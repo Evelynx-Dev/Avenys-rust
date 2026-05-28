@@ -1,0 +1,833 @@
+use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
+use std::hash::{Hash, Hasher};
+use std::ops::Deref;
+use std::sync::Arc;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum Visibility {
+    #[default]
+    Public,
+    Private,
+    Protected,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DataType {
+    I8,
+    I16,
+    I32,
+    I64,
+    U8,
+    U16,
+    U32,
+    U64,
+    F32,
+    F64,
+    Char,
+    Str,
+    Bool,
+    None,
+    List,
+    Vector {
+        element_type: Box<DataType>,
+        dynamic: bool,
+    },
+    Dict,
+    Map {
+        key_type: Box<DataType>,
+        value_type: Box<DataType>,
+    },
+    Anything,
+    Function,
+    Struct,
+    StructNamed(String),
+    Db,
+    Tuple,
+    Set,
+    Datetime,
+    Unknown,
+    Ref {
+        inner: Box<DataType>,
+    },
+    RefMut {
+        inner: Box<DataType>,
+    },
+    Box,
+    Enum,
+    EnumNamed(String),
+    DynTrait {
+        trait_name: String,
+    },
+    Array {
+        element_type: Box<DataType>,
+        size: usize,
+    },
+    Slice {
+        element_type: Box<DataType>,
+    },
+    /// Represents an operation that may succeed with `ok` or fail with `err`.
+    Result {
+        ok: Box<DataType>,
+        err: Box<DataType>,
+    },
+    Generic(String),
+}
+
+impl DataType {
+    pub fn element_type(&self) -> Box<DataType> {
+        match self {
+            DataType::Vector { element_type, .. } => element_type.clone(),
+            _ => Box::new(DataType::Unknown),
+        }
+    }
+
+    pub fn parse_type(s: &str) -> Self {
+        match s {
+            "i8" => DataType::I8,
+            "i16" => DataType::I16,
+            "i32" => DataType::I32,
+            "i64" => DataType::I64,
+            "u8" => DataType::U8,
+            "u16" => DataType::U16,
+            "u32" => DataType::U32,
+            "u64" => DataType::U64,
+            "f32" => DataType::F32,
+            "f64" => DataType::F64,
+            "char" => DataType::Char,
+            "str" => DataType::Str,
+            "bool" => DataType::Bool,
+            "list" => DataType::List,
+            "vec" => DataType::Vector {
+                element_type: Box::new(DataType::Unknown),
+                dynamic: false,
+            },
+            "dict" => DataType::Dict,
+            "map" => DataType::Map {
+                key_type: Box::new(DataType::Unknown),
+                value_type: Box::new(DataType::Unknown),
+            },
+            "anything" => DataType::Anything,
+            "function" => DataType::Function,
+            "db" => DataType::Db,
+            "tuple" => DataType::Tuple,
+            "set" => DataType::Set,
+            "datetime" => DataType::Datetime,
+            "box" => DataType::Box,
+            _ => DataType::Unknown,
+        }
+    }
+
+    pub fn is_struct_like(&self) -> bool {
+        matches!(self, DataType::Struct | DataType::StructNamed(_))
+    }
+
+    pub fn is_enum_like(&self) -> bool {
+        matches!(self, DataType::Enum | DataType::EnumNamed(_))
+    }
+
+    pub fn struct_name(&self) -> Option<&str> {
+        match self {
+            DataType::StructNamed(name) => Some(name.as_str()),
+            _ => None,
+        }
+    }
+
+    pub fn enum_name(&self) -> Option<&str> {
+        match self {
+            DataType::EnumNamed(name) => Some(name.as_str()),
+            _ => None,
+        }
+    }
+
+    pub fn shared_ref(inner: DataType) -> Self {
+        Self::Ref {
+            inner: Box::new(inner),
+        }
+    }
+
+    pub fn mutable_ref(inner: DataType) -> Self {
+        Self::RefMut {
+            inner: Box::new(inner),
+        }
+    }
+
+    pub fn ref_inner(&self) -> Option<&DataType> {
+        match self {
+            Self::Ref { inner } | Self::RefMut { inner } => Some(inner.as_ref()),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Program {
+    pub statements: Vec<Statement>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Identifier {
+    pub name: String,
+    pub data_type: DataType,
+    pub line: usize,
+    pub column: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TraitMethodSig {
+    pub name: String,
+    pub params: Vec<(String, DataType)>,
+    pub return_type: DataType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Expression {
+    Literal(Literal),
+    Identifier(Identifier),
+    BinaryOp {
+        operator: String,
+        left: Box<Expression>,
+        right: Box<Expression>,
+        data_type: DataType,
+    },
+    UnaryOp {
+        operator: String,
+        operand: Box<Expression>,
+        data_type: DataType,
+    },
+    NamedArg {
+        name: String,
+        value: Box<Expression>,
+        data_type: DataType,
+    },
+    Call {
+        name: String,
+        args: Vec<Expression>,
+        #[serde(default)]
+        type_args: Vec<DataType>,
+        data_type: DataType,
+    },
+    List {
+        elements: Vec<Expression>,
+        element_type: DataType,
+        data_type: DataType,
+    },
+    Dict {
+        entries: Vec<(Expression, Expression)>,
+        key_type: DataType,
+        value_type: DataType,
+        data_type: DataType,
+    },
+    Tuple {
+        elements: Vec<Expression>,
+        data_type: DataType,
+    },
+    Index {
+        target: Box<Expression>,
+        index: Box<Expression>,
+        data_type: DataType,
+    },
+    MemberAccess {
+        target: Box<Expression>,
+        member: String,
+        data_type: DataType,
+    },
+    Closure {
+        params: Vec<(String, DataType)>,
+        body: Vec<Statement>,
+        return_type: DataType,
+        capture: Vec<(String, MireValue)>,
+    },
+    Reference {
+        expr: Box<Expression>,
+        is_mutable: bool,
+        data_type: DataType,
+        referenced_type: DataType,
+    },
+    Dereference {
+        expr: Box<Expression>,
+        data_type: DataType,
+    },
+    Box {
+        value: Box<Expression>,
+        data_type: DataType,
+    },
+    Pipeline {
+        input: Box<Expression>,
+        stage: Box<Expression>,
+        safe: bool,
+        data_type: DataType,
+    },
+    Try {
+        expr: Box<Expression>,
+        data_type: DataType,
+    },
+    Ok {
+        value: Box<Expression>,
+        data_type: DataType,
+    },
+    Err {
+        value: Box<Expression>,
+        data_type: DataType,
+    },
+    Match {
+        value: Box<Expression>,
+        cases: Vec<(Expression, Expression)>,
+        default: Box<Expression>,
+        data_type: DataType,
+    },
+    EnumVariantPath {
+        enum_name: String,
+        variant_name: String,
+        data_type: DataType,
+    },
+    EnumVariant {
+        enum_name: String,
+        variant_name: String,
+        payloads: Vec<Expression>,
+        data_type: DataType,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Literal {
+    Int(i64),
+    Float(f64),
+    Char(u32),
+    Str(String),
+    Bool(bool),
+    None,
+    List(Vec<Expression>),
+    Dict(Vec<((Expression, Expression), DataType)>),
+    Tuple(Vec<Expression>),
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct MireFloat(pub f64);
+
+impl MireFloat {
+    pub fn new(value: f64) -> Self {
+        MireFloat(value)
+    }
+
+    pub fn to_bits(self) -> u64 {
+        self.0.to_bits()
+    }
+}
+
+impl Deref for MireFloat {
+    type Target = f64;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl PartialEq for MireFloat {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.to_bits() == other.0.to_bits()
+    }
+}
+
+impl Eq for MireFloat {}
+
+impl Hash for MireFloat {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.to_bits().hash(state);
+    }
+}
+
+impl PartialOrd for MireFloat {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.0.partial_cmp(&other.0)
+    }
+}
+
+impl From<f64> for MireFloat {
+    fn from(value: f64) -> Self {
+        MireFloat(value)
+    }
+}
+
+impl From<MireFloat> for f64 {
+    fn from(value: MireFloat) -> Self {
+        value.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct MireFloat32(pub f32);
+
+impl MireFloat32 {
+    pub fn new(value: f32) -> Self {
+        MireFloat32(value)
+    }
+}
+
+impl Deref for MireFloat32 {
+    type Target = f32;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl PartialEq for MireFloat32 {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.to_bits() == other.0.to_bits()
+    }
+}
+
+impl Eq for MireFloat32 {}
+
+impl Hash for MireFloat32 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.to_bits().hash(state);
+    }
+}
+
+impl PartialOrd for MireFloat32 {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.0.partial_cmp(&other.0)
+    }
+}
+
+impl From<f32> for MireFloat32 {
+    fn from(value: f32) -> Self {
+        MireFloat32(value)
+    }
+}
+
+impl From<MireFloat32> for f32 {
+    fn from(value: MireFloat32) -> Self {
+        value.0
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AssignmentTarget {
+    Variable(String),
+    Field(String),
+    Index {
+        target: Box<Expression>,
+        index: Box<Expression>,
+    },
+}
+
+impl AssignmentTarget {
+    pub fn binding_name(&self) -> Option<&str> {
+        match self {
+            AssignmentTarget::Variable(name) | AssignmentTarget::Field(name) => {
+                name.split('.').next()
+            }
+            AssignmentTarget::Index { target, .. } => Self::root_identifier(target),
+        }
+    }
+
+    pub fn as_expression(&self) -> Expression {
+        match self {
+            AssignmentTarget::Variable(name) => Expression::Identifier(Identifier {
+                name: name.clone(),
+                data_type: DataType::Unknown,
+                line: 0,
+                column: 0,
+            }),
+            AssignmentTarget::Field(path) => {
+                let mut parts = path.split('.');
+                let root = parts.next().unwrap_or_default().to_string();
+                let mut expr = Expression::Identifier(Identifier {
+                    name: root,
+                    data_type: DataType::Unknown,
+                    line: 0,
+                    column: 0,
+                });
+                for member in parts {
+                    expr = Expression::MemberAccess {
+                        target: Box::new(expr),
+                        member: member.to_string(),
+                        data_type: DataType::Unknown,
+                    };
+                }
+                expr
+            }
+            AssignmentTarget::Index { target, index } => Expression::Index {
+                target: target.clone(),
+                index: index.clone(),
+                data_type: DataType::Unknown,
+            },
+        }
+    }
+
+    fn root_identifier(expr: &Expression) -> Option<&str> {
+        match expr {
+            Expression::Identifier(ident) => Some(ident.name.as_str()),
+            Expression::MemberAccess { target, .. } | Expression::Index { target, .. } => {
+                Self::root_identifier(target)
+            }
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for AssignmentTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AssignmentTarget::Variable(name) | AssignmentTarget::Field(name) => {
+                write!(f, "{name}")
+            }
+            AssignmentTarget::Index { target, index } => write!(f, "{target:?} at {index:?}"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Statement {
+    Let {
+        name: String,
+        data_type: DataType,
+        value: Option<Expression>,
+        is_constant: bool,
+        is_mutable: bool,
+        is_static: bool,
+        visibility: Visibility,
+    },
+    Assignment {
+        target: AssignmentTarget,
+        value: Expression,
+        is_mutable: bool,
+    },
+    Function {
+        name: String,
+        #[serde(default)]
+        type_params: Vec<String>,
+        #[serde(default)]
+        type_param_bounds: Vec<(String, Vec<String>)>,
+        params: Vec<(String, DataType)>,
+        body: Vec<Statement>,
+        return_type: DataType,
+        visibility: Visibility,
+        is_method: bool,
+    },
+    Return(Option<Expression>),
+    If {
+        condition: Expression,
+        then_branch: Vec<Statement>,
+        else_branch: Option<Vec<Statement>>,
+    },
+    While {
+        condition: Expression,
+        body: Vec<Statement>,
+    },
+    For {
+        variable: String,
+        #[serde(default)]
+        index: Option<String>,
+        iterable: Expression,
+        body: Vec<Statement>,
+    },
+    Expression(Expression),
+    Break,
+    Continue,
+    Find {
+        variable: String,
+        iterable: Expression,
+        body: Vec<Statement>,
+    },
+    Match {
+        value: Expression,
+        cases: Vec<(Expression, Vec<Statement>)>,
+        default: Vec<Statement>,
+    },
+    Type {
+        name: String,
+        #[serde(default)]
+        type_params: Vec<String>,
+        #[serde(default)]
+        type_param_bounds: Vec<(String, Vec<String>)>,
+        parent: Option<String>,
+        fields: Vec<Statement>,
+    },
+    Skill {
+        name: String,
+        methods: Vec<TraitMethodSig>,
+    },
+    Impl {
+        trait_name: Option<String>,
+        type_name: String,
+        #[serde(default)]
+        type_params: Vec<String>,
+        #[serde(default)]
+        type_param_bounds: Vec<(String, Vec<String>)>,
+        methods: Vec<Statement>,
+    },
+    ExternLib {
+        name: String,
+        path: String,
+    },
+    ExternFunction {
+        name: String,
+        lib_name: String,
+        params: Vec<(String, DataType)>,
+        return_type: DataType,
+    },
+    Unsafe {
+        body: Vec<Statement>,
+    },
+    Asm {
+        instructions: Vec<(String, Expression)>,
+    },
+    Use {
+        path: String,
+        alias: Option<String>,
+        items: Option<Vec<String>>,
+        is_local: bool,
+    },
+    Module {
+        name: String,
+        body: Vec<Statement>,
+    },
+    Drop {
+        value: Expression,
+    },
+    New {
+        value: Option<Expression>,
+        declared_type: DataType,
+    },
+    Own {
+        value: Option<Expression>,
+        inner_type: DataType,
+    },
+    Move {
+        target: String,
+        value: Expression,
+    },
+    Enum {
+        name: String,
+        #[serde(default)]
+        type_params: Vec<String>,
+        #[serde(default)]
+        type_param_bounds: Vec<(String, Vec<String>)>,
+        variants: Vec<EnumVariantDef>,
+    },
+    Query {
+        table: String,
+        bindings: Vec<QueryBinding>,
+        ops: Vec<QueryOp>,
+        joins: Vec<QueryJoin>,
+        group_by: Option<QueryGroup>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueryBinding {
+    pub target: String,
+    pub alias: String,
+    pub column: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueryGet {
+    pub target: String,
+    pub condition: Expression,
+    pub body: Vec<Statement>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueryJoin {
+    pub right_table: String,
+    pub left_column: String,
+    pub right_column: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueryGroup {
+    pub column: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum QueryOp {
+    Insert {
+        assigns: Vec<(String, Expression)>,
+    },
+    Update {
+        condition: Expression,
+        assigns: Vec<(String, Expression)>,
+    },
+    Delete {
+        condition: Expression,
+    },
+    Get(QueryGet),
+    Export {
+        path: String,
+    },
+    Import {
+        path: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnumDef {
+    pub name: String,
+    pub variants: Vec<EnumVariantDef>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnumVariantDef {
+    pub enum_name: String,
+    pub name: String,
+    pub payload_names: Vec<String>,
+    pub data_types: Vec<DataType>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MireValue {
+    I8(i8),
+    I16(i16),
+    I32(i32),
+    I64(i64),
+    U8(u8),
+    U16(u16),
+    U32(u32),
+    U64(u64),
+    Float(MireFloat),
+    F32(MireFloat32),
+    F64(f64),
+    Str(String),
+    Bool(bool),
+    None,
+    List(Vec<MireValue>),
+    Dict(Vec<((MireValue, MireValue), DataType)>),
+    Tuple(Vec<MireValue>),
+    Function(FunctionDef),
+    Builtinfn(String),
+    Ref {
+        value: Box<MireValue>,
+        is_mutable: bool,
+    },
+    Box {
+        value: Box<MireValue>,
+    },
+    Array {
+        elements: Vec<MireValue>,
+        size: usize,
+    },
+    Slice {
+        elements: Vec<MireValue>,
+    },
+    EnumVariant {
+        enum_name: String,
+        variant_name: String,
+        data: Vec<MireValue>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FunctionDef {
+    pub name: String,
+    pub params: Vec<(String, DataType)>,
+    pub body: Arc<Vec<Statement>>,
+    pub return_type: DataType,
+    pub is_method: bool,
+    pub capture: Vec<(String, MireValue)>,
+}
+
+impl MireValue {
+    pub fn equals(&self, other: &MireValue) -> bool {
+        match (self, other) {
+            (MireValue::I8(a), MireValue::I8(b)) => a == b,
+            (MireValue::I16(a), MireValue::I16(b)) => a == b,
+            (MireValue::I32(a), MireValue::I32(b)) => a == b,
+            (MireValue::I64(a), MireValue::I64(b)) => a == b,
+            (MireValue::U8(a), MireValue::U8(b)) => a == b,
+            (MireValue::U16(a), MireValue::U16(b)) => a == b,
+            (MireValue::U32(a), MireValue::U32(b)) => a == b,
+            (MireValue::U64(a), MireValue::U64(b)) => a == b,
+            (MireValue::Float(a), MireValue::Float(b)) => a == b,
+            (MireValue::F32(a), MireValue::F32(b)) => a == b,
+            (MireValue::F64(a), MireValue::F64(b)) => a == b,
+            (MireValue::Str(a), MireValue::Str(b)) => a == b,
+            (MireValue::Bool(a), MireValue::Bool(b)) => a == b,
+            (MireValue::None, MireValue::None) => true,
+            (MireValue::List(a), MireValue::List(b)) => {
+                if a.len() != b.len() {
+                    return false;
+                }
+                for (x, y) in a.iter().zip(b.iter()) {
+                    if !x.equals(y) {
+                        return false;
+                    }
+                }
+                true
+            }
+            (MireValue::Tuple(a), MireValue::Tuple(b)) => {
+                if a.len() != b.len() {
+                    return false;
+                }
+                for (x, y) in a.iter().zip(b.iter()) {
+                    if !x.equals(y) {
+                        return false;
+                    }
+                }
+                true
+            }
+            (MireValue::Dict(a), MireValue::Dict(b)) => {
+                if a.len() != b.len() {
+                    return false;
+                }
+                for ((k, v), _) in a {
+                    let mut found = false;
+                    for ((ok, ov), _) in b {
+                        if k.equals(ok) && v.equals(ov) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if !found {
+                        return false;
+                    }
+                }
+                true
+            }
+            (MireValue::Function(_), MireValue::Function(_)) => false,
+            (MireValue::Builtinfn(a), MireValue::Builtinfn(b)) => a == b,
+            (MireValue::Ref { .. }, MireValue::Ref { .. }) => false,
+            (MireValue::Box { .. }, MireValue::Box { .. }) => false,
+            (
+                MireValue::Array {
+                    elements: a,
+                    size: _,
+                },
+                MireValue::Array {
+                    elements: b,
+                    size: _,
+                },
+            ) => {
+                if a.len() != b.len() {
+                    return false;
+                }
+                for (x, y) in a.iter().zip(b.iter()) {
+                    if !x.equals(y) {
+                        return false;
+                    }
+                }
+                true
+            }
+            (MireValue::Slice { elements: a }, MireValue::Slice { elements: b }) => {
+                if a.len() != b.len() {
+                    return false;
+                }
+                for (x, y) in a.iter().zip(b.iter()) {
+                    if !x.equals(y) {
+                        return false;
+                    }
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub fn ne(&self, other: &MireValue) -> bool {
+        !self.equals(other)
+    }
+}

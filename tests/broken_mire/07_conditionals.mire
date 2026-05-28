@@ -1,0 +1,10 @@
+import std
+
+pub fn main: () {
+    set x = 10 :i64
+    if x == 10 {
+        use dasu(equal)
+    } else {
+        use dasu(not equal)
+    }
+}

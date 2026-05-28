@@ -1,0 +1,22 @@
+import std
+
+enum Status {
+    Pending
+    Active
+    Done
+    Failed
+}
+
+pub fn main: () {
+    set s = Status.Active
+    
+    set result = match s {
+        Status.Pending { "waiting" }
+        Status.Active { "processing" }
+        Status.Done { "complete" }
+        Status.Failed { "error" }
+        _ { "unknown" }
+    } :str
+    
+    use dasu(result)
+}

@@ -1,0 +1,10 @@
+import std
+
+pub fn main: () {
+    use dasu(struct ok)
+}
+
+struct Point {
+    x :i64
+    y :i64
+}

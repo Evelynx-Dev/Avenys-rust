@@ -1,0 +1,10 @@
+import std
+
+pub skill Printer {
+    print: (self) -> ()
+}
+
+pub fn main: () {
+    set x = 10
+    x.print()
+}

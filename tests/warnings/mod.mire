@@ -1,0 +1,6 @@
+pub fn main: () {
+    set hi = "hola" :char
+    set bye = "adios" :char
+
+    use dasu(hi)
+}

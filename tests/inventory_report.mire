@@ -1,0 +1,16 @@
+import lists as lists
+import math as math
+import strings as strings
+
+pub fn main: () {
+set counts = [] :vec[i64] mut
+set counts = lists.push(counts 4)
+set counts = lists.push(counts 7)
+set counts = lists.push(counts 9)
+
+set total = math.sum(counts)
+set label = strings.to_upper("stock")
+
+use dasu("{label} total {total}")
+use dasu("Items {len(counts)}")
+}

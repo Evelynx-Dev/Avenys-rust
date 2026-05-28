@@ -1,0 +1,8 @@
+import std
+
+pub fn main: () {
+    set x = 5 :i64
+    match x {
+        1 { use dasu("one") }
+    }
+}

@@ -1,0 +1,10 @@
+import std
+
+pub struct Counter {
+    count: i64
+}
+
+pub fn main: () {
+    set c = Counter(count: 5)
+    set c.count = "not a number"
+}

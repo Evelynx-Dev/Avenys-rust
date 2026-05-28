@@ -1,0 +1,10 @@
+import std
+
+fn get_five: () :i64 {
+    5
+}
+
+pub fn main: () {
+    set x = get_five()
+    use dasu(x)
+}

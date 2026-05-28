@@ -1,0 +1,9 @@
+import std
+
+fn import: (a:i64 b:i64) :i64 {
+    return a + b
+}
+pub fn main: () {
+    set result = use import(5 3)
+    use dasu("result: {result}")
+}

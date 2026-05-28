@@ -1,0 +1,6 @@
+import std
+
+pub fn main: () {
+    set result = 10 :i64
+    use dasu("result: {result}")
+}

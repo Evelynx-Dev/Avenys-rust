@@ -1,0 +1,10 @@
+import std
+
+fn concat: (a :str, b :str) :str {
+    a + b
+}
+
+pub fn main: () {
+    set s = concat("hello", "world")
+    use dasu(s)
+}

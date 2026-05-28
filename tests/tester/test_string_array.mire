@@ -1,0 +1,7 @@
+import std
+
+pub fn main: () {
+    set names = ["alice" "bob"] :arr[str 2]
+    set first = names at 0
+    use dasu(first)
+}

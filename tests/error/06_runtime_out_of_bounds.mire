@@ -1,0 +1,6 @@
+import std
+
+pub fn main: () {
+    set nums = [1 2 3] :arr[i64 3]
+    set x = nums at 10
+}

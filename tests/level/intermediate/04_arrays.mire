@@ -1,0 +1,8 @@
+import std
+
+pub fn main: () {
+    set arr = [1 2 3] :arr[i64 3]
+    set first = lists.get(arr 0)
+    set last = lists.get(arr 2)
+    use dasu("first={first} last={last}")
+}

@@ -1,0 +1,10 @@
+import std
+
+fn get_str: () :str {
+    "test"
+}
+
+pub fn main: () {
+    set s = get_str()
+    use dasu(s)
+}

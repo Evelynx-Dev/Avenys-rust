@@ -1,0 +1,11 @@
+import std
+
+struct User {
+    name :str
+    age :i64
+}
+
+pub fn main: () {
+    set user = (User name: "Alice" age: 30)
+    use dasu("name={user.name} age={user.age}")
+}

@@ -1,0 +1,17 @@
+import std
+
+enum Color {
+    Red
+    Green
+    Blue
+}
+
+pub fn main: () {
+    set c = Color.Blue
+    set n = match c {
+        Color.Red { "red" }
+        Color.Green { "green" }
+        Color.Blue { "blue" }
+    } :str
+    use dasu(n)
+}

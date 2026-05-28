@@ -1,0 +1,15 @@
+import std
+
+enum Status {
+    Ok
+    Error
+}
+
+pub fn main: () {
+    set r = Status.Ok
+    set m1 = match r {
+        Status.Ok { "success" }
+        Status.Error { "failed" }
+    } :str
+    use dasu(m1)
+}

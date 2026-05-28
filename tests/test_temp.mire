@@ -1,0 +1,10 @@
+import std
+
+pub fn main: () {
+    set x = 5 :i64
+    match x {
+        1 { 10 }
+        5 { 20 }
+        _ { 0 }
+    }
+}

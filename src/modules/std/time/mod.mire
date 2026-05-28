@@ -1,0 +1,10 @@
+pub fn unix_ms: () :i64
+pub fn unix_ns: () :i64
+pub fn since_ms: (start :i64) :i64
+pub fn since_ns: (start :i64) :i64
+pub fn mark: () :i64
+pub fn elapsed: (mark :i64) :i64
+pub fn elapsed_ms: (mark :i64) :i64
+pub fn elapsed_ns: (mark :i64) :i64
+pub fn sleep_ms: (ms :i64)
+pub fn sleep_ns: (ns :i64)

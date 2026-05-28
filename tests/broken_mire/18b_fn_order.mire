@@ -1,0 +1,10 @@
+import std
+
+use import(5 3)
+
+pub fn main: () {
+    use dasu(done)
+}
+fn import: (a:i64 b:i64) :i64 {
+    return a + b
+}

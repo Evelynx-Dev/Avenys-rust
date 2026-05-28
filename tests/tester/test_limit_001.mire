@@ -1,0 +1,9 @@
+import std
+
+fn classify: (x :i64) :str {
+    "hello"
+}
+
+pub fn main: () {
+    use dasu(classify(5))
+}

@@ -1,0 +1,9 @@
+import std
+
+pub fn main: () {
+    set x = 1 :i64
+    set rx = &x
+    use dasu("x = {x}")
+    set x = 2
+    use dasu("x updated")
+}

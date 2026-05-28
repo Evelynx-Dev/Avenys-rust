@@ -1,0 +1,18 @@
+import std
+import strings
+import math
+
+fn greet: (name :str) :str {
+    set upper = strings.to_upper(name)
+    return upper
+}
+
+pub fn main: () {
+    set name = "mire" :str
+    set greeting = greet(name)
+    use dasu("Hello {greeting}!")
+
+    set nums = [1 2 3 4 5] :arr[i64 5]
+    set total = math.sum(nums)
+    use dasu("Sum: {total}")
+}

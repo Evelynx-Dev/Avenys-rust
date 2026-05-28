@@ -1,0 +1,10 @@
+import std
+
+fn greet: (name :str) :str {
+    "hello " + name
+}
+
+pub fn main: () {
+    set message = greet("world")
+    use dasu(message)
+}

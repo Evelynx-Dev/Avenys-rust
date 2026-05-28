@@ -1,0 +1,8 @@
+import std
+
+pub fn main: () {
+    set x = 1 :i64
+    set shared = &x
+    set x = 2
+    use dasu("x = {x}")
+}
