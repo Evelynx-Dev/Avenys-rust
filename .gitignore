@@ -1,0 +1,18 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Mire build outputs
+/bin/debug/
+/bin/release/
+/bin/.cache/
+
+# Editor/OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local tool state
+.codex
