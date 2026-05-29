@@ -66,7 +66,7 @@ mod tests {
             )
             .expect("store file");
         cache
-            .store_analysis(&source_path, 42, &demo_program("typed_main"))
+            .store_analysis(&source_path, &demo_program("typed_main"))
             .expect("store analysis");
         cache.save().expect("save");
 
@@ -77,7 +77,7 @@ mod tests {
             .expect("cached parsed file");
         assert_eq!(parsed.exports, vec!["main".to_string()]);
         let analyzed = reloaded
-            .cached_analysis(&source_path, 42)
+            .cached_analysis(&source_path)
             .expect("cached analysis");
         match analyzed {
             CachedAnalysis::Success(program) => assert_eq!(program.statements.len(), 1),
@@ -100,17 +100,17 @@ mod tests {
         };
         let mut cache = IncrementalCache::load_with_settings(&source_path, settings).expect("load");
         cache
-            .store_analysis(&source_path, 42, &demo_program("typed_main"))
+            .store_analysis(&source_path, &demo_program("typed_main"))
             .expect("store analysis");
         cache.save().expect("save");
 
         let mut reloaded =
             IncrementalCache::load_with_settings(&source_path, settings).expect("reload");
         assert!(reloaded.blob_store.is_memory_mapped());
-        assert!(reloaded.cached_analysis(&source_path, 42).is_some());
+        assert!(reloaded.cached_analysis(&source_path).is_some());
 
         reloaded
-            .store_analysis(&source_path, 43, &demo_program("typed_main_v2"))
+            .store_analysis(&source_path, &demo_program("typed_main_v2"))
             .expect("store second analysis");
         assert!(!reloaded.blob_store.is_memory_mapped());
     }
@@ -140,7 +140,7 @@ mod tests {
             )
             .expect("store file");
         cache
-            .store_analysis(&source_path, 7, &demo_program("analysis"))
+            .store_analysis(&source_path, &demo_program("analysis"))
             .expect("store analysis");
         assert!(cache.db.files.len() + cache.db.analyses.len() <= 1);
         assert!(cache.metrics().evictions >= 1);
@@ -163,7 +163,7 @@ mod tests {
         for i in 0..32 {
             let function_name = format!("main_{}", i);
             cache
-                .store_analysis(&source_path, 7, &demo_program(&function_name))
+                .store_analysis(&source_path, &demo_program(&function_name))
                 .expect("store analysis overwrite");
         }
 
@@ -184,7 +184,9 @@ mod tests {
         let root = std::env::temp_dir().join(format!("mire_cache_compact_ranges_{}", now_epoch_ms()));
         fs::create_dir_all(&root).expect("temp dir");
         let source_path = root.join("main.mire");
+        let source_path2 = root.join("lib.mire");
         fs::write(&source_path, "pub fn main: () {}\n").expect("source");
+        fs::write(&source_path2, "pub fn helper: () {}\n").expect("source");
 
         let settings = CacheSettings {
             max_units: Some(256),
@@ -194,24 +196,37 @@ mod tests {
         let mut cache = IncrementalCache::load_with_settings(&source_path, settings).expect("load");
 
         cache
-            .store_analysis(&source_path, 1, &demo_program("a"))
-            .expect("store analysis a");
+            .store_file(
+                &source_path,
+                CachedParsedFile {
+                    hash: 1,
+                    program: demo_program("a"),
+                    exports: vec![],
+                    local_imports: Vec::new(),
+                },
+            )
+            .expect("store file a");
         cache
-            .store_analysis(&source_path, 2, &demo_program("b"))
-            .expect("store analysis b");
+            .store_file(
+                &source_path2,
+                CachedParsedFile {
+                    hash: 2,
+                    program: demo_program("b"),
+                    exports: vec![],
+                    local_imports: Vec::new(),
+                },
+            )
+            .expect("store file b");
 
         // Keep entry 2 and force a sparse blob by dropping the first entry.
-        let key1 = analysis_cache_key(&source_path, 1);
-        cache.db.analyses.remove(&key1);
+        let key1 = normalize_path_key(&source_path);
+        cache.db.files.remove(&key1);
         cache.maybe_compact_blob_store();
 
         let cached = cache
-            .cached_analysis(&source_path, 2)
-            .expect("analysis 2 should survive compaction");
-        match cached {
-            CachedAnalysis::Success(program) => assert_eq!(program.statements.len(), 1),
-            CachedAnalysis::Error(err) => panic!("unexpected cached error: {err}"),
-        }
+            .cached_file(&source_path2, 2)
+            .expect("file 2 should survive compaction");
+        assert_eq!(cached.program.statements.len(), 1);
     }
 
     #[test]
@@ -239,19 +254,18 @@ mod tests {
             )
             .expect("store file");
         cache
-            .store_analysis(&source_path, 42, &demo_program("typed_main"))
+            .store_analysis(&source_path, &demo_program("typed_main"))
             .expect("store analysis");
 
         assert!(cache.cached_file(&source_path, 1).is_some());
         assert!(cache.cached_file(&source_path, 2).is_none());
-        assert!(cache.cached_analysis(&source_path, 42).is_some());
-        assert!(cache.cached_analysis(&source_path, 99).is_none());
+        assert!(cache.cached_analysis(&source_path).is_some());
 
         let metrics = cache.metrics();
         assert_eq!(metrics.file_hits, 1);
         assert_eq!(metrics.file_misses, 1);
         assert_eq!(metrics.analysis_hits, 1);
-        assert_eq!(metrics.analysis_misses, 1);
+        assert_eq!(metrics.analysis_misses, 0);
     }
 
     #[test]
@@ -275,14 +289,14 @@ mod tests {
         .with_filename(source_path.display().to_string())
         .with_source("pub fn main: () {}\n".to_string());
         cache
-            .store_analysis_error(&source_path, 99, &demo_program("broken"), &error)
+            .store_analysis_error(&source_path, &demo_program("broken"), &error)
             .expect("store error");
         cache.save().expect("save");
 
         let mut reloaded =
             IncrementalCache::load_with_settings(&source_path, settings).expect("reload");
         let cached = reloaded
-            .cached_analysis(&source_path, 99)
+            .cached_analysis(&source_path)
             .expect("cached analysis");
         match cached {
             CachedAnalysis::Success(_) => panic!("expected cached error"),
@@ -319,13 +333,13 @@ mod tests {
         assert!(!cache_path.exists(), "corrupt cache file should be removed");
 
         cache
-            .store_analysis(&source_path, 42, &demo_program("typed_main"))
+            .store_analysis(&source_path, &demo_program("typed_main"))
             .expect("store analysis");
         cache.save().expect("save rebuilt cache");
 
         let mut reloaded =
             IncrementalCache::load_with_settings(&source_path, settings).expect("reload");
-        assert!(reloaded.cached_analysis(&source_path, 42).is_some());
+        assert!(reloaded.cached_analysis(&source_path).is_some());
     }
 
     #[test]
@@ -391,7 +405,7 @@ mod tests {
             parse("fn helper: () :i64 {\n    return 1\n}\nfn main: () :i64 {\n    return helper()\n}\n")
                 .expect("parse older");
         cache
-            .store_analysis(&source_path, 100, &older)
+            .store_analysis(&source_path, &older)
             .expect("store older analysis");
 
         std::thread::sleep(std::time::Duration::from_millis(2));
@@ -401,11 +415,8 @@ mod tests {
         )
         .expect("parse newer");
         cache
-            .store_analysis(&source_path, 101, &newer)
+            .store_analysis(&source_path, &newer)
             .expect("store newer analysis");
-
-        // Touch old fingerprint so its last_access becomes newer than the actual latest snapshot.
-        let _ = cache.cached_analysis(&source_path, 100);
 
         let report = cache
             .analysis_invalidation_report(&source_path, &newer)

@@ -103,7 +103,7 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
     }
     cache.record_build_miss();
 
-    let program = if let Some(cached) = cache.cached_analysis(source_path, fingerprint) {
+    let program = if let Some(cached) = cache.cached_analysis(source_path) {
         match cached {
             CachedAnalysis::Success(program) => program,
             CachedAnalysis::Error(error) => return Err(error),
@@ -149,11 +149,11 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
             } else {
                 err
             };
-            cache.store_analysis_error(source_path, fingerprint, &program, &err)?;
+            cache.store_analysis_error(source_path, &program, &err)?;
             cache.save()?;
             return Err(err);
         }
-        cache.store_analysis(source_path, fingerprint, &program)?;
+        cache.store_analysis(source_path, &program)?;
         program
     };
 

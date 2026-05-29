@@ -68,11 +68,8 @@ pub(super) fn build_cache_key(
     )
 }
 
-pub(super) fn analysis_cache_key(source_path: &Path, fingerprint: u64) -> String {
-    format!(
-        "{}::analysis::{fingerprint}",
-        normalize_path_key(source_path)
-    )
+pub(super) fn analysis_cache_key(source_path: &Path) -> String {
+    format!("{}::analysis::program", normalize_path_key(source_path))
 }
 
 pub(super) fn normalize_path_key(path: &Path) -> String {

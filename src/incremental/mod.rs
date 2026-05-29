@@ -39,7 +39,7 @@ pub use utils::{cache_file_path, source_hash, build_fingerprint, statement_expor
 const CACHE_DIR_NAME: &str = ".cache";
 const CACHE_FILE_NAME: &str = "incremental.bin";
 const CACHE_MAGIC: &[u8; 8] = b"MIREINC2";
-const CACHE_FORMAT_VERSION: u32 = 5;
+const CACHE_FORMAT_VERSION: u32 = 6;
 const DEFAULT_MAX_UNITS: usize = 256;
 const BLOB_COMPACT_THRESHOLD_RATIO: f64 = 0.7;
 
@@ -591,25 +591,13 @@ impl IncrementalCache {
         Ok(())
     }
 
-    pub fn cached_analysis(
-        &mut self,
-        source_path: &Path,
-        fingerprint: u64,
-    ) -> Option<CachedAnalysis> {
+    pub fn cached_analysis(&mut self, source_path: &Path) -> Option<CachedAnalysis> {
         if !self.settings.analysis_cache {
             return None;
         }
 
-        let key = analysis_cache_key(source_path, fingerprint);
-        let Some(entry) = self.db.analyses.get(&key) else {
-            self.metrics.analysis_misses += 1;
-            return None;
-        };
-        if entry.fingerprint != fingerprint {
-            self.metrics.analysis_misses += 1;
-            return None;
-        }
-
+        let key = analysis_cache_key(source_path);
+        let entry = self.db.analyses.get(&key)?;
         let blob = self
             .blob_store
             .read(entry.blob_offset, entry.blob_len)
@@ -628,7 +616,6 @@ impl IncrementalCache {
     pub fn store_analysis(
         &mut self,
         source_path: &Path,
-        fingerprint: u64,
         program: &Program,
     ) -> Result<()> {
         if !self.settings.analysis_cache {
@@ -650,9 +637,9 @@ impl IncrementalCache {
         let (blob_offset, blob_len) = self.blob_store.append(&blob);
         let now = now_epoch_ms();
         self.db.analyses.insert(
-            analysis_cache_key(source_path, fingerprint),
+            analysis_cache_key(source_path),
             AnalysisCacheEntry {
-                fingerprint,
+                fingerprint: 0,
                 blob_offset,
                 blob_len,
                 last_access_epoch_ms: now,
@@ -667,7 +654,6 @@ impl IncrementalCache {
     pub fn store_analysis_error(
         &mut self,
         source_path: &Path,
-        fingerprint: u64,
         program: &Program,
         error: &MireError,
     ) -> Result<()> {
@@ -688,9 +674,9 @@ impl IncrementalCache {
         let (blob_offset, blob_len) = self.blob_store.append(&blob);
         let now = now_epoch_ms();
         self.db.analyses.insert(
-            analysis_cache_key(source_path, fingerprint),
+            analysis_cache_key(source_path),
             AnalysisCacheEntry {
-                fingerprint,
+                fingerprint: 0,
                 blob_offset,
                 blob_len,
                 last_access_epoch_ms: now,
@@ -716,18 +702,7 @@ impl IncrementalCache {
         &mut self,
         source_path: &Path,
     ) -> Option<CachedAnalysisSnapshot> {
-        let prefix = format!("{}::analysis::", normalize_path_key(source_path));
-        let mut latest_key: Option<String> = None;
-        let mut latest_created = 0_u64;
-
-        for (key, entry) in &self.db.analyses {
-            if key.starts_with(&prefix) && entry.created_epoch_ms >= latest_created {
-                latest_created = entry.created_epoch_ms;
-                latest_key = Some(key.clone());
-            }
-        }
-
-        let key = latest_key?;
+        let key = analysis_cache_key(source_path);
         let entry = self.db.analyses.get(&key)?;
         let blob = self
             .blob_store
@@ -929,19 +904,8 @@ impl IncrementalCache {
     }
 
     fn latest_analysis_units(&self, source_path: &Path) -> Option<Vec<AnalysisUnitMetadata>> {
-        let prefix = format!("{}::analysis::", normalize_path_key(source_path));
-        let mut latest_key: Option<&str> = None;
-        let mut latest_created = 0_u64;
-
-        for (key, entry) in &self.db.analyses {
-            if key.starts_with(&prefix) && entry.created_epoch_ms >= latest_created {
-                latest_created = entry.created_epoch_ms;
-                latest_key = Some(key.as_str());
-            }
-        }
-
-        let key = latest_key?;
-        let entry = self.db.analyses.get(key)?;
+        let key = analysis_cache_key(source_path);
+        let entry = self.db.analyses.get(&key)?;
         let blob = self
             .blob_store
             .read(entry.blob_offset, entry.blob_len)
