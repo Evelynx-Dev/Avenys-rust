@@ -1,5 +1,4 @@
 mod typeck_returns;
-mod typeck_builtins;
 mod typeck_check_expression;
 mod typeck_signatures;
 mod typeck_statements;
@@ -158,7 +157,7 @@ impl TypeChecker {
             enum_variants: HashMap::new(),
             traits: HashMap::new(),
             impl_traits: HashMap::new(),
-            builtin_returns: typeck_builtins::default_builtin_returns(),
+            builtin_returns: crate::builtins::default_builtin_returns(),
             return_type_stack: Vec::new(),
             impl_self_type: None,
             impl_self_name: None,

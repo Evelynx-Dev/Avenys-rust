@@ -3,7 +3,6 @@ use crate::parser::ast::{
     AssignmentTarget, DataType, Expression, Identifier, Literal, QueryBinding, QueryOp, Statement,
 };
 
-use crate::compiler::typeck::typeck_builtins;
 use crate::compiler::typeck::typeck_returns::{
     implicit_return_expression_mut, statements_contain_explicit_return,
 };
@@ -463,10 +462,14 @@ impl TypeChecker {
     pub(super) fn check_use_statement(&mut self, path: &str) {
         if path == "__std_all__" {
             for module in ["math", "term", "strings", "lists", "dicts", "time"] {
-                typeck_builtins::import_std_members(self, module);
+                for member in crate::builtins::std_module_members(module) {
+                    self.insert_var((*member).to_string(), DataType::Anything, true);
+                }
             }
         } else if let Some(rest) = path.strip_prefix("stdall:") {
-            typeck_builtins::import_std_members(self, rest);
+            for member in crate::builtins::std_module_members(rest) {
+                self.insert_var((*member).to_string(), DataType::Anything, true);
+            }
         } else if let Some(rest) = path.strip_prefix("stdselect:")
             && let Some((_, items)) = rest.split_once(':')
         {
