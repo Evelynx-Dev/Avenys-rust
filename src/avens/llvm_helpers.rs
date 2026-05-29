@@ -266,4 +266,12 @@ impl LlvmIrGen {
         out
     }
 
+    pub(super) fn null_value(&self) -> LlValue {
+        LlValue {
+            ty: LlType::Ptr,
+            repr: "null".to_string(),
+            owned: false,
+        }
+    }
+
 }

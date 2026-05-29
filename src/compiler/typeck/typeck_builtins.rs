@@ -27,7 +27,7 @@ pub(super) fn default_builtin_returns() -> HashMap<String, DataType> {
         "env_chdir",
         // Proc – side effects on process table
         "proc_kill",
-        "proc_write",
+        "proc_write",    // TODO: migrate to kioto ABI (see kioto_abi_v1.md §3.7/3.11)
         "proc_on",
         "proc_exit",
     ] {
@@ -142,7 +142,7 @@ pub(super) fn default_builtin_returns() -> HashMap<String, DataType> {
         "proc_shell",
         "proc_exec_pipe",
         "proc_pipe",
-        "proc_read",
+        "proc_read",    // TODO: migrate to kioto ABI (see kioto_abi_v1.md §3.7/3.11)
         // String builtins
         "strings.to_upper",
         "strings.to_lower",

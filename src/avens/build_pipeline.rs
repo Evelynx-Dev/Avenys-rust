@@ -180,7 +180,7 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
         ));
     }
 
-    let ir = LlvmIrGen::new().compile_program(&program).map_err(|err| {
+    let (ir, extern_libs) = LlvmIrGen::new().compile_program(&program).map_err(|err| {
         let err = if err.source().is_none() {
             err.with_source(source.clone())
         } else {
@@ -215,7 +215,7 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
     }
 
     if options.emit_binary {
-        compile_binary_from_ir(&final_ir, &runtime_support, &binary_path, options.opt_level)?;
+        compile_binary_from_ir(&final_ir, &runtime_support, &binary_path, options.opt_level, &extern_libs)?;
     }
 
     cache.store_build(

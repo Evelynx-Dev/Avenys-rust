@@ -1,7 +1,7 @@
 use super::*;
 
 impl LlvmIrGen {
-    pub(super) fn compile_program(mut self, program: &Program) -> Result<String> {
+    pub(super) fn compile_program(mut self, program: &Program) -> Result<(String, Vec<(String, String)>)> {
         // First pass: collect struct definitions
         for stmt in &program.statements {
             if let Statement::Type { name, fields, .. } = stmt {
@@ -105,6 +105,9 @@ impl LlvmIrGen {
                         returns_value: *return_type != DataType::None,
                     },
                 );
+            }
+            if let Statement::ExternLib { name, path } = stmt {
+                self.extern_libs.push((name.clone(), path.clone()));
             }
             if let Statement::Function {
                 name,
@@ -293,6 +296,9 @@ impl LlvmIrGen {
             "declare ptr @mire_list_slice(ptr, i64, i64)".to_string(),
             "declare void @mire_runtime_panic(ptr)".to_string(),
             "declare ptr @fgets(ptr, i64, ptr)".to_string(),
+            "declare ptr @mire_read_line(ptr)".to_string(),
+            "declare i64 @atoll(ptr)".to_string(),
+            "declare double @atof(ptr)".to_string(),
             "@.fmt_i64 = private unnamed_addr constant [5 x i8] c\"%ld\\0A\\00\"".to_string(),
             "@.fmt_str = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\"".to_string(),
             "@.fmt_float = private unnamed_addr constant [4 x i8] c\"%f\\0A\\00\"".to_string(),
@@ -300,9 +306,10 @@ impl LlvmIrGen {
             "@.fmt_bool_true = private unnamed_addr constant [5 x i8] c\"true\\00\"".to_string(),
             "@.fmt_bool_false = private unnamed_addr constant [6 x i8] c\"false\\00\"".to_string(),
             "@.fmt_i32 = private unnamed_addr constant [4 x i8] c\"%d\\0A\\00\"".to_string(),
-            "@.fmt_prompt = private unnamed_addr constant [3 x i8] c\"%s\\00\"".to_string(),
-            "@.scanf_str = private unnamed_addr constant [3 x i8] c\"%s\\00\"".to_string(),
-            "@.scanf_i64 = private unnamed_addr constant [4 x i8] c\"%ld\\00\"".to_string(),
+            // NOTE: stdin I/O builtins are planned for migration to kioto ABI
+            //       (see __kioto_io_readln in kioto_abi_v1.md §3.11).
+            //       ireru itself will remain as the language builtin, but
+            //       std::io functions will delegate to kioto extern fns.
             "@.argc = global i32 0".to_string(),
             "@.argv = global ptr null".to_string(),
             "declare ptr @mire_get_args(i32, ptr)".to_string(),
@@ -354,7 +361,7 @@ impl LlvmIrGen {
         out.extend(self.body);
         out.push("}".to_string());
         out.push(String::new());
-        Ok(out.join("\n"))
+        Ok((out.join("\n"), self.extern_libs))
     }
 
     pub(super) fn compile_statement(&mut self, stmt: &Statement) -> Result<()> {
@@ -1933,44 +1940,86 @@ impl LlvmIrGen {
 
 
     pub(super) fn compile_input_expr(&mut self, args: &[Expression], data_type: &DataType) -> Result<LlValue> {
-        if args.len() != 1 {
+        // ireru accepts 0 or 1 argument:
+        //   ireru()          — read line with no prompt
+        //   ireru("prompt")  — show prompt, then read line
+        // Optional type annotation: ireru() :i64, ireru("> ") :f64, ireru() :bool
+        if args.len() > 1 {
             return Err(MireError::new(ErrorKind::Runtime {
-                message: "Avenys ireru expects 1 argument".to_string(),
+                message: "Avenys ireru expects 0 or 1 argument".to_string(),
             }));
         }
 
-        let prompt = self.compile_expr(&args[0])?;
+        let prompt = if args.is_empty() {
+            self.null_value()
+        } else {
+            self.compile_expr(&args[0])?
+        };
+
+        let input = self.tmp();
         self.body.push(format!(
-            "  call i32 (ptr, ...) @printf(ptr @.fmt_prompt, ptr {})",
+            "  {input} = call ptr @mire_read_line(ptr {})",
             prompt.repr
         ));
 
         match data_type {
             DataType::I64 | DataType::I32 | DataType::I16 | DataType::I8 => {
-                let temp_buf = self.tmp();
-                let result = self.tmp();
-                self.body.push(format!("  {temp_buf} = alloca i64"));
+                let parsed = self.tmp();
                 self.body.push(format!(
-                    "  call i32 (ptr, ...) @scanf(ptr @.scanf_i64, ptr {temp_buf})"
+                    "  {parsed} = call i64 @atoll(ptr {input})"
                 ));
-                self.body
-                    .push(format!("  {result} = load i64, ptr {temp_buf}"));
                 Ok(LlValue {
                     ty: LlType::I64,
+                    repr: parsed,
+                    owned: false,
+                })
+            }
+            DataType::F64 => {
+                let parsed = self.tmp();
+                self.body.push(format!(
+                    "  {parsed} = call double @atof(ptr {input})"
+                ));
+                Ok(LlValue {
+                    ty: LlType::F64,
+                    repr: parsed,
+                    owned: false,
+                })
+            }
+            DataType::Bool => {
+                let true_str = self.string_value("true");
+                let one_str = self.string_value("1");
+                let cmp_true = self.tmp();
+                let is_true = self.tmp();
+                let cmp_one = self.tmp();
+                let is_one = self.tmp();
+                let result = self.tmp();
+                self.body.push(format!(
+                    "  {cmp_true} = call i32 @strcmp(ptr {input}, ptr {})",
+                    true_str.repr
+                ));
+                self.body.push(format!(
+                    "  {is_true} = icmp eq i32 {cmp_true}, 0"
+                ));
+                self.body.push(format!(
+                    "  {cmp_one} = call i32 @strcmp(ptr {input}, ptr {})",
+                    one_str.repr
+                ));
+                self.body.push(format!(
+                    "  {is_one} = icmp eq i32 {cmp_one}, 0"
+                ));
+                self.body.push(format!(
+                    "  {result} = or i1 {is_true}, {is_one}"
+                ));
+                Ok(LlValue {
+                    ty: LlType::I1,
                     repr: result,
                     owned: false,
                 })
             }
             _ => {
-                let input_buf = self.tmp();
-                self.body
-                    .push(format!("  {input_buf} = call ptr @malloc(i64 256)"));
-                self.body.push(format!(
-                    "  call i32 (ptr, ...) @scanf(ptr @.scanf_str, ptr {input_buf})"
-                ));
                 Ok(LlValue {
                     ty: LlType::Ptr,
-                    repr: input_buf,
+                    repr: input,
                     owned: true,
                 })
             }

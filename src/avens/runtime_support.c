@@ -1939,6 +1939,41 @@ void *mire_env_all(void) {
     return list_ptr;
 }
 
+// ==================== I/O: mire_read_line ====================
+// Reads a line from stdin, optionally with a prompt.
+// If prompt is non-NULL and non-empty, prints it to stdout (no newline) and flushes.
+// Returns a heap-allocated, managed string (registered for GC) without the trailing newline.
+// On EOF/error, returns an empty managed string.
+// NOTE: stdin I/O builtins are planned for migration to kioto ABI
+//       (see __kioto_io_readln in kioto_abi_v1.md §3.11).
+char *mire_read_line(const char *prompt) {
+    if (prompt != NULL && prompt[0] != '\0') {
+        printf("%s", prompt);
+        fflush(stdout);
+    }
+
+    size_t cap = 128;
+    size_t len = 0;
+    char *buf = (char *)malloc(cap);
+    if (!buf) return mire_managed_from_slice("", 0);
+
+    int c;
+    while ((c = getchar()) != EOF && c != '\n') {
+        if (len + 1 >= cap) {
+            cap += cap >> 1;
+            char *nb = (char *)realloc(buf, cap);
+            if (!nb) { free(buf); return mire_managed_from_slice("", 0); }
+            buf = nb;
+        }
+        buf[len++] = (char)c;
+    }
+    buf[len] = '\0';
+
+    char *result = mire_managed_from_slice(buf, len);
+    free(buf);
+    return result;
+}
+
 // ==================== Kioto ABI v1 — Adapter Layer ====================
 // These functions implement the __kioto_* contract defined in
 // kioto_abi_v1.md so that Kioto modules can call them via extern fn
