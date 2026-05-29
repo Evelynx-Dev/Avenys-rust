@@ -304,8 +304,8 @@ impl<'a> BorrowChecker<'a> {
                 self.pop_scope();
                 
                 let mut moved_vars = Vec::new();
-                for i in 0..scopes_before.len() {
-                    for (name, state) in &scopes_before[i] {
+                for (i, scope) in scopes_before.iter().enumerate() {
+                    for (name, state) in scope {
                         if !state.is_moved && self.scopes[i][name].is_moved {
                             moved_vars.push(name.clone());
                         }
@@ -344,8 +344,8 @@ impl<'a> BorrowChecker<'a> {
                 self.pop_scope();
                 
                 let mut moved_vars = Vec::new();
-                for i in 0..scopes_before.len() {
-                    for (name, state) in &scopes_before[i] {
+                for (i, scope) in scopes_before.iter().enumerate() {
+                    for (name, state) in scope {
                         if !state.is_moved && self.scopes[i][name].is_moved {
                             moved_vars.push(name.clone());
                         }
@@ -383,8 +383,8 @@ impl<'a> BorrowChecker<'a> {
                 self.pop_scope();
                 
                 let mut moved_vars = Vec::new();
-                for i in 0..scopes_before.len() {
-                    for (name, state) in &scopes_before[i] {
+                for (i, scope) in scopes_before.iter().enumerate() {
+                    for (name, state) in scope {
                         if !state.is_moved && self.scopes[i][name].is_moved {
                             moved_vars.push(name.clone());
                         }
@@ -930,10 +930,8 @@ impl<'a> BorrowChecker<'a> {
     }
 
     fn mark_moved_if_non_copy(&mut self, name: &str) {
-        if self.is_non_copy_binding(name) {
-            if let Some(state) = self.lookup_binding_mut(name) {
-                state.is_moved = true;
-            }
+        if self.is_non_copy_binding(name) && let Some(state) = self.lookup_binding_mut(name) {
+            state.is_moved = true;
         }
     }
 
