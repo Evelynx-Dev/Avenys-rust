@@ -278,7 +278,6 @@ impl LlvmIrGen {
             "declare ptr @mire_strings_substr(ptr, i64, i64)".to_string(),
             "declare ptr @mire_strings_pad_left(ptr, i64, ptr)".to_string(),
             "declare ptr @mire_strings_pad_right(ptr, i64, ptr)".to_string(),
-            "declare ptr @mire_strings_repeat(ptr, i64)".to_string(),
             "declare ptr @mire_list_create(i64, i64)".to_string(),
             "declare ptr @mire_list_push_i64(ptr, i64)".to_string(),
             "declare ptr @mire_list_new()".to_string(),
@@ -1461,26 +1460,7 @@ impl LlvmIrGen {
             Expression::Call { name, args, .. } if name == "strings.pad_right" => {
                 self.compile_pad_right(args)
             }
-            Expression::Call { name, args, .. } if name == "strings.repeat" => {
-                self.compile_repeat(args)
-            }
-            Expression::Call { name, args, .. } if name == "strings.is_empty" => {
-                if args.len() != 1 {
-                    return Err(MireError::new(ErrorKind::Runtime {
-                        message: "Avenys strings.is_empty(...) expects 1 argument".to_string(),
-                    }));
-                }
-                let len = self.compile_len(args)?;
-                let len_i64 = self.cast_to_i64(len)?;
-                let out = self.tmp();
-                self.body
-                    .push(format!("  {out} = icmp eq i64 {}, 0", len_i64.repr));
-                Ok(LlValue {
-                    ty: LlType::I1,
-                    repr: out,
-                    owned: false,
-                })
-            }
+
             Expression::Call { name, args, .. } if name == "abs" => self.compile_abs(args),
             Expression::Call { name, args, .. } if name == "sqrt" => self.compile_sqrt(args),
             Expression::Call { name, args, .. } if name == "pow" => self.compile_pow(args),

@@ -551,6 +551,8 @@ The prompt (if provided) is printed to stdout without a newline before reading. 
 
 ## 14. Imports
 
+Modules are imported with the `import` keyword:
+
 ```mire
 import std
 import math
@@ -564,6 +566,20 @@ Specific imports select only named items from a module:
 
 ```mire
 import strings: (split replace trim)
+```
+
+Module dependencies can also be declared in `owl.toml` under the `[imports]` section:
+
+```toml
+[imports]
+kioto = { version = "0.2" }
+my-lib = { path = "./lib/my-lib" }
+```
+
+Use the CLI to manage imports:
+```
+mire import kioto --version 0.2
+mire import ./local-lib --path lib/local-lib
 ```
 
 ---

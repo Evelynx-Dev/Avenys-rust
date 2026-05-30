@@ -2,7 +2,7 @@
 
 Mire is a compiled, statically typed programming language with ownership-oriented memory safety checks and an LLVM-based backend.
 
-Current compiler crate version: `3.9.1`.
+Current compiler crate version: `3.10.0`.
 
 ## Status
 
@@ -10,8 +10,9 @@ Current compiler crate version: `3.9.1`.
 - Compiler pipeline: lexer, parser, type checker, semantic analysis, borrow checker, LLVM lowering
 - Incremental compilation: enabled (cache, reuse, LRU pruning)
 - Optimization profiles: `debug/release` + `-O0/-O1/-O2/-O3/-Os/-Oz`
-- Public CLI surface: `run`, `build`, `check`, `debug`
-- Callback/FFI contract: `call(...)` only lowers callbacks with inferable signature metadata; opaque `:function` dynamic calls are rejected at compile time.
+- Public CLI surface: `run`, `build`, `check`, `debug`, `import`
+- Standard library (`std/`): fully implemented via Kioto ABI v1 — 116 C wrappers covering fs, env, strings, lists, dicts, time, cpu, mem, proc, gpu, term, math, io.
+- TOML-based import management: `owl.toml` `[imports]` section with `mire import` CLI command.
 
 ## Quick Start
 
@@ -27,6 +28,7 @@ mire run [file] [options] [-- args]      # Compile and run
 mire build [file] [options]               # Compile to binary
 mire check [file] [options]               # Type-check without codegen
 mire debug [file] [options]               # Debug compilation
+mire import <module> [options]            # Add import to owl.toml
 ```
 
 Default profile is `debug` (`-O0`). Use `--release` or `-O2` for optimized builds.
@@ -42,6 +44,10 @@ mire run tests/complex/algorithms/01_sum_loop.mire -- --ms
 
 # Build a release binary
 mire build my_program.mire --release
+
+# Add a module dependency
+mire import kioto --version 0.2
+mire import ./local-lib --path lib/local-lib
 ```
 
 ## Documentation

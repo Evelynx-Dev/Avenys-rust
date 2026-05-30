@@ -3391,6 +3391,48 @@ fn borrowck_loop_moves_are_tracked() {
     assert!(err.to_string().contains("Use after move"), "{}", err.to_string());
 }
 
+#[test]
+fn local_import_restructured_module_dir() {
+    let root = make_temp_project_root("mire_local_import_restructured");
+    fs::create_dir_all(root.join("code/helpers")).expect("mkdir helpers");
+    fs::write(
+        root.join("owl.toml"),
+        "[project]\nname = \"restructured-modules\"\nversion = \"0.1.0\"\nentry = \"code/main.mire\"\n",
+    )
+    .expect("write project");
+
+    fs::write(
+        root.join("code/helpers/calc.mire"),
+        "pub fn mul: (a :i64 b :i64) :i64 {\n    return a * b\n}\n",
+    )
+    .expect("write calc");
+
+    let main_path = root.join("code/main.mire");
+    fs::write(
+        &main_path,
+        "import ./helpers/calc: (mul)\n\npub fn main: () {\n    use dasu(str(mul(6 7)))\n}\n",
+    )
+    .expect("write main");
+
+    let result = compile_file_with_avenys(
+        &main_path,
+        &BuildOptions {
+            mode: BuildMode::Debug,
+            opt_level: OptLevel::O0,
+            debug_dump: false,
+            output: None,
+            emit_binary: true,
+            persist_ir: false,
+            import_mode: mire::ImportMode::Legacy,
+            cache: Default::default(),
+            warning_filter: mire::error::diagnostic::WarningFilter::Default,
+            deny_warnings: std::collections::HashSet::new(),
+            module_paths: vec![],
+        },
+    );
+    assert!(result.is_ok(), "restructured module dir should compile: {:?}", result.err());
+}
+
 fn make_temp_project_root(prefix: &str) -> PathBuf {
     let root = unique_temp_dir(prefix);
     fs::create_dir_all(&root).expect("mkdir project root");

@@ -2,7 +2,31 @@
 
 All notable changes to Mire are documented in this file.
 
-## [3.8.14] - 2026-05-26
+## [3.10.0] - 2026-05-30
+
+### Added
+- Kioto ABI v1 closed: all `__kioto_*` extern functions declared in `std/` and implemented in C.
+  - 3 new C wrappers: `__kioto_lists_first`, `__kioto_lists_last`, `__kioto_lists_is_empty`.
+  - `__kioto_strings_strip` extern added to `std/strings/mod.mire`.
+  - Filled remaining proc externs: `run`, `exec`, `shell`, `wait`, `kill`, `exit`, `exists` with function bodies.
+- TOML-based import system: `owl.toml` now supports `[imports]` section.
+  - New CLI command: `mire import <module> [--version <ver>] [--path <path>]`.
+  - `ImportResolver` checks manifest imports before filesystem resolution.
+  - New types: `MireImports`, `MireImportEntry` (Simple, WithPath, PathOnly).
+  - New functions: `write_manifest`, `load_manifest_imports`.
+- `kioto/` modules marked as deprecated — std/ is the canonical module source.
+
+### Changed
+- `std/proc/mod.mire` now links to Kioto ABI C externs.
+- `MireManifest` extended with optional `imports: MireImports` field.
+- Import resolution order: manifest imports > project local > owl home > bundled.
+
+## [3.9.1] - 2026-05-26
+
+### Fixed
+- `__kioto_dicts_merge` fixed: was iterating `a` entries instead of `b`, and accessing non-existent `entries[i].key_kind`.
+- `__kioto_cpu_loadavg` replaced `getloadavg()` with `/proc/loadavg` read (removes `_GNU_SOURCE` dependency).
+- Cleaned redundant `extern` declarations in `__kioto_time_elapsed_ns` / `__kioto_cpu_elapsed_ns`.
 
 ### Added
 - `match` advanced pattern support (compiler-internal, no syntax breaks):

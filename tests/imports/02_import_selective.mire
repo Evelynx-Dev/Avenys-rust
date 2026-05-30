@@ -1,0 +1,12 @@
+// Test: selective imports from std sections
+import strings: (upper lower len)
+import math: (sum)
+
+pub fn main: () {
+    set s1 = strings.upper("hello")
+    set s2 = strings.lower("WORLD")
+    use dasu(s1 + " " + s2)
+
+    set total = math.sum([10 20 30] :vec[i64])
+    use dasu("sum: {total}")
+}

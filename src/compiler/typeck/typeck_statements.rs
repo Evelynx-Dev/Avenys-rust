@@ -459,35 +459,6 @@ impl TypeChecker {
         Ok(())
     }
 
-    pub(super) fn check_use_statement(&mut self, path: &str) {
-        if path == "__std_all__" {
-            for module in ["math", "term", "strings", "lists", "dicts", "time"] {
-                for member in crate::builtins::std_module_members(module) {
-                    self.insert_var((*member).to_string(), DataType::Anything, true);
-                }
-            }
-        } else if let Some(rest) = path.strip_prefix("stdall:") {
-            for member in crate::builtins::std_module_members(rest) {
-                self.insert_var((*member).to_string(), DataType::Anything, true);
-            }
-        } else if let Some(rest) = path.strip_prefix("stdselect:")
-            && let Some((_, items)) = rest.split_once(':')
-        {
-            for item in items.split(',').filter(|item| !item.is_empty()) {
-                self.insert_var(item.to_string(), DataType::Anything, true);
-            }
-        } else if let Some(rest) = path.strip_prefix("stdalias:")
-            && let Some((alias, _)) = rest.split_once(':')
-        {
-            self.insert_var(alias.to_string(), DataType::Anything, true);
-        } else if let Some(rest) = path.strip_prefix("stdaliasselect:") {
-            let mut parts = rest.splitn(3, ':');
-            if let Some(alias) = parts.next() {
-                self.insert_var(alias.to_string(), DataType::Anything, true);
-            }
-        }
-    }
-
     fn check_query_op(&mut self, op: &mut QueryOp) -> Result<()> {
         match op {
             QueryOp::Insert { assigns } => {

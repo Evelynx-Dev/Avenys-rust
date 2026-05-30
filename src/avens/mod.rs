@@ -35,8 +35,8 @@ mod llvm_dicts;
 mod llvm_functions;
 mod llvm_lists;
 pub use config::{
-    BuildMode, BuildOptions, BuildResult, ImportMode, MireCacheConfig, MireLock, MireLockBuild,
-    MireLockProject, MireManifest, MireProject, OptLevel,
+    BuildMode, BuildOptions, BuildResult, ImportMode, MireCacheConfig, MireImportEntry,
+    MireImports, MireLock, MireLockBuild, MireLockProject, MireManifest, MireProject, OptLevel,
 };
 pub use build_pipeline::{compile_file_with_avenys, default_output_dir};
 use llvm_types::*;
@@ -45,8 +45,8 @@ use utils::{
     strip_root_namespace,
 };
 pub use manifest::{
-    find_project_root, load_project_manifest, project_lock_path, project_manifest_path,
-    write_lock_file,
+    find_project_root, load_manifest_imports, load_project_manifest, project_lock_path,
+    project_manifest_path, write_lock_file, write_manifest,
 };
 use toolchain::{compile_binary_from_ir, optimize_ir};
 use reuse::prepare_program_with_partial_analysis_reuse;

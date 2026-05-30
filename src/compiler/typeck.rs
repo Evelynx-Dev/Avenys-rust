@@ -384,7 +384,7 @@ impl TypeChecker {
             | Statement::ExternLib { .. }
             | Statement::ExternFunction { .. }
             | Statement::Enum { .. } => {}
-            Statement::Use { path, .. } => self.check_use_statement(path),
+            Statement::Use { .. } => {}
         }
 
         Ok(())

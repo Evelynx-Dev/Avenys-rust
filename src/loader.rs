@@ -1,4 +1,4 @@
-use crate::avens::{ImportMode, find_project_root};
+use crate::avens::{ImportMode, MireImportEntry, find_project_root, load_manifest_imports};
 use crate::error::{ErrorKind, MireError, Result};
 use crate::incremental::{
     CacheSettings, CachedImport, CachedParsedFile, IncrementalCache, LoadedFile, LoadedProgram,
@@ -36,10 +36,12 @@ pub fn load_program_with_metadata_with_settings(
         return load_shallow_program(&canonical);
     };
 
+    let manifest_imports = load_manifest_imports(&project_root).unwrap_or_default();
     let mut resolver = ImportResolver::new(
         project_root,
         IncrementalCache::load_with_settings(&canonical, settings)?,
         import_mode,
+        manifest_imports,
     );
     let statements = resolver.load_file(&canonical)?;
     resolver.cache.save()?;
@@ -97,10 +99,16 @@ struct ImportResolver {
     files: HashMap<PathBuf, LoadedFile>,
     sources: HashMap<PathBuf, String>,
     import_mode: ImportMode,
+    manifest_imports: HashMap<String, MireImportEntry>,
 }
 
 impl ImportResolver {
-    fn new(project_root: PathBuf, cache: IncrementalCache, import_mode: ImportMode) -> Self {
+    fn new(
+        project_root: PathBuf,
+        cache: IncrementalCache,
+        import_mode: ImportMode,
+        manifest_imports: HashMap<String, MireImportEntry>,
+    ) -> Self {
         Self {
             project_root,
             cache,
@@ -109,6 +117,7 @@ impl ImportResolver {
             files: HashMap::new(),
             sources: HashMap::new(),
             import_mode,
+            manifest_imports,
         }
     }
 
@@ -390,12 +399,19 @@ impl ImportResolver {
         let importer_dir = importer_path
             .parent()
             .unwrap_or(self.project_root.as_path());
+
+        // First try ./<name>.mire
         let mut candidate = importer_dir.join(relative);
         if candidate.extension().is_none() {
             candidate.set_extension("mire");
         }
+        if let Ok(canonical) = candidate.canonicalize() {
+            return Ok(canonical);
+        }
 
-        let canonical = candidate.canonicalize().map_err(|err| {
+        // Then try ./<name>/mod.mire (directory module)
+        let dir_candidate = importer_dir.join(relative).join("mod.mire");
+        let canonical = dir_candidate.canonicalize().map_err(|err| {
             MireError::new(ErrorKind::Runtime {
                 message: format!("Could not resolve local import '{}': {}", raw_path, err),
             })
@@ -428,13 +444,13 @@ impl ImportResolver {
     }
 
     fn std_entry_path(&self) -> Result<PathBuf> {
-        let project_candidate = self.project_root.join("src/modules/std/mod.mire");
+        let project_candidate = self.project_root.join("src/modules/kioto/mod.mire");
         if let Ok(path) = project_candidate.canonicalize() {
             return Ok(path);
         }
 
         let bundled_candidate =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/modules/std/mod.mire");
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/modules/kioto/mod.mire");
         bundled_candidate.canonicalize().map_err(|err| {
             MireError::new(ErrorKind::Runtime {
                 message: format!(
@@ -452,7 +468,34 @@ impl ImportResolver {
         PathBuf::from(home).join(".owl").join("modules")
     }
 
+    fn resolve_import_from_manifest(&self, name: &str) -> Option<PathBuf> {
+        self.manifest_imports.get(name).and_then(|entry| {
+            match entry {
+                MireImportEntry::Simple { version: _v } => {
+                    // version-based: check owl home
+                    let owl = self.owl_home_modules().join(name).join("lib.mire");
+                    if owl.exists() { Some(owl) } else { None }
+                }
+                MireImportEntry::PathOnly { path } | MireImportEntry::WithPath { path, .. } => {
+                    let p = PathBuf::from(path);
+                    let candidate = if p.is_absolute() { p } else { self.project_root.join(&p) };
+                    // Try direct file, then <path>/lib.mire
+                    if candidate.exists() && candidate.extension().is_some() {
+                        Some(candidate)
+                    } else {
+                        let lib = candidate.join("lib.mire");
+                        if lib.exists() { Some(lib) } else { None }
+                    }
+                }
+            }
+        })
+    }
+
     fn resolve_module_path(&self, name: &str) -> Result<PathBuf> {
+        // 0. Check manifest imports first
+        if let Some(path) = self.resolve_import_from_manifest(name) {
+            return Ok(path);
+        }
         // 1. Project local: ./<name>/lib.mire
         let project_candidate = self.project_root.join(name).join("lib.mire");
         if let Ok(path) = project_candidate.canonicalize() {
@@ -487,10 +530,19 @@ impl ImportResolver {
                 .join("src/modules")
                 .join(name)
                 .join("lib.mire");
-        bundled_candidate.canonicalize().map_err(|err| {
+        if let Ok(path) = bundled_candidate.canonicalize() {
+            return Ok(path);
+        }
+        // 7. Bundled with compiler (src): <CARGO_MANIFEST_DIR>/src/modules/<name>/mod.mire
+        let bundled_mod_candidate =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("src/modules")
+                .join(name)
+                .join("mod.mire");
+        bundled_mod_candidate.canonicalize().map_err(|err| {
             MireError::new(ErrorKind::Runtime {
                 message: format!(
-                    "Could not resolve module '{}' (tried '{}', '{}', '{}', '{}', '{}' and '{}'): {}",
+                    "Could not resolve module '{}' (tried '{}', '{}', '{}', '{}', '{}', '{}' and '{}'): {}",
                     name,
                     project_candidate.display(),
                     local_modules_candidate.display(),
@@ -498,6 +550,7 @@ impl ImportResolver {
                     owl_code_candidate.display(),
                     workspace_project_candidate.display(),
                     bundled_candidate.display(),
+                    bundled_mod_candidate.display(),
                     err
                 ),
             })
@@ -505,6 +558,12 @@ impl ImportResolver {
     }
 
     fn resolve_module_dir(&self, name: &str) -> Result<PathBuf> {
+        // 0. Check manifest imports first
+        if let Some(path) = self.resolve_import_from_manifest(name)
+            && let Some(dir) = path.parent()
+        {
+            return Ok(dir.to_path_buf());
+        }
         // 1. Project local: ./<name>/
         let project_candidate = self.project_root.join(name);
         if let Ok(path) = project_candidate.canonicalize() {
@@ -592,8 +651,12 @@ impl ImportResolver {
     ) -> Result<Vec<ExpandedStatement>> {
         let mut result = Vec::new();
         for item in items {
-            let file_name = format!("{}.mire", item);
-            let file_path = module_dir.join(&file_name);
+            let file_path = module_dir.join(format!("{}.mire", item));
+            let file_path = if file_path.exists() {
+                file_path
+            } else {
+                module_dir.join(item).join("mod.mire")
+            };
             let canonical = file_path.canonicalize().map_err(|err| {
                 MireError::new(ErrorKind::Runtime {
                     message: format!(

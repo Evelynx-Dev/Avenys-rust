@@ -28,13 +28,51 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
     let optimized_ir_path = options
         .persist_ir
         .then(|| output_dir.join(format!("{stem}.opt.ll")));
-    let runtime_support =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/avens/runtime_support.c");
-    let runtime_support_source = fs::read_to_string(&runtime_support).map_err(|err| {
-        MireError::new(ErrorKind::Runtime {
-            message: format!("Could not read '{}': {}", runtime_support.display(), err),
-        })
-    })?;
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let c_source_files: Vec<String> = {
+        let mut files = Vec::new();
+        for entry in std::fs::read_dir(manifest_dir.join("src/runtime")).map_err(|err| {
+            MireError::new(ErrorKind::Runtime {
+                message: format!("Could not read src/runtime: {}", err),
+            })
+        })? {
+            let entry = entry.map_err(|err| {
+                MireError::new(ErrorKind::Runtime {
+                    message: format!("Could not read entry: {}", err),
+                })
+            })?;
+            let path = entry.path();
+            if path.extension().is_some_and(|e| e == "c") {
+                files.push(path.to_string_lossy().to_string());
+            }
+        }
+        for entry in std::fs::read_dir(manifest_dir.join("src/pal/linux")).map_err(|err| {
+            MireError::new(ErrorKind::Runtime {
+                message: format!("Could not read src/pal/linux: {}", err),
+            })
+        })? {
+            let entry = entry.map_err(|err| {
+                MireError::new(ErrorKind::Runtime {
+                    message: format!("Could not read entry: {}", err),
+                })
+            })?;
+            let path = entry.path();
+            if path.extension().is_some_and(|e| e == "c") {
+                files.push(path.to_string_lossy().to_string());
+            }
+        }
+        files.sort();
+        files
+    };
+    let c_sources_combined: String = {
+        let mut combined = String::new();
+        for src in &c_source_files {
+            if let Ok(content) = fs::read_to_string(src) {
+                combined.push_str(&content);
+            }
+        }
+        combined
+    };
     let cache_settings = CacheSettings::resolve_for(source_path, options.cache)?;
     let mut cache = IncrementalCache::load_with_settings(source_path, cache_settings)?;
     let loaded = load_program_with_metadata_with_settings(
@@ -60,7 +98,7 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
         options.import_mode,
         options.opt_level,
         options.emit_binary,
-        &runtime_support_source,
+        &c_sources_combined,
     );
 
     if let Some(entry) = cache.build_entry(
@@ -215,7 +253,7 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
     }
 
     if options.emit_binary {
-        compile_binary_from_ir(&final_ir, &runtime_support, &binary_path, options.opt_level, &extern_libs)?;
+        compile_binary_from_ir(&final_ir, &c_source_files, &binary_path, options.opt_level, &extern_libs, &manifest_dir)?;
     }
 
     cache.store_build(

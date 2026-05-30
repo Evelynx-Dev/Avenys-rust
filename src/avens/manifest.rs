@@ -1,5 +1,6 @@
 use super::*;
 use super::toolchain::llvm_version;
+use std::collections::HashMap;
 
 pub fn load_project_manifest(cwd: &Path) -> Result<Option<MireManifest>> {
     let manifest_path = project_manifest_path(cwd);
@@ -95,4 +96,26 @@ pub fn project_lock_path(cwd: &Path) -> PathBuf {
         return cwd.join("project.lock");
     }
     cwd.join("Mire.lock")
+}
+
+pub fn write_manifest(manifest: &MireManifest, path: &Path) -> Result<()> {
+    let raw = toml::to_string_pretty(manifest).map_err(|err| {
+        MireError::new(ErrorKind::Runtime {
+            message: format!("Could not serialize manifest: {}", err),
+        })
+    })?;
+    fs::write(path, raw).map_err(|err| {
+        MireError::new(ErrorKind::Runtime {
+            message: format!("Could not write manifest '{}': {}", path.display(), err),
+        })
+    })?;
+    Ok(())
+}
+
+pub fn load_manifest_imports(cwd: &Path) -> Result<HashMap<String, MireImportEntry>> {
+    match load_project_manifest(cwd) {
+        Ok(Some(manifest)) => Ok(manifest.imports.entries),
+        Ok(None) => Ok(HashMap::new()),
+        Err(e) => Err(e),
+    }
 }

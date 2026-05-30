@@ -2042,12 +2042,12 @@ int64_t __kioto_math_ceil(double x) { return mire_double_ceil(x); }
 // ── time ──────────────────────────────────────────────────────────────
 int64_t __kioto_time_mark(void) { return mire_wall_mark_ns(); }
 int64_t __kioto_time_elapsed_ms(int64_t start) { return mire_wall_elapsed_ms(start); }
-int64_t __kioto_time_elapsed_ns(int64_t start) { extern int64_t mire_clock_ns(clockid_t); return mire_clock_ns(CLOCK_MONOTONIC) - start; }
+int64_t __kioto_time_elapsed_ns(int64_t start) { return mire_clock_ns(CLOCK_MONOTONIC) - start; }
 
 // ── cpu ───────────────────────────────────────────────────────────────
 int64_t __kioto_cpu_mark(void) { return mire_cpu_mark_ns(); }
 int64_t __kioto_cpu_elapsed_ms(int64_t start) { return mire_cpu_elapsed_ms(start); }
-int64_t __kioto_cpu_elapsed_ns(int64_t start) { extern int64_t mire_clock_ns(clockid_t); return mire_clock_ns(CLOCK_PROCESS_CPUTIME_ID) - start; }
+int64_t __kioto_cpu_elapsed_ns(int64_t start) { return mire_clock_ns(CLOCK_PROCESS_CPUTIME_ID) - start; }
 int64_t __kioto_cpu_cycles_est(int64_t start) { return mire_cpu_cycles_est(start); }
 
 // ── proc ──────────────────────────────────────────────────────────────
@@ -2131,3 +2131,334 @@ void *__kioto_dicts_values(void *dict) { return mire_dict_values(dict); }
 // ── mem ───────────────────────────────────────────────────────────────
 int64_t __kioto_mem_process_bytes(void) { return mire_mem_process_bytes(); }
 char *__kioto_mem_format(int64_t bytes) { return mire_mem_format(bytes); }
+
+// ── io ────────────────────────────────────────────────────────────────
+// These delegate to the existing mire I/O runtime to match the kioto ABI.
+void __kioto_io_print(const char *msg) {
+    if (msg) printf("%s\n", msg);
+}
+void __kioto_io_print_err(const char *msg) {
+    if (msg) fprintf(stderr, "%s\n", msg);
+}
+char *__kioto_io_readln(void) {
+    return mire_read_line(NULL);
+}
+
+// ── gpu ───────────────────────────────────────────────────────────────
+char *__kioto_gpu_snapshot(void) { return mire_gpu_snapshot(); }
+
+// ── time (string variants) ─────────────────────────────────────────────
+char *__kioto_time_elapsed_ms_str(int64_t start_ns) { return mire_wall_elapsed_ms_str(start_ns); }
+
+// ── cpu (string variants) ──────────────────────────────────────────────
+char *__kioto_cpu_elapsed_ms_str(int64_t start_ns) { return mire_cpu_elapsed_ms_str(start_ns); }
+
+// ── env extras ──────────────────────────────────────────────────────────
+int __kioto_env_chdir(const char *path) { return chdir(path); }
+
+// ── strings extras ──────────────────────────────────────────────────────
+int64_t __kioto_strings_is_empty(const char *s) { return (s == NULL || s[0] == '\0') ? 1 : 0; }
+int64_t __kioto_strings_index_of(const char *s, const char *sub) {
+    if (!s || !sub) return -1;
+    const char *found = strstr(s, sub);
+    return found ? (int64_t)(found - s) : -1;
+}
+
+// ── math extras ─────────────────────────────────────────────────────────
+int64_t __kioto_math_abs(int64_t x) { return x < 0 ? -x : x; }
+int64_t __kioto_math_sum(void *list) {
+    if (!list) return 0;
+    int64_t len = mire_list_len(list);
+    int64_t total = 0;
+    for (int64_t i = 0; i < len; i++) {
+        total += ((int64_t *)list)[i + 1];
+    }
+    return total;
+}
+
+// ── mem extras ──────────────────────────────────────────────────────────
+// These read system memory info from /proc/meminfo on Linux.
+static int64_t mire_mem_read_proc_value(const char *key) {
+    FILE *f = fopen("/proc/meminfo", "r");
+    if (!f) return 0;
+    char line[256];
+    int64_t value = 0;
+    while (fgets(line, sizeof(line), f)) {
+        if (strncmp(line, key, strlen(key)) == 0) {
+            sscanf(line + strlen(key), " %ld", &value);
+            break;
+        }
+    }
+    fclose(f);
+    return value * 1024; // /proc/meminfo values are in kB
+}
+int64_t __kioto_mem_used(void) {
+    int64_t total = mire_mem_read_proc_value("MemTotal:");
+    int64_t free = mire_mem_read_proc_value("MemFree:");
+    return total - free;
+}
+int64_t __kioto_mem_total(void) { return mire_mem_read_proc_value("MemTotal:"); }
+int64_t __kioto_mem_free(void) { return mire_mem_read_proc_value("MemFree:"); }
+int64_t __kioto_mem_available(void) { return mire_mem_read_proc_value("MemAvailable:"); }
+int64_t __kioto_mem_percent(void) {
+    int64_t total = mire_mem_read_proc_value("MemTotal:");
+    if (total == 0) return 0;
+    int64_t available = mire_mem_read_proc_value("MemAvailable:");
+    return 100 - (available * 100 / total);
+}
+void *__kioto_mem_snapshot(void) {
+    void *dict = mire_list_create(0, sizeof(void *));
+    dict = mire_dict_set_i64(dict, MIRE_KIND_STR, MIRE_KIND_SCALAR, 0, (void*)"total", __kioto_mem_total());
+    dict = mire_dict_set_i64(dict, MIRE_KIND_STR, MIRE_KIND_SCALAR, 0, (void*)"free", __kioto_mem_free());
+    dict = mire_dict_set_i64(dict, MIRE_KIND_STR, MIRE_KIND_SCALAR, 0, (void*)"available", __kioto_mem_available());
+    dict = mire_dict_set_i64(dict, MIRE_KIND_STR, MIRE_KIND_SCALAR, 0, (void*)"used", __kioto_mem_used());
+    dict = mire_dict_set_i64(dict, MIRE_KIND_STR, MIRE_KIND_SCALAR, 0, (void*)"percent", __kioto_mem_percent());
+    dict = mire_dict_set_i64(dict, MIRE_KIND_STR, MIRE_KIND_SCALAR, 0, (void*)"process", mire_mem_process_bytes());
+    return dict;
+}
+
+// ── cpu extras ──────────────────────────────────────────────────────────
+int64_t __kioto_cpu_count(void) {
+    long n = sysconf(_SC_NPROCESSORS_ONLN);
+    return n > 0 ? (int64_t)n : 1;
+}
+int64_t __kioto_cpu_freq_mhz(void) {
+    // Try to read from /proc/cpuinfo
+    FILE *f = fopen("/proc/cpuinfo", "r");
+    if (!f) return 0;
+    char line[256];
+    double mhz = 0;
+    while (fgets(line, sizeof(line), f)) {
+        if (sscanf(line, "cpu MHz\t: %lf", &mhz) == 1) break;
+    }
+    fclose(f);
+    return (int64_t)(mhz + 0.5);
+}
+int64_t __kioto_cpu_time_ns(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts);
+    return (int64_t)ts.tv_sec * 1000000000L + (int64_t)ts.tv_nsec;
+}
+int64_t __kioto_cpu_time_ms(void) { return __kioto_cpu_time_ns() / 1000000; }
+void *__kioto_cpu_loadavg(void) {
+    // Read from /proc/loadavg
+    FILE *f = fopen("/proc/loadavg", "r");
+    void *list = mire_list_create(0, 8);
+    if (!f) {
+        list = mire_list_push_i64(list, 0);
+        list = mire_list_push_i64(list, 0);
+        list = mire_list_push_i64(list, 0);
+        return list;
+    }
+    double l1, l5, l15;
+    if (fscanf(f, "%lf %lf %lf", &l1, &l5, &l15) == 3) {
+        // Store as i64 (scaled by 100 to preserve 2 decimal places)
+        list = mire_list_push_i64(list, (int64_t)(l1 * 100));
+        list = mire_list_push_i64(list, (int64_t)(l5 * 100));
+        list = mire_list_push_i64(list, (int64_t)(l15 * 100));
+    } else {
+        list = mire_list_push_i64(list, 0);
+        list = mire_list_push_i64(list, 0);
+        list = mire_list_push_i64(list, 0);
+    }
+    fclose(f);
+    return list;
+}
+void *__kioto_cpu_snapshot(void) {
+    void *dict = mire_list_create(0, sizeof(void *));
+    dict = mire_dict_set_i64(dict, MIRE_KIND_STR, MIRE_KIND_SCALAR, 0, (void*)"count", __kioto_cpu_count());
+    dict = mire_dict_set_i64(dict, MIRE_KIND_STR, MIRE_KIND_SCALAR, 0, (void*)"freq_mhz", __kioto_cpu_freq_mhz());
+    return dict;
+}
+
+// ── time extras ─────────────────────────────────────────────────────────
+int64_t __kioto_time_unix_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (int64_t)ts.tv_sec * 1000 + (int64_t)ts.tv_nsec / 1000000;
+}
+int64_t __kioto_time_unix_ns(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (int64_t)ts.tv_sec * 1000000000L + (int64_t)ts.tv_nsec;
+}
+int64_t __kioto_time_since_ms(int64_t start_ns) {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    int64_t now = (int64_t)ts.tv_sec * 1000000000L + (int64_t)ts.tv_nsec;
+    return (now - start_ns) / 1000000;
+}
+int64_t __kioto_time_since_ns(int64_t start_ns) {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    int64_t now = (int64_t)ts.tv_sec * 1000000000L + (int64_t)ts.tv_nsec;
+    return now - start_ns;
+}
+void __kioto_time_sleep_ms(int64_t ms) { usleep((useconds_t)ms * 1000); }
+void __kioto_time_sleep_ns(int64_t ns) {
+    struct timespec ts;
+    ts.tv_sec = ns / 1000000000L;
+    ts.tv_nsec = ns % 1000000000L;
+    nanosleep(&ts, NULL);
+}
+
+// ── term ────────────────────────────────────────────────────────────────
+char *__kioto_term_style(const char *s, const char *style) {
+    // Basic ANSI style wrapping
+    const char *code = "0";
+    if (strcmp(style, "bold") == 0) code = "1";
+    else if (strcmp(style, "dim") == 0) code = "2";
+    else if (strcmp(style, "italic") == 0) code = "3";
+    else if (strcmp(style, "underline") == 0) code = "4";
+    else if (strcmp(style, "red") == 0) code = "31";
+    else if (strcmp(style, "green") == 0) code = "32";
+    else if (strcmp(style, "yellow") == 0) code = "33";
+    else if (strcmp(style, "blue") == 0) code = "34";
+    else if (strcmp(style, "magenta") == 0) code = "35";
+    else if (strcmp(style, "cyan") == 0) code = "36";
+    else if (strcmp(style, "white") == 0) code = "37";
+    char buf[1024];
+    snprintf(buf, sizeof(buf), "\033[%sm%s\033[0m", code, s ? s : "");
+    return mire_managed_from_slice(buf, strlen(buf));
+}
+char *__kioto_term_hr(const char *ch, int64_t len) {
+    if (!ch || len <= 0) return mire_managed_from_slice("", 0);
+    size_t slen = strlen(ch);
+    size_t total = (size_t)len * slen;
+    char *buf = (char *)malloc(total + 1);
+    if (!buf) return mire_managed_from_slice("", 0);
+    for (int64_t i = 0; i < len; i++) {
+        memcpy(buf + i * slen, ch, slen);
+    }
+    buf[total] = '\0';
+    char *result = mire_managed_from_slice(buf, total);
+    free(buf);
+    return result;
+}
+char *__kioto_term_clear(void) {
+    return mire_managed_from_slice("\033[2J\033[H", 7);
+}
+
+// ── list extras ─────────────────────────────────────────────────────────
+int64_t __kioto_lists_index_of(void *list, int64_t value) {
+    if (!list) return -1;
+    int64_t len = mire_list_len(list);
+    for (int64_t i = 0; i < len; i++) {
+        if (((int64_t *)list)[i + 1] == value) return i;
+    }
+    return -1;
+}
+void *__kioto_lists_flatten(void *list) {
+    if (!list) return mire_list_create(0, 8);
+    int64_t len = mire_list_len(list);
+    void *result = mire_list_create(0, 8);
+    for (int64_t i = 0; i < len; i++) {
+        void *sublist = ((void **)((int64_t *)list + 1))[i];
+        if (sublist) {
+            int64_t sublen = mire_list_len(sublist);
+            for (int64_t j = 0; j < sublen; j++) {
+                result = mire_list_push_i64(result, ((int64_t *)sublist)[j + 1]);
+            }
+        }
+    }
+    return result;
+}
+void *__kioto_lists_reverse(void *list) {
+    if (!list) return list;
+    int64_t len = mire_list_len(list);
+    int64_t *data = (int64_t *)list;
+    for (int64_t i = 0; i < len / 2; i++) {
+        int64_t tmp = data[i + 1];
+        data[i + 1] = data[len - i];
+        data[len - i] = tmp;
+    }
+    return list;
+}
+void *__kioto_lists_sort(void *list) {
+    if (!list) return list;
+    // Simple insertion sort for i64 lists
+    int64_t len = mire_list_len(list);
+    int64_t *data = (int64_t *)list;
+    for (int64_t i = 1; i < len; i++) {
+        int64_t key = data[i + 1];
+        int64_t j = i - 1;
+        while (j >= 0 && data[j + 1] > key) {
+            data[j + 2] = data[j + 1];
+            j--;
+        }
+        data[j + 2] = key;
+    }
+    return list;
+}
+void *__kioto_lists_unique(void *list) {
+    if (!list) return mire_list_create(0, 8);
+    int64_t len = mire_list_len(list);
+    int64_t *data = (int64_t *)list;
+    void *result = mire_list_create(0, 8);
+    for (int64_t i = 0; i < len; i++) {
+        int64_t val = data[i + 1];
+        int64_t j;
+        int64_t rlen = mire_list_len(result);
+        int64_t *rdata = (int64_t *)result;
+        for (j = 0; j < rlen; j++) {
+            if (rdata[j + 1] == val) break;
+        }
+        if (j == rlen) {
+            result = mire_list_push_i64(result, val);
+        }
+    }
+    return result;
+}
+int64_t __kioto_lists_contains(void *list, int64_t value) {
+    if (!list) return 0;
+    int64_t len = mire_list_len(list);
+    int64_t *data = (int64_t *)list;
+    for (int64_t i = 0; i < len; i++) {
+        if (data[i + 1] == value) return 1;
+    }
+    return 0;
+}
+char *__kioto_lists_join(void *list, const char *sep) {
+    if (!list || !sep) return mire_managed_from_slice("", 0);
+    return mire_strings_join((char **)list, (size_t)mire_list_len(list), sep);
+}
+int64_t __kioto_lists_first(void *list) {
+    if (!list) return 0;
+    if (mire_list_len(list) == 0) return 0;
+    return ((int64_t *)list)[1];
+}
+int64_t __kioto_lists_last(void *list) {
+    if (!list) return 0;
+    int64_t len = mire_list_len(list);
+    if (len == 0) return 0;
+    return ((int64_t *)list)[len];
+}
+int64_t __kioto_lists_is_empty(void *list) {
+    return (!list || mire_list_len(list) == 0) ? 1 : 0;
+}
+
+// ── dict extras ─────────────────────────────────────────────────────────
+int64_t __kioto_dicts_entries(void *dict) {
+    if (!dict) return 0;
+    return ((MireDict *)dict)->len;
+}
+void *__kioto_dicts_merge(void *a, void *b) {
+    if (!a) return b;
+    if (!b) return a;
+    MireDict *db = (MireDict *)b;
+    for (int64_t i = 0; i < db->len; i++) {
+        if (db->key_kind == MIRE_KIND_SCALAR) {
+            int64_t key = mire_dict_read_key_scalar(db, i);
+            int64_t val = mire_dict_read_scalar(db, i);
+            a = mire_dict_set_i64(a, MIRE_KIND_SCALAR, db->value_kind, 0, (void *)key, val);
+        } else {
+            void *key = mire_dict_read_key_ptr(db, i);
+            void *val = mire_dict_read_ptr(db, i);
+            a = mire_dict_set_ptr(a, db->key_kind, db->value_kind, 0, key, val);
+        }
+    }
+    return a;
+}
+int64_t __kioto_dicts_is_empty(void *dict) {
+    return (!dict || ((MireDict *)dict)->len == 0) ? 1 : 0;
+}

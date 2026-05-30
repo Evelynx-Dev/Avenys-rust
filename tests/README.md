@@ -66,13 +66,14 @@ for f in tests/level/beginner/*.mire; do ./target/release/mire run "$f"; done
 | edge/error_handling | 1 | ✅ Passing |
 | behavior/typeck | 2 | ✅ Passing |
 | behavior/borrowck | 3 | ⚠️ Partial |
-| modules | 1 | ✅ Passing |
+| modules | 3 | ✅ Passing |
 
 ## Known Issues
 
 See `docs/issues.md` for documented issues and limitations.
 - **math.avg**: Function not available, use `math.sum(x) / len(x)`
 - **List HOF scope**: `lists.fold/map/filter` are working with inline closures; generic callback values are still not documented as stable surface. Current checked order is `lists.fold(acc, closure, list)`.
+- **std/proc.run/exec with args**: `run(cmd, args)` and `exec(cmd, args)` require string joining from extern — implemented as declarations pending cross-module import resolution within std sub-modules.
 
 ## Incremental Compilation
 

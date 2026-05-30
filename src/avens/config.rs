@@ -1,7 +1,7 @@
 use crate::error::diagnostic::{DiagnosticCode, WarningFilter};
 use crate::incremental::CacheOverrides;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -91,6 +91,22 @@ pub struct MireManifest {
     pub project: MireProject,
     #[serde(default)]
     pub cache: Option<MireCacheConfig>,
+    #[serde(default)]
+    pub imports: MireImports,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MireImports {
+    #[serde(flatten)]
+    pub entries: HashMap<String, MireImportEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum MireImportEntry {
+    Simple { version: String },
+    WithPath { version: String, path: String },
+    PathOnly { path: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

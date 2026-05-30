@@ -361,23 +361,6 @@ impl LlvmIrGen {
         Ok(LlValue { ty: LlType::Ptr, repr: result, owned: true })
     }
 
-    pub(super) fn compile_repeat(&mut self, args: &[Expression]) -> Result<LlValue> {
-        if args.len() != 2 {
-            return Err(MireError::new(ErrorKind::Runtime {
-                message: "strings.repeat(...) expects 2 arguments".to_string(),
-            }));
-        }
-        let input = self.compile_expr(&args[0])?;
-        let times_expr = self.compile_expr(&args[1])?;
-        let times = self.cast_to_i64(times_expr)?;
-        let result = self.tmp();
-        self.body.push(format!(
-            "  {result} = call ptr @mire_strings_repeat(ptr {}, i64 {})",
-            input.repr, times.repr
-        ));
-        Ok(LlValue { ty: LlType::Ptr, repr: result, owned: true })
-    }
-
     pub(super) fn emit_print(&mut self, value: &LlValue) -> Result<()> {
         match value.ty {
             LlType::I64 => {
