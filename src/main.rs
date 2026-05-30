@@ -64,6 +64,7 @@ fn run_cli() -> Result<i32, MireError> {
         "build" => build_command(&cwd, &args[2..]),
         "check" => check_command(&cwd, &args[2..]),
         "debug" => debug_command(&cwd, &args[2..]),
+        "test" => test_command(&cwd, &args[2..]),
         "import" => import_command(&cwd, &args[2..]),
         "help" | "--help" | "-h" => {
             print_help();
@@ -204,6 +205,164 @@ fn debug_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
         return Ok(status.code().unwrap_or(1));
     }
     Ok(0)
+}
+
+fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
+    let mut run = true;
+    let mut verbose = false;
+    let mut paths: Vec<String> = Vec::new();
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--no-run" => run = false,
+            "--verbose" | "-v" => verbose = true,
+            _ => paths.push(args[i].clone()),
+        }
+        i += 1;
+    }
+
+    let mut test_files: Vec<PathBuf> = Vec::new();
+
+    if !paths.is_empty() {
+        for p in &paths {
+            let path = cwd.join(p);
+            if path.is_dir() {
+                let mut entries: Vec<_> = walkdir(&path, "*.mire")?;
+                entries.sort();
+                test_files.extend(entries);
+            } else if path.is_file() {
+                test_files.push(path);
+            } else {
+                eprintln!("warning: test path not found: {}", path.display());
+            }
+        }
+    } else {
+        let tests_dir = cwd.join("tests");
+        if tests_dir.is_dir() {
+            let mut entries: Vec<_> = walkdir(&tests_dir, "*.mire")?;
+            entries.sort();
+            test_files = entries;
+        }
+    }
+
+    if test_files.is_empty() {
+        println!("no extra tests found");
+        return Ok(0);
+    }
+
+    let _total = test_files.len();
+    let mut passed = 0u32;
+    let mut failed = 0u32;
+
+    for file in &test_files {
+        let display = file
+            .strip_prefix(cwd)
+            .unwrap_or(file)
+            .display()
+            .to_string();
+
+        if verbose {
+            print!("test {} ... ", display);
+        }
+
+        if !file.exists() {
+            if verbose {
+                println!("FAILED");
+            } else {
+                println!("FAILED: {} - file not found", display);
+            }
+            failed += 1;
+            continue;
+        }
+
+        let options = BuildOptions {
+            mode: BuildMode::Debug,
+            opt_level: OptLevel::O0,
+            debug_dump: false,
+            output: Some(default_output_dir(file, BuildMode::Debug).join("test")),
+            emit_binary: run,
+            persist_ir: false,
+            import_mode: ImportMode::default(),
+            cache: Default::default(),
+            warning_filter: WarningFilter::Default,
+            deny_warnings: HashSet::new(),
+            module_paths: Vec::new(),
+        };
+
+        match compile_file_with_avenys(file, &options) {
+            Ok(build) => {
+                if run {
+                    match Command::new(&build.binary_path).status() {
+                        Ok(status) if status.success() => {
+                            if verbose {
+                                println!("ok");
+                            }
+                            passed += 1;
+                        }
+                        Ok(status) => {
+                            if verbose {
+                                println!("FAILED");
+                            } else {
+                                println!("FAILED: {} (exit code: {:?})", display, status.code());
+                            }
+                            failed += 1;
+                        }
+                        Err(e) => {
+                            if verbose {
+                                println!("FAILED");
+                            } else {
+                                println!("FAILED: {} - run error: {}", display, e);
+                            }
+                            failed += 1;
+                        }
+                    }
+                } else {
+                    if verbose {
+                        println!("ok");
+                    }
+                    passed += 1;
+                }
+            }
+            Err(e) => {
+                if verbose {
+                    println!("FAILED");
+                } else {
+                    println!("FAILED: {} - {}", display, e);
+                }
+                failed += 1;
+            }
+        }
+    }
+
+    let status = if failed == 0 { "ok" } else { "FAILED" };
+    println!(
+        "\ntest result: {}. {} passed; {} failed; finished",
+        status, passed, failed
+    );
+
+    Ok(if failed == 0 { 0 } else { 1 })
+}
+
+fn walkdir(dir: &Path, _pattern: &str) -> Result<Vec<PathBuf>, MireError> {
+    let mut results = Vec::new();
+    if !dir.is_dir() {
+        return Ok(results);
+    }
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&current) else { continue };
+        for entry in entries {
+            let Ok(entry) = entry else { continue };
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if let Some(ext) = path.extension() && ext == "mire" {
+                    results.push(path);
+            }
+        }
+    }
+    Ok(results)
 }
 
 fn parse_run_options(
@@ -574,4 +733,7 @@ fn print_help() {
     println!("  check [file]          Analyze only");
     println!("  debug [file]          Debug build, emits IR");
     println!("  import <module>       Add import to owl.toml");
+    println!("  test [paths...]       Run integration tests from tests/");
+    println!("    --no-run            Compile only, skip execution");
+    println!("    --verbose, -v       Show per-test results");
 }
