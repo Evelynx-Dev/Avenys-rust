@@ -1,0 +1,13 @@
+extern fn __kioto_env_get: (key :str) :str lib "c"
+extern fn __kioto_env_set: (key :str, value :str) lib "c"
+extern fn __kioto_env_all: () :map[str str] lib "c"
+extern fn __kioto_env_args: () :vec[str] lib "c"
+extern fn __kioto_env_cwd: () :str lib "c"
+extern fn __kioto_env_chdir: (path :str) lib "c"
+
+pub fn get: (key :str) :str { return __kioto_env_get(key) }
+pub fn set: (key :str, value :str) { __kioto_env_set(key, value) }
+pub fn all: () :map[str str] { return __kioto_env_all() }
+pub fn args: () :vec[str] { return __kioto_env_args() }
+pub fn cwd: () :str { return __kioto_env_cwd() }
+pub fn chdir: (path :str) { __kioto_env_chdir(path) }

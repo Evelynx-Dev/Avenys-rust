@@ -1,0 +1,15 @@
+pub fn pair: (a b) {
+    return [a b]
+}
+
+pub fn triple: (a b c) {
+    return [a b c]
+}
+
+pub fn first: (t) {
+    return lists.get(t 0)
+}
+
+pub fn second: (t) {
+    return lists.get(t 1)
+}

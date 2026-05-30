@@ -1,4 +1,0 @@
-extern fn __kioto_gpu_snapshot: () :map[str i64] lib "c"
-
-pub fn available: () :bool
-pub fn snapshot: () :map[str i64] { return __kioto_gpu_snapshot() }

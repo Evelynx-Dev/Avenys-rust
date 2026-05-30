@@ -1,0 +1,29 @@
+pub fn size: (items :vec[anything]) :i64 {
+    return len(items)
+}
+
+pub fn head: (items :vec[anything]) {
+    if len(items) == 0 { return mu }
+    return lists.get(items 0)
+}
+
+pub fn tail: (items :vec[anything]) {
+    if len(items) <= 1 { return [] }
+    return lists.slice(items 1 len(items))
+}
+
+pub fn take: (items :vec[anything] n :i64) {
+    if n <= 0 { return [] }
+    if n >= len(items) { return items }
+    return lists.slice(items 0 n)
+}
+
+pub fn skip: (items :vec[anything] n :i64) {
+    if n <= 0 { return items }
+    if n >= len(items) { return [] }
+    return lists.slice(items n len(items))
+}
+
+pub fn collect: (items :vec[anything]) {
+    return items
+}
