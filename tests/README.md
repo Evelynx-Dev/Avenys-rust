@@ -37,14 +37,29 @@ tests/
 
 ```bash
 # Run a single test
-./target/release/mire run tests/level/beginner/01_hello_world.mire
+./target/release/mire test tests/level/beginner/01_hello_world.mire
 
-# Run all tests in a directory
-for f in tests/level/beginner/*.mire; do ./target/release/mire run "$f"; done
+# Run all tests in a directory (recursively)
+./target/release/mire test tests/level/
+
+# Run all integration tests from tests/ (auto-detected)
+./target/release/mire test --verbose
+
+# Compile-check only (no execution)
+./target/release/mire test --no-run
 
 # Run with timing
 ./target/release/mire run tests/complex/algorithms/01_sum_loop.mire --ms
 ```
+
+## Test Strategy
+
+| Layer | Tool | Purpose |
+|-------|------|---------|
+| Compiler regressions | Rust `#[test]` (cargo test) | Type checking, borrowck, loader, incremental cache |
+| Integration tests | `mire test` | End-to-end compilation and execution |
+| PAL unit tests | C tests via `cc` crate | Platform abstraction layer correctness |
+| Manual smoke | `mire run` | Ad-hoc verification |
 
 ## Test Status Summary
 
