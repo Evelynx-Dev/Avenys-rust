@@ -303,10 +303,8 @@ impl TypeChecker {
                 name,
                 data_type,
                 value,
-                is_constant: _,
                 is_mutable,
-                is_static: _,
-                visibility: _,
+                ..
             } => self.check_let_statement(name, data_type, value, *is_mutable)?,
             Statement::Assignment { target, value, .. } => {
                 self.check_assignment_statement(target, value)?
@@ -393,9 +391,9 @@ impl TypeChecker {
     fn statement_location(statement: &Statement) -> (usize, usize) {
         match statement {
         Statement::Let {
-            value: Some(value), ..
-        }
-        | Statement::Assignment { value, .. }
+            name_line, name_column, ..
+        } => (*name_line, *name_column),
+        Statement::Assignment { value, .. }
         | Statement::Expression(value)
         | Statement::Drop { value }
         | Statement::New {
@@ -492,6 +490,8 @@ mod tests {
                 is_mutable: false,
                 is_static: false,
                 visibility: Visibility::Public,
+            name_line: 1,
+            name_column: 1,
             }],
         };
 
@@ -515,6 +515,8 @@ mod tests {
                     is_mutable: false,
                     is_static: false,
                     visibility: Visibility::Public,
+                    name_line: 1,
+                    name_column: 1,
                 },
                 Statement::Expression(Expression::Identifier(Identifier {
                     name: "x".to_string(),
@@ -616,6 +618,8 @@ mod tests {
                     is_mutable: false,
                     is_static: false,
                     visibility: Visibility::Public,
+                    name_line: 1,
+                    name_column: 1,
                 },
                 Statement::Assignment {
                     target: AssignmentTarget::Variable("x".to_string()),
@@ -682,6 +686,8 @@ mod tests {
                     is_mutable: false,
                     is_static: false,
                     visibility: Visibility::Public,
+                    name_line: 1,
+                    name_column: 1,
                 },
                 Statement::Let {
                     name: "b".to_string(),
@@ -691,6 +697,8 @@ mod tests {
                     is_mutable: false,
                     is_static: false,
                     visibility: Visibility::Public,
+                    name_line: 1,
+                    name_column: 1,
                 },
                 Statement::Expression(Expression::BinaryOp {
                     operator: "&&".to_string(),
@@ -726,6 +734,8 @@ mod tests {
                     is_mutable: false,
                     is_static: false,
                     visibility: Visibility::Public,
+                    name_line: 1,
+                    name_column: 1,
                 },
                 Statement::Let {
                     name: "y".to_string(),
@@ -740,6 +750,8 @@ mod tests {
                     is_mutable: false,
                     is_static: false,
                     visibility: Visibility::Public,
+                    name_line: 1,
+                    name_column: 1,
                 },
             ],
         };
@@ -755,6 +767,8 @@ mod tests {
                     is_mutable: false,
                     is_static: false,
                     visibility: Visibility::Public,
+                    name_line: 1,
+                    name_column: 1,
                 },
                 previous.statements[1].clone(),
             ],
@@ -867,6 +881,8 @@ mod tests {
                             is_mutable: false,
                             is_static: false,
                             visibility: Visibility::Public,
+                        name_line: 1,
+                        name_column: 1,
                         },
                         Statement::Let {
                             name: "broken".to_string(),
@@ -881,6 +897,8 @@ mod tests {
                             is_mutable: false,
                             is_static: false,
                             visibility: Visibility::Public,
+                        name_line: 1,
+                        name_column: 1,
                         },
                     ],
                 },
@@ -1034,6 +1052,8 @@ mod tests {
                     is_mutable: false,
                     is_static: false,
                     visibility: Visibility::Public,
+                    name_line: 1,
+                    name_column: 1,
                 },
                 Statement::Let {
                     name: "m".to_string(),
@@ -1051,6 +1071,8 @@ mod tests {
                     is_mutable: false,
                     is_static: false,
                     visibility: Visibility::Public,
+                    name_line: 1,
+                    name_column: 1,
                 },
             ],
         };
@@ -1125,6 +1147,8 @@ mod tests {
                             is_mutable: false,
                             is_static: false,
                             visibility: Visibility::Public,
+                        name_line: 1,
+                        name_column: 1,
                         },
                         Statement::Let {
                             name: "shared".to_string(),
@@ -1144,6 +1168,8 @@ mod tests {
                             is_mutable: false,
                             is_static: false,
                             visibility: Visibility::Public,
+                        name_line: 1,
+                        name_column: 1,
                         },
                         Statement::Expression(Expression::Call {
                             name: "bump".to_string(),

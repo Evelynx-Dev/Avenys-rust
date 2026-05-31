@@ -149,3 +149,48 @@ void *rt_list_get_ptr(void *list_ptr, int64_t index) {
     if (index < 0 || index >= len) return NULL;
     return ((void **)list_ptr)[index + 1];
 }
+
+int64_t rt_lists_len(void *list) { return rt_list_len(list); }
+int64_t rt_lists_get_i64(void *list, int64_t index) { return rt_list_get_i64(list, index); }
+void *rt_lists_get_ptr(void *list, int64_t index) { return rt_list_get_ptr(list, index); }
+void *rt_lists_push_i64(void *list, int64_t value) { return rt_list_push_i64(list, value); }
+void *rt_lists_push_ptr(void *list, void *value) { return rt_list_push_ptr(list, value); }
+int64_t rt_lists_pop(void *list) { return rt_list_pop_i64(list); }
+void *rt_lists_slice(void *list, int64_t start, int64_t end) { return rt_list_slice(list, start, end); }
+void *rt_lists_concat(void *a, void *b) { return rt_list_concat(a, b); }
+void *rt_lists_remove(void *list, int64_t index) { return rt_list_remove(list, index); }
+void *rt_lists_clear(void *list) { return rt_list_clear(list); }
+void *rt_lists_flatten(void *list) {
+    void *result = rt_list_create(8, 8);
+    int64_t len = rt_list_len(list);
+    for (int64_t i = 0; i < len; i++) {
+        void *sublist = rt_list_get_ptr(list, i);
+        int64_t sublen = rt_list_len(sublist);
+        for (int64_t j = 0; j < sublen; j++)
+            result = rt_list_push_i64(result, rt_list_get_i64(sublist, j));
+    }
+    return result;
+}
+void *rt_lists_sort(void *list) {
+    int64_t len = rt_list_len(list);
+    int64_t *arr = (int64_t *)list + 1;
+    for (int64_t i = 1; i < len; i++) {
+        int64_t key = arr[i];
+        int64_t j = i - 1;
+        while (j >= 0 && arr[j] > key) { arr[j + 1] = arr[j]; j--; }
+        arr[j + 1] = key;
+    }
+    return list;
+}
+char *rt_lists_join_list(void *list, const char *sep) {
+    return rt_strings_join_list(list, sep);
+}
+int64_t rt_lists_first(void *list) {
+    if (rt_list_len(list) <= 0) return 0;
+    return rt_list_get_i64(list, 0);
+}
+int64_t rt_lists_last(void *list) {
+    int64_t len = rt_list_len(list);
+    if (len <= 0) return 0;
+    return rt_list_get_i64(list, len - 1);
+}

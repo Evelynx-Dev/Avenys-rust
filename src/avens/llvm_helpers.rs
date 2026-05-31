@@ -274,4 +274,19 @@ impl LlvmIrGen {
         }
     }
 
+    /// Cast value to Ptr if it is I64 (from DataType::Unknown), otherwise pass through.
+    pub(super) fn ensure_ptr(&mut self, value: LlValue) -> LlValue {
+        if value.ty == LlType::I64 {
+            let result = self.tmp();
+            self.body
+                .push(format!("  {result} = inttoptr i64 {} to ptr", value.repr));
+            LlValue {
+                ty: LlType::Ptr,
+                repr: result,
+                owned: value.owned,
+            }
+        } else {
+            value
+        }
+    }
 }

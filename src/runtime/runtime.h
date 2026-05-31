@@ -107,7 +107,66 @@ char  *rt_dict_to_string(void *dict_ptr);
 void  *rt_dict_keys(void *dict_ptr);
 void  *rt_dict_values(void *dict_ptr);
 
+// ── Extended string operations ───────────────────────────────────────
+int64_t rt_strings_contains(const char *input, const char *needle);
+char   *rt_strings_replace(const char *input, const char *from, const char *to);
+char   *rt_strings_replace_first(const char *input, const char *from, const char *to);
+int64_t rt_strings_starts_with(const char *str, const char *prefix);
+int64_t rt_strings_ends_with(const char *str, const char *suffix);
+char   *rt_strings_substr(const char *input, int64_t start, int64_t length);
+char   *rt_strings_pad_left(const char *input, int64_t width, const char *pad);
+char   *rt_strings_pad_right(const char *input, int64_t width, const char *pad);
+char   *rt_strings_trim(const char *input);
+char   *rt_strings_split_list(const char *input, const char *delimiter);
+char   *rt_strings_join(char **parts, int64_t count, const char *delimiter);
+
+// ── I/O helpers ──────────────────────────────────────────────────────
+char   *rt_read_line(const char *prompt);
+void   *rt_get_args(int argc, char **argv);
+
+// ── Time / CPU string formatters ──────────────────────────────────────
+char   *rt_time_elapsed_ms_str(int64_t start_ns);
+char   *rt_cpu_elapsed_ms_str(int64_t start_ns);
+
 // ── Runtime utilities ────────────────────────────────────────────────
 void rt_panic(const char *message);
+
+// ── Strings module aliases (rt_strings_*) ─────────────────────────────
+int64_t rt_strings_len(const char *s);
+char   *rt_strings_to_upper(const char *s);
+char   *rt_strings_to_lower(const char *s);
+char   *rt_strings_strip(const char *s);
+void   *rt_strings_split(const char *s, const char *sep);
+char   *rt_strings_join_list(void *parts, const char *sep);
+
+// ── Lists module aliases (rt_lists_*) ─────────────────────────────────
+int64_t rt_lists_len(void *list);
+int64_t rt_lists_get_i64(void *list, int64_t index);
+void   *rt_lists_get_ptr(void *list, int64_t index);
+void   *rt_lists_push_i64(void *list, int64_t value);
+void   *rt_lists_push_ptr(void *list, void *value);
+int64_t rt_lists_pop(void *list);
+void   *rt_lists_slice(void *list, int64_t start, int64_t end);
+void   *rt_lists_concat(void *a, void *b);
+void   *rt_lists_remove(void *list, int64_t index);
+void   *rt_lists_clear(void *list);
+void   *rt_lists_flatten(void *list);
+void   *rt_lists_sort(void *list);
+char   *rt_lists_join_list(void *list, const char *sep);
+int64_t rt_lists_first(void *list);
+int64_t rt_lists_last(void *list);
+
+// ── Dicts module aliases (rt_dicts_*) ─────────────────────────────────
+int64_t rt_dicts_len(void *dict);
+void   *rt_dicts_get(void *dict, const char *key);
+void   *rt_dicts_set(void *dict, const char *key, void *value);
+void   *rt_dicts_set_i64(void *dict, const char *key, int64_t value);
+int64_t rt_dicts_has(void *dict, const char *key);
+void   *rt_dicts_remove(void *dict, const char *key);
+void   *rt_dicts_keys(void *dict);
+void   *rt_dicts_values(void *dict);
+int64_t rt_dicts_entries(void *dict);
+void   *rt_dicts_merge(void *a, void *b);
+int64_t rt_dicts_is_empty(void *dict);
 
 #endif // MIRE_RUNTIME_H

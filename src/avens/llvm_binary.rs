@@ -150,7 +150,7 @@ impl LlvmIrGen {
 
         if left_is_ptr && right_is_ptr && op == "+" {
             self.body.push(format!(
-                "  {result} = call ptr @mire_string_concat(ptr {left_repr}, ptr {right_repr})"
+                "  {result} = call ptr @rt_string_concat(ptr {left_repr}, ptr {right_repr})"
             ));
             return Ok(LlValue {
                 ty: LlType::Ptr,
@@ -159,10 +159,21 @@ impl LlvmIrGen {
             });
         }
 
-        if left_is_ptr && right_is_ptr && matches!(op, "==" | "!=" | "<" | ">" | "<=" | ">=") {
+        if (left_is_ptr || right_is_ptr) && matches!(op, "==" | "!=" | "<" | ">" | "<=" | ">=") {
+            let left = if left_is_ptr {
+                lhs
+            } else {
+                self.ensure_ptr(lhs)
+            };
+            let right = if right_is_ptr {
+                rhs
+            } else {
+                self.ensure_ptr(rhs)
+            };
             let cmp_value = self.tmp();
             self.body.push(format!(
-                "  {cmp_value} = call i32 @strcmp(ptr {left_repr}, ptr {right_repr})"
+                "  {cmp_value} = call i32 @strcmp(ptr {}, ptr {})",
+                left.repr, right.repr
             ));
             let pred = match op {
                 "==" => "eq",
@@ -546,8 +557,17 @@ impl LlvmIrGen {
                 message: "Struct type not supported here".to_string(),
             })),
             LlType::Ptr if value.ty == LlType::Ptr => Ok(value),
+            LlType::Ptr if value.ty == LlType::I64 => {
+                let tmp = self.tmp();
+                self.body.push(format!("  {tmp} = inttoptr i64 {} to ptr", value.repr));
+                Ok(LlValue {
+                    ty: LlType::Ptr,
+                    repr: tmp,
+                    owned: false,
+                })
+            }
             LlType::Ptr => Err(MireError::new(ErrorKind::Runtime {
-                message: "Avenys cannot cast non-pointer value to string".to_string(),
+                message: format!("Avenys cannot cast non-pointer value (ty={:?}) to string (function '{}', ret={:?})", value.ty, self.current_function, self.current_return),
             })),
         }
     }
@@ -565,9 +585,18 @@ impl LlvmIrGen {
                 }));
             }
             LlType::Ptr if value.ty == LlType::Ptr => value,
+            LlType::Ptr if value.ty == LlType::I64 => {
+                let tmp = self.tmp();
+                self.body.push(format!("  {tmp} = inttoptr i64 {} to ptr", value.repr));
+                LlValue {
+                    ty: LlType::Ptr,
+                    repr: tmp,
+                    owned: false,
+                }
+            }
             LlType::Ptr => {
                 return Err(MireError::new(ErrorKind::Runtime {
-                    message: "Avenys cannot store non-pointer into string slot".to_string(),
+                    message: format!("Avenys cannot cast non-pointer value to string (function '{}')", self.current_function),
                 }));
             }
         };
@@ -629,7 +658,7 @@ impl LlvmIrGen {
                 let old_ptr = self.tmp();
                 self.body.push(format!("  {old_ptr} = load ptr, ptr {ptr}"));
                 self.body
-                    .push(format!("  call void @mire_string_free(ptr {old_ptr})"));
+                    .push(format!("  call void @rt_managed_free(ptr {old_ptr})"));
             }
 
             let owned_value = if value.owned {
@@ -637,7 +666,7 @@ impl LlvmIrGen {
             } else {
                 let copied = self.tmp();
                 self.body.push(format!(
-                    "  {copied} = call ptr @mire_string_copy(ptr {})",
+                    "  {copied} = call ptr @rt_string_copy(ptr {})",
                     value.repr
                 ));
                 LlValue {
@@ -701,7 +730,7 @@ impl LlvmIrGen {
         self.body
             .push(format!("  {current} = load ptr, ptr {}", var.ptr));
         self.body.push(format!(
-            "  {appended} = call ptr @mire_string_append_owned(ptr {current}, ptr {})",
+            "  {appended} = call ptr @rt_string_append_owned(ptr {current}, ptr {})",
             rhs.repr
         ));
         self.body

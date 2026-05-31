@@ -1,13 +1,13 @@
-# Built-in Modules Source Layout
+# Built-in Modules
 
-This directory contains built-in module definitions used by Mire.
+This directory holds Mire's standard library (`std/`).
 
 ## Layout
 
 ```
 src/modules/
-├── std/                  # Standard Library (canonical)
-│   ├── mod.mire          # Aggregator: import __std_all__
+├── std/                  # Standard library (canonical)
+│   ├── mod.mire          # Aggregator: imports all sections
 │   ├── cpu/mod.mire
 │   ├── dicts/mod.mire
 │   ├── env/mod.mire
@@ -21,35 +21,23 @@ src/modules/
 │   ├── term/mod.mire
 │   └── time/mod.mire
 ├── kioto/                # DEPRECATED — use std/ instead
-│   ├── lib.mire
-│   ├── cpu.mire
-│   ├── dicts.mire
-│   ├── env.mire
-│   ├── fs.mire
-│   ├── iter.mire
-│   ├── lists.mire
-│   ├── math.mire
-│   ├── maybe.mire
-│   ├── mem.mire
-│   ├── proc.mire
-│   ├── result.mire
-│   ├── strings.mire
-│   ├── term.mire
-│   ├── time.mire
-│   ├── tuple.mire
-│   └── types.mire
-└── README.md             # This file
+│   └── ...
+└── README.md
 ```
 
-## Conventions
+## How externs work
 
-- `src/modules/std/<section>/mod.mire` — Standard Library section modules
-- `src/modules/std/mod.mire` — std aggregator (imports all sections)
-- All `__kioto_*` extern functions are declared in `std/` and implemented in C (`src/avens/runtime_support.c`)
+Each `std/<section>/mod.mire` declares `extern fn` signatures that map to
+C functions prefixed `__kioto_*`. Those are implemented in
+`src/runtime/kioto_exports.c`, which delegates to `rt_*` (runtime core) or
+`pal_*` (platform layer) under the hood.
+
+This is a temporary bridge. Eventually the `std/` modules will call `rt_*`
+and `pal_*` directly, at which point `kioto_exports.c` gets deleted.
 
 ## Import Management
 
-Dependencies can be declared in `owl.toml` under `[imports]`:
+Dependencies go in `owl.toml` under `[imports]`:
 
 ```toml
 [project]

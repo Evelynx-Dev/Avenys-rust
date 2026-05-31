@@ -1,0 +1,406 @@
+# ABI Map — mire_* → rt_*/pal_* migration registry
+#
+# Maps every @mire_* LLVM symbol (declared in llvm_functions.rs) to its
+# new @rt_* (runtime core) or @pal_* (platform abstraction layer) equivalent.
+# kioto_abi.c has been deleted; codegen emits rt_*/pal_* directly.
+#
+# Categories:
+#   runtime  → src/runtime/ (platform‑independent)
+#   pal      → src/pal/     (OS‑dependent, per‑platform backends)
+#   removed  → dead declaration, no call sites
+#   special  → entry point, not an extern
+
+[entry.mire_main]
+target = "@mire_main"
+reason = "User program entry point — not an extern, stays as-is"
+
+[entry.mire_runtime_panic]
+target = "@rt_panic"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_i64_to_string]
+target = "@rt_i64_to_string"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_bool_to_string]
+target = "@rt_bool_to_string"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_f64_to_string]
+target = "@rt_f64_to_string"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_string_copy]
+target = "@rt_string_copy"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_string_concat]
+target = "@rt_string_concat"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_string_append_owned]
+target = "@rt_string_append_owned"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_string_free]
+target = "@rt_managed_free"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_string_to_upper]
+target = "@rt_string_to_upper"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_string_to_lower]
+target = "@rt_string_to_lower"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_strings_replace]
+target = "@rt_strings_replace"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_strings_trim]
+target = "@rt_strings_trim"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_strings_join]
+target = "@rt_strings_join"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_strings_split_list]
+target = "@rt_strings_split_list"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_strings_replace_first]
+target = "@rt_strings_replace_first"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_strings_starts_with]
+target = "@rt_strings_starts_with"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_strings_ends_with]
+target = "@rt_strings_ends_with"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_strings_contains]
+target = "@rt_strings_contains"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_strings_substr]
+target = "@rt_strings_substr"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_strings_pad_left]
+target = "@rt_strings_pad_left"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_strings_pad_right]
+target = "@rt_strings_pad_right"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_read_line]
+target = "@rt_read_line"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_get_args]
+target = "@rt_get_args"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_list_create]
+target = "@rt_list_create"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_list_push_i64]
+target = "@rt_list_push_i64"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_list_push_ptr]
+target = "@rt_list_push_ptr"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_list_push_scalar]
+target = "@rt_list_push_scalar"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_list_pop_i64]
+target = "@rt_list_pop_i64"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_list_concat]
+target = "@rt_list_concat"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_list_slice]
+target = "@rt_list_slice"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_dict_get_i64]
+target = "@rt_dict_get_i64"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_dict_get_ptr]
+target = "@rt_dict_get_ptr"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_dict_set_i64]
+target = "@rt_dict_set_i64"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_dict_set_ptr]
+target = "@rt_dict_set_ptr"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_dict_to_string]
+target = "@rt_dict_to_string"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_dict_keys]
+target = "@rt_dict_keys"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_dict_values]
+target = "@rt_dict_values"
+kind = "runtime"
+header = "runtime.h"
+
+[entry.mire_fs_write]
+target = "@pal_fs_write"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_fs_append]
+target = "@pal_fs_append"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_fs_read]
+target = "@pal_fs_read"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_fs_copy]
+target = "@pal_fs_copy"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_fs_move]
+target = "@pal_fs_move"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_fs_drop]
+target = "@pal_fs_delete"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_fs_mkdir]
+target = "@pal_fs_mkdir"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_fs_rmdir]
+target = "@pal_fs_rmdir"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_fs_exists]
+target = "@pal_fs_exists"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_fs_is_dir]
+target = "@pal_fs_is_dir"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_fs_size]
+target = "@pal_fs_size"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_fs_list]
+target = "@pal_fs_list"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_fs_join]
+target = "@pal_fs_join"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_fs_dir]
+target = "@pal_fs_dir"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_fs_name]
+target = "@pal_fs_name"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_fs_ext]
+target = "@pal_fs_ext"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_proc_run]
+target = "@pal_proc_run"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_proc_exec]
+target = "@pal_proc_exec"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_proc_wait]
+target = "@pal_proc_wait"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_proc_kill]
+target = "@pal_proc_kill"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_proc_exit]
+target = "@pal_proc_exit"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_proc_shell]
+target = "@pal_proc_shell"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_proc_exists]
+target = "@pal_proc_exists"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_env_get]
+target = "@pal_env_get"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_env_set]
+target = "@pal_env_set"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_env_cwd]
+target = "@pal_env_cwd"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_env_all]
+target = "@pal_env_all"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_wall_mark_ns]
+target = "@pal_time_mark"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_wall_elapsed_ms]
+target = "@pal_time_elapsed_ms"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_wall_elapsed_ms_str]
+target = "@rt_time_elapsed_ms_str"
+kind = "runtime"
+note = "Formatting function — not PAL, returns managed string"
+
+[entry.mire_cpu_elapsed_ms_str]
+target = "@rt_cpu_elapsed_ms_str"
+kind = "runtime"
+note = "Formatting function — not PAL, returns managed string"
+
+[entry.mire_cpu_mark_ns]
+target = "@pal_cpu_mark"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_cpu_elapsed_ms]
+target = "@pal_cpu_elapsed_ms"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_cpu_elapsed_ms_str]
+target = "@pal_cpu_elapsed_ms_str"
+kind = "pal"
+note = "Returns string via rt_managed_printf_i64 internally"
+
+[entry.mire_cpu_cycles_est]
+target = "@pal_cpu_cycles_est"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_mem_process_bytes]
+target = "@pal_mem_process_bytes"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_mem_format]
+target = "@pal_mem_format"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_gpu_snapshot]
+target = "@pal_gpu_snapshot"
+kind = "pal"
+header = "pal.h"
+
+[entry.mire_list_new]
+target = ""
+kind = "removed"
+note = "Dead declaration — never called from any codegen path"
+
+[entry.mire_strings_split]
+target = ""
+kind = "removed"
+note = "Dead declaration — never called from any codegen path; __kioto_strings_split has own impl"
+
+[entry.mire_option_wrap]
+target = ""
+kind = "removed"
+note = "Dead symbol — called from pipeline safe-path only; no definition exists, codegen path never exercised by tests"
+

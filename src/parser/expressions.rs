@@ -674,6 +674,11 @@ impl Parser {
         if self.check_lifecycle_expression_prefix() {
             return self.parse_lifecycle_expression();
         }
+
+        if self.check_keyword_ident() {
+            return Ok(self.parse_keyword_identifier());
+        }
+
         match self.peek().ttype {
             TokenType::Use => self.parse_use_expr(),
             TokenType::If => self.parse_if_expression(),
@@ -931,6 +936,28 @@ impl Parser {
             TokenType::Lbrace => self.parse_brace_literal(),
             _ => Err(self.error("Unexpected token in expression")),
         }
+    }
+
+    fn check_keyword_ident(&self) -> bool {
+        matches!(
+            self.peek().ttype,
+            TokenType::NewKw | TokenType::DropKw | TokenType::MoveKw | TokenType::OwnKw | TokenType::Set | TokenType::To
+        )
+    }
+
+    fn parse_keyword_identifier(&mut self) -> Expression {
+        let token = self.peek();
+        let name = match token.ttype {
+            TokenType::NewKw => "new",
+            TokenType::DropKw => "drop",
+            TokenType::MoveKw => "move",
+            TokenType::OwnKw => "own",
+            TokenType::Set => "set",
+            TokenType::To => "to",
+            _ => unreachable!(),
+        };
+        self.advance();
+        identifier_expr_with_pos(name, token.line, token.column)
     }
 
     fn check_lifecycle_expression_prefix(&self) -> bool {

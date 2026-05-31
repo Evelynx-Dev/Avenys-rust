@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <unistd.h>
 
 char *rt_string_copy(const char *value) {
     if (value == NULL) return rt_managed_from_slice("", 0);
@@ -102,5 +104,262 @@ char *rt_string_to_lower(const char *value) {
         out[i] = rt_unicode_to_lower((unsigned char)value[i]);
     }
     out[len] = '\0';
+    return out;
+}
+
+// ── Extended string operations (migrated from kioto_abi.c) ────────────
+
+int64_t rt_strings_contains(const char *input, const char *needle) {
+    if (!input || !needle) return 0;
+    return strstr(input, needle) != NULL ? 1 : 0;
+}
+
+char *rt_strings_replace(const char *input, const char *from, const char *to) {
+    if (!input) input = "";
+    if (!from || !*from) return rt_managed_from_slice(input, strlen(input));
+    if (!to) to = "";
+    const char *pos = strstr(input, from);
+    if (!pos) return rt_managed_from_slice(input, strlen(input));
+    size_t prefix_len = (size_t)(pos - input);
+    size_t from_len = strlen(from);
+    size_t to_len = strlen(to);
+    size_t suffix_len = strlen(pos + from_len);
+    char *out = rt_managed_alloc(prefix_len + to_len + suffix_len);
+    if (!out) return rt_managed_from_slice("", 0);
+    memcpy(out, input, prefix_len);
+    memcpy(out + prefix_len, to, to_len);
+    memcpy(out + prefix_len + to_len, pos + from_len, suffix_len);
+    out[prefix_len + to_len + suffix_len] = '\0';
+    return out;
+}
+
+char *rt_strings_replace_first(const char *input, const char *from, const char *to) {
+    if (!input || !from || !*from) return rt_managed_from_slice(input ? input : "", input ? strlen(input) : 0);
+    if (!to) to = "";
+    const char *pos = strstr(input, from);
+    if (!pos) return rt_managed_from_slice(input, strlen(input));
+    size_t prefix = (size_t)(pos - input);
+    size_t from_len = strlen(from);
+    size_t to_len = strlen(to);
+    size_t suffix = strlen(pos + from_len);
+    char *out = rt_managed_alloc(prefix + to_len + suffix);
+    if (!out) return rt_managed_from_slice("", 0);
+    memcpy(out, input, prefix);
+    memcpy(out + prefix, to, to_len);
+    memcpy(out + prefix + to_len, pos + from_len, suffix);
+    out[prefix + to_len + suffix] = '\0';
+    return out;
+}
+
+int64_t rt_strings_starts_with(const char *str, const char *prefix) {
+    if (!str || !prefix) return 0;
+    size_t slen = strlen(str), plen = strlen(prefix);
+    if (plen > slen) return 0;
+    return strncmp(str, prefix, plen) == 0 ? 1 : 0;
+}
+
+int64_t rt_strings_ends_with(const char *str, const char *suffix) {
+    if (!str || !suffix) return 0;
+    size_t slen = strlen(str), suflen = strlen(suffix);
+    if (suflen > slen) return 0;
+    return strcmp(str + slen - suflen, suffix) == 0 ? 1 : 0;
+}
+
+char *rt_strings_substr(const char *input, int64_t start, int64_t length) {
+    if (!input) return rt_managed_from_slice("", 0);
+    size_t len = strlen(input);
+    if (start < 0) start = 0;
+    if ((size_t)start >= len || length <= 0) return rt_managed_from_slice("", 0);
+    if ((size_t)(start + length) > len) length = (int64_t)(len - (size_t)start);
+    return rt_managed_from_slice(input + start, (size_t)length);
+}
+
+static char *pad_core(const char *input, int64_t width, const char *pad, int left_pad) {
+    if (!input) input = "";
+    if (!pad) pad = " ";
+    size_t ilen = strlen(input);
+    size_t plen = strlen(pad);
+    if (plen == 0 || (int64_t)ilen >= width) return rt_managed_from_slice(input, ilen);
+    size_t pad_total = (size_t)(width - (int64_t)ilen);
+    size_t repeats = pad_total / plen + 1;
+    size_t buf_len = repeats * plen;
+    char *pad_buf = (char *)malloc(buf_len);
+    if (!pad_buf) return rt_managed_from_slice(input, ilen);
+    for (size_t i = 0; i < repeats; i++) memcpy(pad_buf + i * plen, pad, plen);
+    size_t result_len = (size_t)width;
+    char *out = rt_managed_alloc(result_len);
+    if (!out) { free(pad_buf); return rt_managed_from_slice("", 0); }
+    if (left_pad) {
+        memcpy(out, pad_buf, pad_total);
+        memcpy(out + pad_total, input, ilen);
+    } else {
+        memcpy(out, input, ilen);
+        memcpy(out + ilen, pad_buf, pad_total);
+    }
+    out[result_len] = '\0';
+    free(pad_buf);
+    return out;
+}
+
+char *rt_strings_pad_left(const char *input, int64_t width, const char *pad) {
+    return pad_core(input, width, pad, 1);
+}
+
+char *rt_strings_pad_right(const char *input, int64_t width, const char *pad) {
+    return pad_core(input, width, pad, 0);
+}
+
+char *rt_strings_trim(const char *input) {
+    if (!input) return rt_managed_from_slice("", 0);
+    size_t len = strlen(input);
+    const char *start = input;
+    const char *end = input + len - 1;
+    while (start <= end && (unsigned char)*start <= ' ') start++;
+    while (end >= start && (unsigned char)*end <= ' ') end--;
+    if (start > end) return rt_managed_from_slice("", 0);
+    return rt_managed_from_slice(start, (size_t)(end - start + 1));
+}
+
+char *rt_strings_split_list(const char *input, const char *delimiter) {
+    if (input == NULL || delimiter == NULL) return (char *)rt_list_create(0, 8);
+    size_t delim_len = strlen(delimiter);
+    size_t input_len = strlen(input);
+    if (delim_len == 0) {
+        void *list = rt_list_create(1, 8);
+        if (!list) return NULL;
+        char *copy = rt_strdup_raw(input);
+        if (copy) list = rt_list_push_ptr(list, copy);
+        return (char *)list;
+    }
+    size_t count = 1;
+    const char *cursor = input;
+    const char *match;
+    while ((match = strstr(cursor, delimiter)) != NULL) { count++; cursor = match + delim_len; }
+    void *list = rt_list_create((int64_t)count, 8);
+    if (!list) return NULL;
+    const char *seg_start = input;
+    cursor = input;
+    while ((match = strstr(cursor, delimiter)) != NULL) {
+        size_t seg_len = (size_t)(match - seg_start);
+        char *copy = rt_strdup_raw_n(seg_start, seg_len);
+        if (copy) list = rt_list_push_ptr(list, copy);
+        seg_start = match + delim_len;
+        cursor = seg_start;
+    }
+    size_t tail_len = input_len - (size_t)(seg_start - input);
+    char *tail = rt_strdup_raw_n(seg_start, tail_len);
+    if (tail) list = rt_list_push_ptr(list, tail);
+    return (char *)list;
+}
+
+char *rt_strings_join(char **parts, int64_t count, const char *delimiter) {
+    if (!parts || count == 0) return rt_managed_from_slice("", 0);
+    if (!delimiter) delimiter = "";
+    size_t dlen = strlen(delimiter);
+    size_t total = 0;
+    for (int64_t i = 0; i < count; i++) {
+        if (parts[i]) total += strlen(parts[i]);
+    }
+    total += dlen * (size_t)(count - 1);
+    char *out = rt_managed_alloc(total);
+    if (!out) return rt_managed_from_slice("", 0);
+    size_t pos = 0;
+    for (int64_t i = 0; i < count; i++) {
+        if (i > 0 && dlen > 0) { memcpy(out + pos, delimiter, dlen); pos += dlen; }
+        if (parts[i]) {
+            size_t plen = strlen(parts[i]);
+            memcpy(out + pos, parts[i], plen);
+            pos += plen;
+        }
+    }
+    out[pos] = '\0';
+    return out;
+}
+
+char *rt_read_line(const char *prompt) {
+    if (prompt && *prompt) {
+        printf("%s", prompt);
+        fflush(stdout);
+    }
+    size_t cap = 128, len = 0;
+    char *buf = (char *)malloc(cap);
+    if (!buf) return rt_managed_from_slice("", 0);
+    int ch;
+    while ((ch = getchar()) != EOF && ch != '\n') {
+        if (len + 1 >= cap) {
+            cap *= 2;
+            char *nb = (char *)realloc(buf, cap);
+            if (!nb) break;
+            buf = nb;
+        }
+        buf[len++] = (char)ch;
+    }
+    buf[len] = '\0';
+    char *result = rt_managed_from_slice(buf, len);
+    free(buf);
+    return result;
+}
+
+void *rt_get_args(int argc, char **argv) {
+    void *list = rt_list_create(argc > 0 ? argc : 4, 8);
+    for (int i = 0; i < argc; i++) {
+        char *copy = rt_strdup_raw(argv[i]);
+        list = rt_list_push_ptr(list, copy);
+    }
+    return list;
+}
+
+char *rt_time_elapsed_ms_str(int64_t start_ns) {
+    int64_t ms = (int64_t)(clock() / (CLOCKS_PER_SEC / 1000)) - start_ns;
+    return rt_managed_printf_i64("%lld", (long long)ms);
+}
+
+char *rt_cpu_elapsed_ms_str(int64_t start_ns) {
+    int64_t ms = (int64_t)(clock() / (CLOCKS_PER_SEC / 1000)) - start_ns;
+    return rt_managed_printf_i64("%lld", (long long)ms);
+}
+
+int64_t rt_strings_len(const char *s) { return s ? (int64_t)strlen(s) : 0; }
+
+char *rt_strings_to_upper(const char *s) { return rt_string_to_upper(s); }
+char *rt_strings_to_lower(const char *s) { return rt_string_to_lower(s); }
+char *rt_strings_strip(const char *s) { return rt_strings_trim(s); }
+
+void *rt_strings_split(const char *s, const char *sep) {
+    void *list = rt_list_create(8, 8);
+    if (!s || !sep || !*sep) { list = rt_list_push_ptr(list, rt_managed_from_slice(s ? s : "", s ? strlen(s) : 0)); return list; }
+    char *copy = rt_strdup_raw(s);
+    if (!copy) return list;
+    char *token = strtok(copy, sep);
+    while (token) {
+        list = rt_list_push_ptr(list, rt_managed_from_slice(token, strlen(token)));
+        token = strtok(NULL, sep);
+    }
+    free(copy);
+    return list;
+}
+
+char *rt_strings_join_list(void *parts, const char *sep) {
+    int64_t count = rt_list_len(parts);
+    size_t dlen = sep ? strlen(sep) : 0;
+    size_t total = 0;
+    for (int64_t i = 0; i < count; i++) {
+        char *s = rt_list_get_ptr(parts, i);
+        if (s) total += strlen(s);
+    }
+    total += dlen * (count > 0 ? count - 1 : 0);
+    char *out = rt_managed_alloc(total);
+    if (!out) return rt_managed_from_slice("", 0);
+    size_t pos = 0;
+    for (int64_t i = 0; i < count; i++) {
+        if (i > 0 && dlen > 0) { memcpy(out + pos, sep, dlen); pos += dlen; }
+        char *s = rt_list_get_ptr(parts, i);
+        if (s) {
+            size_t slen = strlen(s);
+            memcpy(out + pos, s, slen);
+            pos += slen;
+        }
+    }
+    out[pos] = '\0';
     return out;
 }

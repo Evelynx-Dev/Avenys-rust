@@ -963,9 +963,9 @@ impl<'a> BorrowChecker<'a> {
     fn statement_location(statement: &Statement) -> (usize, usize) {
         match statement {
             Statement::Let {
-                value: Some(value), ..
-            }
-            | Statement::Assignment { value, .. }
+                name_line, name_column, ..
+            } => (*name_line, *name_column),
+            Statement::Assignment { value, .. }
             | Statement::Expression(value)
             | Statement::Drop { value }
             | Statement::New {
@@ -1057,6 +1057,8 @@ mod tests {
             is_mutable: false,
             is_static: false,
             visibility: Visibility::Public,
+            name_line: 1,
+            name_column: 1,
         }
     }
 
@@ -1339,6 +1341,8 @@ mod tests {
                     is_mutable: false,
                     is_static: false,
                     visibility: Visibility::Public,
+                    name_line: 1,
+                    name_column: 1,
                 },
                 Statement::Expression(Expression::Call {
                     name: "move::".to_string(),

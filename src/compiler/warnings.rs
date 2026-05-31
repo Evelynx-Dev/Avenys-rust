@@ -60,12 +60,13 @@ impl WarningAnalyzer {
                 let Some((line, column)) = pos else {
                     continue;
                 };
-                self.push_warn(
+                self.push_warn_at(
                     DiagnosticCode::W0001,
                     "Unused Variable",
                     format!("Variable '{}' is never used", name),
                     line,
                     column,
+                    name.len(),
                     Some("prefix with '_' to suppress this warning".to_string()),
                 );
             }
@@ -561,6 +562,19 @@ impl WarningAnalyzer {
         column: usize,
         help: Option<String>,
     ) {
+        self.push_warn_at(code, title, message, line, column, 3, help);
+    }
+
+    fn push_warn_at(
+        &mut self,
+        code: DiagnosticCode,
+        title: &str,
+        message: String,
+        line: usize,
+        column: usize,
+        length: usize,
+        help: Option<String>,
+    ) {
         if !self.filter.matches(code) {
             return;
         }
@@ -578,7 +592,7 @@ impl WarningAnalyzer {
         diag.labels.push(Label {
             line,
             column,
-            length: 3,
+            length,
             message: "".to_string(),
             style: LabelStyle::Primary,
         });
@@ -666,9 +680,9 @@ fn expr_fingerprint(expr: &Expression) -> String {
 fn statement_location(statement: &Statement) -> (usize, usize) {
     match statement {
         Statement::Let {
-            value: Some(value), ..
-        }
-        | Statement::Assignment { value, .. }
+            name_line, name_column, ..
+        } => (*name_line, *name_column),
+        Statement::Assignment { value, .. }
         | Statement::Expression(value)
         | Statement::Drop { value }
         | Statement::New {
@@ -733,12 +747,21 @@ fn find_position_for_import(source: &str, module: &str) -> Option<(usize, usize)
 }
 
 fn find_position_for_var(source: &str, name: &str) -> Option<(usize, usize)> {
-    find_position_for_any_pattern(source, &[
-        &format!("set {} ", name),
-        &format!("set {}=", name),
-        &format!("set {}\n", name),
-        &format!("set {}", name),
-    ])
+    for (idx, line) in source.lines().enumerate() {
+        let mut search_start = 0;
+        while let Some(col) = line[search_start..].find(name) {
+            let abs_col = search_start + col;
+            let before = abs_col.checked_sub(1).and_then(|i| line.as_bytes().get(i));
+            let after = line.as_bytes().get(abs_col + name.len());
+            let is_boundary = before.map_or(true, |&c| !c.is_ascii_alphanumeric() && c != b'_')
+                && after.map_or(true, |&c| !c.is_ascii_alphanumeric() && c != b'_');
+            if is_boundary {
+                return Some((idx + 1, abs_col + 1));
+            }
+            search_start = abs_col + 1;
+        }
+    }
+    None
 }
 
 fn find_position_for_fn(source: &str, name: &str) -> Option<(usize, usize)> {

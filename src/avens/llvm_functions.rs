@@ -116,11 +116,6 @@ impl LlvmIrGen {
                 ..
             } = stmt
             {
-                let llvm_name = if name == "main" {
-                    "@mire_main".to_string()
-                } else {
-                    format!("@fn_{}", sanitize_symbol(name))
-                };
                 let param_types = params
                     .iter()
                     .map(|(_, ty)| self.map_type(ty))
@@ -130,6 +125,7 @@ impl LlvmIrGen {
                 } else {
                     self.map_type(return_type)?
                 };
+                let llvm_name = self.llvm_fn_name(name);
                 self.user_functions.insert(
                     name.clone(),
                     FnInfo {
@@ -153,10 +149,11 @@ impl LlvmIrGen {
                     } = method
                     {
                         let full_name = format!("{}.{}", normalize_nominal_name(type_name), name);
+                        let llvm_name = self.llvm_fn_name(&full_name);
                         self.user_functions.insert(
                             full_name.clone(),
                             FnInfo {
-                                llvm_name: format!("@fn_{}", sanitize_symbol(&full_name)),
+                                llvm_name,
                                 params: params
                                     .iter()
                                     .map(|(param_name, ty)| {
@@ -176,6 +173,10 @@ impl LlvmIrGen {
             }
         }
 
+        // Reset the function ID counter so the compilation pass produces the
+        // same unique LLVM names as the registration pass (in the same order).
+        self.next_fn_id.clear();
+
         for stmt in &program.statements {
             if let Statement::Function {
                 name,
@@ -190,7 +191,8 @@ impl LlvmIrGen {
                 } else {
                     self.map_type(return_type)?
                 };
-                let fn_ir = self.compile_function_ir(name, params, body, ret)?;
+                let returns_value = *return_type != DataType::None;
+                let fn_ir = self.compile_function_ir(name, params, body, ret, returns_value)?;
                 self.functions.push(fn_ir);
             }
             if let Statement::Impl {
@@ -208,11 +210,13 @@ impl LlvmIrGen {
                     {
                         let full_name =
                             format!("{}.{}", normalize_nominal_name(type_name), name);
+                        let returns_value = *return_type != DataType::None;
                         let fn_ir = self.compile_function_ir(
                             &full_name,
                             params,
                             body,
                             self.map_type(return_type)?,
+                            returns_value,
                         )?;
                         self.functions.push(fn_ir);
                     }
@@ -247,55 +251,53 @@ impl LlvmIrGen {
             "declare i32 @strcmp(ptr, ptr)".to_string(),
             "declare i32 @getpagesize()".to_string(),
             "declare i64 @getpid()".to_string(),
-            "declare i64 @mire_wall_mark_ns()".to_string(),
-            "declare i64 @mire_wall_elapsed_ms(i64)".to_string(),
-            "declare ptr @mire_wall_elapsed_ms_str(i64)".to_string(),
-            "declare i64 @mire_cpu_mark_ns()".to_string(),
-            "declare i64 @mire_cpu_elapsed_ms(i64)".to_string(),
-            "declare ptr @mire_cpu_elapsed_ms_str(i64)".to_string(),
-            "declare i64 @mire_cpu_cycles_est(i64)".to_string(),
-            "declare i64 @mire_mem_process_bytes()".to_string(),
-            "declare ptr @mire_mem_format(i64)".to_string(),
-            "declare ptr @mire_gpu_snapshot()".to_string(),
-            "declare ptr @mire_i64_to_string(i64)".to_string(),
-            "declare ptr @mire_bool_to_string(i64)".to_string(),
-            "declare ptr @mire_f64_to_string(double)".to_string(),
-            "declare ptr @mire_string_copy(ptr)".to_string(),
-            "declare ptr @mire_string_concat(ptr, ptr)".to_string(),
-            "declare ptr @mire_string_append_owned(ptr, ptr)".to_string(),
-            "declare void @mire_string_free(ptr)".to_string(),
-            "declare ptr @mire_string_to_upper(ptr)".to_string(),
-            "declare ptr @mire_string_to_lower(ptr)".to_string(),
-            "declare ptr @mire_strings_replace(ptr, ptr, ptr)".to_string(),
-            "declare ptr @mire_strings_split(ptr, ptr)".to_string(),
-            "declare ptr @mire_strings_split_list(ptr, ptr)".to_string(),
-            "declare ptr @mire_strings_join(ptr, i64, ptr)".to_string(),
-            "declare ptr @mire_strings_trim(ptr)".to_string(),
-            "declare ptr @mire_strings_replace_first(ptr, ptr, ptr)".to_string(),
-            "declare i64 @mire_strings_starts_with(ptr, ptr)".to_string(),
-            "declare i64 @mire_strings_ends_with(ptr, ptr)".to_string(),
-            "declare i64 @mire_strings_contains(ptr, ptr)".to_string(),
-            "declare ptr @mire_strings_substr(ptr, i64, i64)".to_string(),
-            "declare ptr @mire_strings_pad_left(ptr, i64, ptr)".to_string(),
-            "declare ptr @mire_strings_pad_right(ptr, i64, ptr)".to_string(),
-            "declare ptr @mire_list_create(i64, i64)".to_string(),
-            "declare ptr @mire_list_push_i64(ptr, i64)".to_string(),
-            "declare ptr @mire_list_new()".to_string(),
-            "declare ptr @mire_list_push_scalar(ptr, i64, i64)".to_string(),
-            "declare ptr @mire_list_push_ptr(ptr, ptr)".to_string(),
-            "declare ptr @mire_list_concat(ptr, ptr)".to_string(),
-            "declare i64 @mire_list_pop_i64(ptr)".to_string(),
-            "declare i64 @mire_dict_get_i64(ptr, i64, i64, ptr, i64)".to_string(),
-            "declare ptr @mire_dict_get_ptr(ptr, i64, i64, ptr, ptr)".to_string(),
-            "declare ptr @mire_dict_set_i64(ptr, i64, i64, i64, ptr, i64)".to_string(),
-            "declare ptr @mire_dict_set_ptr(ptr, i64, i64, i64, ptr, ptr)".to_string(),
-            "declare ptr @mire_dict_to_string(ptr)".to_string(),
-            "declare ptr @mire_dict_keys(ptr)".to_string(),
-            "declare ptr @mire_dict_values(ptr)".to_string(),
-            "declare ptr @mire_list_slice(ptr, i64, i64)".to_string(),
-            "declare void @mire_runtime_panic(ptr)".to_string(),
+            "declare i64 @pal_time_mark()".to_string(),
+            "declare i64 @pal_time_elapsed_ms(i64)".to_string(),
+            "declare ptr @rt_time_elapsed_ms_str(i64)".to_string(),
+            "declare i64 @pal_cpu_mark()".to_string(),
+            "declare i64 @pal_cpu_elapsed_ms(i64)".to_string(),
+            "declare ptr @rt_cpu_elapsed_ms_str(i64)".to_string(),
+            "declare i64 @pal_cpu_cycles_est(i64)".to_string(),
+            "declare i64 @pal_mem_process_bytes()".to_string(),
+            "declare ptr @pal_mem_format(i64)".to_string(),
+            "declare ptr @pal_gpu_snapshot()".to_string(),
+            "declare ptr @rt_i64_to_string(i64)".to_string(),
+            "declare ptr @rt_bool_to_string(i64)".to_string(),
+            "declare ptr @rt_f64_to_string(double)".to_string(),
+            "declare ptr @rt_string_copy(ptr)".to_string(),
+            "declare ptr @rt_string_concat(ptr, ptr)".to_string(),
+            "declare ptr @rt_string_append_owned(ptr, ptr)".to_string(),
+            "declare void @rt_managed_free(ptr)".to_string(),
+            "declare ptr @rt_string_to_upper(ptr)".to_string(),
+            "declare ptr @rt_string_to_lower(ptr)".to_string(),
+            "declare ptr @rt_strings_replace(ptr, ptr, ptr)".to_string(),
+            "declare ptr @rt_strings_split_list(ptr, ptr)".to_string(),
+            "declare ptr @rt_strings_join(ptr, i64, ptr)".to_string(),
+            "declare ptr @rt_strings_trim(ptr)".to_string(),
+            "declare ptr @rt_strings_replace_first(ptr, ptr, ptr)".to_string(),
+            "declare i64 @rt_strings_starts_with(ptr, ptr)".to_string(),
+            "declare i64 @rt_strings_ends_with(ptr, ptr)".to_string(),
+            "declare i64 @rt_strings_contains(ptr, ptr)".to_string(),
+            "declare ptr @rt_strings_substr(ptr, i64, i64)".to_string(),
+            "declare ptr @rt_strings_pad_left(ptr, i64, ptr)".to_string(),
+            "declare ptr @rt_strings_pad_right(ptr, i64, ptr)".to_string(),
+            "declare ptr @rt_list_create(i64, i64)".to_string(),
+            "declare ptr @rt_list_push_i64(ptr, i64)".to_string(),
+            "declare ptr @rt_list_push_scalar(ptr, i64, i64)".to_string(),
+            "declare ptr @rt_list_push_ptr(ptr, ptr)".to_string(),
+            "declare ptr @rt_list_concat(ptr, ptr)".to_string(),
+            "declare i64 @rt_list_pop_i64(ptr)".to_string(),
+            "declare i64 @rt_dict_get_i64(ptr, i64, i64, ptr, i64)".to_string(),
+            "declare ptr @rt_dict_get_ptr(ptr, i64, i64, ptr, ptr)".to_string(),
+            "declare ptr @rt_dict_set_i64(ptr, i64, i64, i64, ptr, i64)".to_string(),
+            "declare ptr @rt_dict_set_ptr(ptr, i64, i64, i64, ptr, ptr)".to_string(),
+            "declare ptr @rt_dict_to_string(ptr)".to_string(),
+            "declare ptr @rt_dict_keys(ptr)".to_string(),
+            "declare ptr @rt_dict_values(ptr)".to_string(),
+            "declare ptr @rt_list_slice(ptr, i64, i64)".to_string(),
+            "declare void @rt_panic(ptr)".to_string(),
             "declare ptr @fgets(ptr, i64, ptr)".to_string(),
-            "declare ptr @mire_read_line(ptr)".to_string(),
+            "declare ptr @rt_read_line(ptr)".to_string(),
             "declare i64 @atoll(ptr)".to_string(),
             "declare double @atof(ptr)".to_string(),
             "@.fmt_i64 = private unnamed_addr constant [5 x i8] c\"%ld\\0A\\00\"".to_string(),
@@ -311,41 +313,58 @@ impl LlvmIrGen {
             //       std::io functions will delegate to kioto extern fns.
             "@.argc = global i32 0".to_string(),
             "@.argv = global ptr null".to_string(),
-            "declare ptr @mire_get_args(i32, ptr)".to_string(),
+            "declare ptr @rt_get_args(i32, ptr)".to_string(),
             // FS functions
-            "declare i32 @mire_fs_write(ptr, ptr)".to_string(),
-            "declare i32 @mire_fs_append(ptr, ptr)".to_string(),
-            "declare ptr @mire_fs_read(ptr)".to_string(),
-            "declare i32 @mire_fs_copy(ptr, ptr)".to_string(),
-            "declare i32 @mire_fs_move(ptr, ptr)".to_string(),
-            "declare i32 @mire_fs_drop(ptr)".to_string(),
-            "declare i32 @mire_fs_mkdir(ptr)".to_string(),
-            "declare i32 @mire_fs_rmdir(ptr)".to_string(),
-            "declare i64 @mire_fs_exists(ptr)".to_string(),
-            "declare i64 @mire_fs_is_dir(ptr)".to_string(),
-            "declare i64 @mire_fs_size(ptr)".to_string(),
-            "declare ptr @mire_fs_list(ptr)".to_string(),
-            "declare ptr @mire_fs_join(ptr, ptr)".to_string(),
-            "declare ptr @mire_fs_dir(ptr)".to_string(),
-            "declare ptr @mire_fs_name(ptr)".to_string(),
-            "declare ptr @mire_fs_ext(ptr)".to_string(),
+            "declare i32 @pal_fs_write(ptr, ptr)".to_string(),
+            "declare i32 @pal_fs_append(ptr, ptr)".to_string(),
+            "declare ptr @pal_fs_read(ptr)".to_string(),
+            "declare i32 @pal_fs_copy(ptr, ptr)".to_string(),
+            "declare i32 @pal_fs_move(ptr, ptr)".to_string(),
+            "declare i32 @pal_fs_delete(ptr)".to_string(),
+            "declare i32 @pal_fs_mkdir(ptr)".to_string(),
+            "declare i32 @pal_fs_rmdir(ptr)".to_string(),
+            "declare i64 @pal_fs_exists(ptr)".to_string(),
+            "declare i64 @pal_fs_is_dir(ptr)".to_string(),
+            "declare i64 @pal_fs_size(ptr)".to_string(),
+            "declare ptr @pal_fs_list(ptr)".to_string(),
+            "declare ptr @pal_fs_join(ptr, ptr)".to_string(),
+            "declare ptr @pal_fs_dir(ptr)".to_string(),
+            "declare ptr @pal_fs_name(ptr)".to_string(),
+            "declare ptr @pal_fs_ext(ptr)".to_string(),
             // PROC functions
-            "declare ptr @mire_proc_run(ptr)".to_string(),
-            "declare ptr @mire_proc_exec(ptr)".to_string(),
-            "declare i64 @mire_proc_wait(i32)".to_string(),
-            "declare i32 @mire_proc_kill(i32)".to_string(),
-            "declare void @mire_proc_exit(i32)".to_string(),
-            "declare ptr @mire_proc_shell(ptr)".to_string(),
-            "declare i32 @mire_proc_exists(i32)".to_string(),
+            "declare ptr @pal_proc_run(ptr)".to_string(),
+            "declare ptr @pal_proc_exec(ptr)".to_string(),
+            "declare i64 @pal_proc_wait(i32)".to_string(),
+            "declare i32 @pal_proc_kill(i32)".to_string(),
+            "declare void @pal_proc_exit(i32)".to_string(),
+            "declare ptr @pal_proc_shell(ptr)".to_string(),
+            "declare i32 @pal_proc_exists(i32)".to_string(),
             "declare double @sqrt(double)".to_string(),
             // ENV functions
-            "declare ptr @mire_env_get(ptr)".to_string(),
-            "declare i32 @mire_env_set(ptr, ptr)".to_string(),
-            "declare ptr @mire_env_cwd()".to_string(),
-            "declare ptr @mire_env_all()".to_string(),
+            "declare ptr @pal_env_get(ptr)".to_string(),
+            "declare i32 @pal_env_set(ptr, ptr)".to_string(),
+            "declare ptr @pal_env_cwd()".to_string(),
+            "declare ptr @pal_env_all()".to_string(),
         ];
         out.extend(self.strings);
-        out.extend(self.extern_decls);
+        // Deduplicate extern declarations by function name.
+        // Hard-coded declarations (already in `out`) take priority.
+        let extra_externs: Vec<String> = {
+            fn extract_fn_name(decl: &str) -> Option<&str> {
+                let start = decl.find('@')?;
+                let end = decl[start..].find('(')?;
+                Some(&decl[start + 1..start + end])
+            }
+            let mut seen: std::collections::HashSet<&str> = 
+                out.iter().filter_map(|s| extract_fn_name(s)).collect();
+            self.extern_decls.iter()
+                .filter(|decl| {
+                    extract_fn_name(decl).map_or(true, |name| seen.insert(name))
+                })
+                .cloned()
+                .collect()
+        };
+        out.extend(extra_externs);
         out.push(String::new());
         let has_functions = !self.functions.is_empty();
         out.extend(self.functions);
@@ -614,7 +633,7 @@ impl LlvmIrGen {
                     let dropped_ty = self.expression_data_type(value);
                     if dropped_ty == DataType::Str {
                         self.body
-                            .push(format!("  call void @mire_string_free(ptr {})", dropped.repr));
+                            .push(format!("  call void @rt_managed_free(ptr {})", dropped.repr));
                     } else {
                         self.body.push(format!("  call void @free(ptr {})", dropped.repr));
                     }
@@ -786,7 +805,7 @@ impl LlvmIrGen {
                 if operator == "+" && left_is_list && right_is_list {
                     let result = self.tmp();
                     self.body.push(format!(
-                        "  {result} = call ptr @mire_list_concat(ptr {}, ptr {})",
+                        "  {result} = call ptr @rt_list_concat(ptr {}, ptr {})",
                         lhs.repr, rhs.repr
                     ));
                     return Ok(LlValue {
@@ -812,7 +831,7 @@ impl LlvmIrGen {
                     DataType::Dict | DataType::Map { .. } => {
                         let tmp = self.tmp();
                         self.body.push(format!(
-                            "  {tmp} = call ptr @mire_dict_to_string(ptr {})",
+                            "  {tmp} = call ptr @rt_dict_to_string(ptr {})",
                             value.repr
                         ));
                         Ok(LlValue {
@@ -825,7 +844,7 @@ impl LlvmIrGen {
                         let i64_value = self.cast_to_i64(value)?;
                         let tmp = self.tmp();
                         self.body.push(format!(
-                            "  {tmp} = call ptr @mire_bool_to_string(i64 {})",
+                            "  {tmp} = call ptr @rt_bool_to_string(i64 {})",
                             i64_value.repr
                         ));
                         Ok(LlValue {
@@ -837,7 +856,7 @@ impl LlvmIrGen {
                     DataType::F64 => {
                         let tmp = self.tmp();
                         self.body.push(format!(
-                            "  {tmp} = call ptr @mire_f64_to_string(double {})",
+                            "  {tmp} = call ptr @rt_f64_to_string(double {})",
                             value.repr
                         ));
                         Ok(LlValue {
@@ -851,7 +870,7 @@ impl LlvmIrGen {
                         LlType::I64 => {
                             let tmp = self.tmp();
                             self.body.push(format!(
-                                "  {tmp} = call ptr @mire_i64_to_string(i64 {})",
+                                "  {tmp} = call ptr @rt_i64_to_string(i64 {})",
                                 value.repr
                             ));
                             Ok(LlValue {
@@ -864,7 +883,7 @@ impl LlvmIrGen {
                             let i64_value = self.cast_to_i64(value)?;
                             let tmp = self.tmp();
                             self.body.push(format!(
-                                "  {tmp} = call ptr @mire_bool_to_string(i64 {})",
+                                "  {tmp} = call ptr @rt_bool_to_string(i64 {})",
                                 i64_value.repr
                             ));
                             Ok(LlValue {
@@ -876,7 +895,7 @@ impl LlvmIrGen {
                         LlType::F64 => {
                             let tmp = self.tmp();
                             self.body.push(format!(
-                                "  {tmp} = call ptr @mire_f64_to_string(double {})",
+                                "  {tmp} = call ptr @rt_f64_to_string(double {})",
                                 value.repr
                             ));
                             Ok(LlValue {
@@ -889,7 +908,7 @@ impl LlvmIrGen {
                             let i64_value = self.cast_to_i64(value)?;
                             let tmp = self.tmp();
                             self.body.push(format!(
-                                "  {tmp} = call ptr @mire_i64_to_string(i64 {})",
+                                "  {tmp} = call ptr @rt_i64_to_string(i64 {})",
                                 i64_value.repr
                             ));
                             Ok(LlValue {
@@ -1197,7 +1216,7 @@ impl LlvmIrGen {
                         let dropped_ty = self.expression_data_type(arg);
                         if dropped_ty == DataType::Str {
                             self.body
-                                .push(format!("  call void @mire_string_free(ptr {})", dropped.repr));
+                                .push(format!("  call void @rt_managed_free(ptr {})", dropped.repr));
                         } else {
                             self.body.push(format!("  call void @free(ptr {})", dropped.repr));
                         }
@@ -1557,6 +1576,9 @@ impl LlvmIrGen {
             Expression::Call { name, args, .. } if name == "lists.filter" => {
                 self.compile_lists_filter(args)
             }
+            Expression::Call { name, args, .. } if name == "__type_matches" => {
+                self.compile_type_matches(args)
+            }
             Expression::Call { name, args, .. } if name == "math.sum" => {
                 self.compile_math_sum(args)
             }
@@ -1669,7 +1691,7 @@ impl LlvmIrGen {
                 })
             }
             Expression::Pipeline {
-                input, stage, safe, ..
+                input, stage, ..
             } => {
                 let input_val = self.compile_expr(input)?;
 
@@ -1688,19 +1710,6 @@ impl LlvmIrGen {
                         for arg in args {
                             let arg_val = self.compile_expr(arg)?;
                             all_args.push(arg_val);
-                        }
-
-                        if *safe {
-                            let tmp = self.tmp();
-                            self.body.push(format!(
-                                "  {tmp} = call ptr @mire_option_wrap(i64 {})",
-                                all_args[1].repr
-                            ));
-                            return Ok(LlValue {
-                                ty: LlType::Ptr,
-                                repr: tmp,
-                                owned: true,
-                            });
                         }
 
                         let fn_info = self.user_functions.get(name).cloned().ok_or_else(|| {
@@ -1743,19 +1752,6 @@ impl LlvmIrGen {
                         }
 
                         let all_args = [input_val];
-
-                        if *safe {
-                            let tmp = self.tmp();
-                            self.body.push(format!(
-                                "  {tmp} = call ptr @mire_option_wrap(i64 {})",
-                                all_args[0].repr
-                            ));
-                            return Ok(LlValue {
-                                ty: LlType::Ptr,
-                                repr: tmp,
-                                owned: true,
-                            });
-                        }
 
                         let fn_info = self.user_functions.get(name).cloned().ok_or_else(|| {
                             MireError::new(ErrorKind::Backend {
@@ -1854,9 +1850,9 @@ impl LlvmIrGen {
     pub(super) fn statement_location(statement: &Statement) -> (usize, usize) {
         match statement {
             Statement::Let {
-                value: Some(value), ..
-            }
-            | Statement::Assignment { value, .. }
+                name_line, name_column, ..
+            } => (*name_line, *name_column),
+            Statement::Assignment { value, .. }
             | Statement::Expression(value)
             | Statement::Drop { value }
             | Statement::New {
@@ -1938,7 +1934,7 @@ impl LlvmIrGen {
 
         let input = self.tmp();
         self.body.push(format!(
-            "  {input} = call ptr @mire_read_line(ptr {})",
+            "  {input} = call ptr @rt_read_line(ptr {})",
             prompt.repr
         ));
 
@@ -2092,31 +2088,47 @@ impl LlvmIrGen {
 
 
 
+    fn llvm_fn_name(&mut self, name: &str) -> String {
+        if name == "main" {
+            "@mire_main".to_string()
+        } else if name.contains('.') {
+            format!("@fn_{}", sanitize_symbol(name))
+        } else {
+            let counter = {
+                let c = self.next_fn_id.entry(name.to_string()).or_insert(0usize);
+                *c += 1;
+                *c
+            };
+            format!("@fn_{}_{}", sanitize_symbol(name), counter)
+        }
+    }
+
     pub(super) fn compile_function_ir(
         &mut self,
         name: &str,
         params: &[(String, DataType)],
         body: &[Statement],
         ret: LlType,
+        returns_value: bool,
     ) -> Result<String> {
         let saved_allocas = std::mem::take(&mut self.entry_allocas);
         let saved_body = std::mem::take(&mut self.body);
         let saved_vars = std::mem::take(&mut self.vars);
         let saved_loop_stack = std::mem::take(&mut self.loop_stack);
         let saved_return = self.current_return.clone();
+        let saved_function = self.current_function.clone();
+        self.current_function = name.to_string();
         self.current_return = ret.clone();
-
-        let fn_info = self.user_functions.get(name).cloned().ok_or_else(|| {
-            MireError::new(ErrorKind::Runtime {
-                message: format!("Avenys missing function metadata for '{}'", name),
-            })
-        })?;
         let method_owner = name.split_once('.').map(|(owner, _)| owner.to_string());
 
-        for ((param_name, param_data_type), param_ty) in params.iter().zip(fn_info.params.iter()) {
+        for (param_name, param_data_type) in params.iter() {
+            let param_ty = if param_name == "self" {
+                LlType::Ptr
+            } else {
+                self.map_type(param_data_type)?
+            };
             let ptr = self.tmp();
             let arg_name = format!("%arg_{}", sanitize_symbol(param_name));
-            let param_ty = param_ty.clone();
             self.entry_allocas
                 .push(format!("  {ptr} = alloca {}", self.ty(param_ty.clone())));
             self.body.push(format!(
@@ -2173,7 +2185,7 @@ impl LlvmIrGen {
             .iter()
             .all(|stmt| !matches!(stmt, Statement::Return(_)))
         {
-            if fn_info.returns_value {
+            if returns_value {
                 if let Some(Statement::Expression(expr)) = body.last() {
                     let value = self.compile_expr(expr)?;
                     let ret = self.cast_to_type(value, ret_clone.clone())?;
@@ -2215,18 +2227,23 @@ impl LlvmIrGen {
 
         let args = params
             .iter()
-            .zip(fn_info.params.iter())
-            .map(|((name, _), ty)| {
-                format!("{} %arg_{}", self.ty(ty.clone()), sanitize_symbol(name))
+            .map(|(name, data_type)| {
+                let ty = if name == "self" {
+                    LlType::Ptr
+                } else {
+                    self.map_type(data_type).unwrap_or(LlType::I64)
+                };
+                format!("{} %arg_{}", self.ty(ty), sanitize_symbol(name))
             })
             .collect::<Vec<_>>()
             .join(", ");
 
+        let llvm_name = self.llvm_fn_name(name);
         let mut lines = Vec::new();
         lines.push(format!(
             "define {} {}({}) {{",
             self.ty(ret_clone.clone()),
-            fn_info.llvm_name,
+            llvm_name,
             args
         ));
         lines.push("entry:".to_string());
@@ -2239,6 +2256,7 @@ impl LlvmIrGen {
         self.vars = saved_vars;
         self.loop_stack = saved_loop_stack;
         self.current_return = saved_return;
+        self.current_function = saved_function;
 
         Ok(lines.join("\n"))
     }

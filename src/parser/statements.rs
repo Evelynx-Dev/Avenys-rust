@@ -82,6 +82,7 @@ impl Parser {
     fn parse_set_statement(&mut self) -> Result<Statement> {
         self.expect(TokenType::Set)?;
 
+        let var_token = self.peek();
         let target = self.parse_assignment_target()?;
         let op = self.advance();
         let is_compound = matches!(
@@ -197,6 +198,8 @@ impl Parser {
             is_mutable,
             is_static: false,
             visibility: Visibility::Private,
+            name_line: var_token.line,
+            name_column: var_token.column,
         })
     }
 
@@ -279,6 +282,7 @@ impl Parser {
                 break;
             }
             if self.peek().ttype == TokenType::Ident {
+                let field_token = self.peek();
                 let field_name = self.expect_ident()?;
                 let field_type = if self.check(TokenType::Colon) {
                     self.advance();
@@ -300,6 +304,8 @@ impl Parser {
                     is_mutable,
                     is_static: false,
                     visibility: Visibility::Private,
+                    name_line: field_token.line,
+                    name_column: field_token.column,
                 });
             }
             self.skip_newlines();

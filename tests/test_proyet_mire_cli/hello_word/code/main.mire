@@ -1,6 +1,6 @@
-fn main: () {
+pub fn main: () {
     set x = 10 :i64
     set s = str(x)
 
-    use dasu("str maybe? " {s})
+    use dasu("str maybe? " + s)
 }

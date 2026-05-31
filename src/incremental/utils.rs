@@ -28,7 +28,7 @@ pub fn build_fingerprint(
     import_mode: ImportMode,
     opt_level: OptLevel,
     emit_binary: bool,
-    runtime_support: &str,
+    c_sources_combined: &str,
 ) -> u64 {
     let mut hasher = FxHasher::new();
     normalize_path_key(source_path).hash(&mut hasher);
@@ -37,7 +37,7 @@ pub fn build_fingerprint(
     opt_level.hash(&mut hasher);
     emit_binary.hash(&mut hasher);
     env!("CARGO_PKG_VERSION").hash(&mut hasher);
-    runtime_support.hash(&mut hasher);
+    c_sources_combined.hash(&mut hasher);
 
     let mut file_entries: Vec<_> = files.iter().collect();
     file_entries.sort_by_key(|(left, _)| *left);

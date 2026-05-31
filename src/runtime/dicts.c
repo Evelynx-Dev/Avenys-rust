@@ -462,3 +462,65 @@ void *rt_dict_values(void *dict_ptr) {
     }
     return list;
 }
+
+int64_t rt_dicts_len(void *dict) { return rt_dict_len(dict); }
+void *rt_dicts_get(void *dict, const char *key) {
+    return rt_dict_get_ptr(dict, 3, 0, (void *)key, NULL);
+}
+void *rt_dicts_set(void *dict, const char *key, void *value) {
+    return rt_dict_set_ptr(dict, 3, dict ? ((MireDict *)dict)->value_kind : 3, 0, (void *)key, value);
+}
+void *rt_dicts_set_i64(void *dict, const char *key, int64_t value) {
+    return rt_dict_set_i64(dict, 3, 1, 0, (void *)key, value);
+}
+int64_t rt_dicts_has(void *dict, const char *key) {
+    return rt_dict_has(dict, 3, 0, (void *)key);
+}
+void *rt_dicts_remove(void *dict, const char *key) {
+    return rt_dict_remove(dict, 3, 0, (void *)key);
+}
+void *rt_dicts_keys(void *dict) { return rt_dict_keys(dict); }
+void *rt_dicts_values(void *dict) { return rt_dict_values(dict); }
+int64_t rt_dicts_entries(void *dict) { return rt_dict_len(dict); }
+void *rt_dicts_merge(void *a, void *b) {
+    MireDict *dict_b = (MireDict *)b;
+    if (!dict_b) return a;
+    for (int64_t i = 0; i < dict_b->len; i++) {
+        const void *key_slot_ptr = dict_b->key_storage + i * dict_b->key_size;
+        if (dict_b->key_kind == MIRE_KIND_STR) {
+            const char *k = *(const char **)key_slot_ptr;
+            const void *value_slot_ptr = dict_b->value_storage + i * dict_b->value_size;
+            if (dict_b->value_kind == MIRE_KIND_STR || dict_b->value_kind == MIRE_KIND_MAP || dict_b->value_kind == MIRE_KIND_PTR) {
+                void *v = *(void **)value_slot_ptr;
+                a = rt_dict_set_ptr(a, MIRE_KIND_STR, dict_b->value_kind, 0, (void *)k, v);
+            } else {
+                int64_t v = *(int64_t *)value_slot_ptr;
+                a = rt_dict_set_i64(a, MIRE_KIND_STR, MIRE_KIND_SCALAR, 0, (void *)k, v);
+            }
+        } else {
+            int64_t k;
+            switch (dict_b->key_size) {
+                case 1: k = *(uint8_t *)key_slot_ptr; break;
+                case 2: k = *(uint16_t *)key_slot_ptr; break;
+                case 4: k = *(uint32_t *)key_slot_ptr; break;
+                default: k = *(int64_t *)key_slot_ptr; break;
+            }
+            const void *value_slot_ptr = dict_b->value_storage + i * dict_b->value_size;
+            if (dict_b->value_kind == MIRE_KIND_STR || dict_b->value_kind == MIRE_KIND_MAP || dict_b->value_kind == MIRE_KIND_PTR) {
+                void *v = *(void **)value_slot_ptr;
+                a = rt_dict_set_ptr(a, dict_b->key_kind, dict_b->value_kind, k, NULL, v);
+            } else {
+                int64_t v;
+                switch (dict_b->value_size) {
+                    case 1: v = *(uint8_t *)value_slot_ptr; break;
+                    case 2: v = *(uint16_t *)value_slot_ptr; break;
+                    case 4: v = *(uint32_t *)value_slot_ptr; break;
+                    default: v = *(int64_t *)value_slot_ptr; break;
+                }
+                a = rt_dict_set_i64(a, dict_b->key_kind, MIRE_KIND_SCALAR, k, NULL, v);
+            }
+        }
+    }
+    return a;
+}
+int64_t rt_dicts_is_empty(void *dict) { return rt_dict_len(dict) <= 0 ? 1 : 0; }

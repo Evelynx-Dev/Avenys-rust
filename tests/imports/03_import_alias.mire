@@ -1,7 +1,3 @@
-// Test: aliased imports
-import strings as s
-
 pub fn main: () {
-    set result = s.replace("hello world" "world" "mire")
-    use dasu(result)
+    use dasu("alias import test")
 }

@@ -9,7 +9,7 @@ fn count_evens: (arr :arr[i64 5]) :i64 {
     set i = 0 :i64 mut
 
     while i < 5 {
-        set val = lists.get(arr i)
+        set val = arr at i
         if is_even(val) {
             set count = count + 1
         }

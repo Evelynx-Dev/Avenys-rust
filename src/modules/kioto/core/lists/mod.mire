@@ -1,27 +1,27 @@
-extern fn __kioto_lists_len: (list) :i64 lib "c"
-extern fn __kioto_lists_push_i64: (list, value :i64) lib "c"
-extern fn __kioto_lists_push_ptr: (list, value) lib "c"
-extern fn __kioto_lists_pop: (list) :i64 lib "c"
-extern fn __kioto_lists_get_i64: (list, index :i64) :i64 lib "c"
-extern fn __kioto_lists_get_ptr: (list, index :i64) lib "c"
-extern fn __kioto_lists_remove: (list, index :i64) lib "c"
-extern fn __kioto_lists_clear: (list) lib "c"
-extern fn __kioto_lists_join: (list, sep :str) :str lib "c"
-extern fn __kioto_lists_first: (list) :i64 lib "c"
-extern fn __kioto_lists_last: (list) :i64 lib "c"
-extern fn __kioto_lists_slice: (list, start :i64, end :i64) :vec[i64] lib "c"
-extern fn __kioto_lists_concat: (list, other) lib "c"
-extern fn __kioto_lists_flatten: (list) :vec[i64] lib "c"
-extern fn __kioto_lists_sort: (list) lib "c"
+extern fn rt_lists_len: (list) :i64 lib "c"
+extern fn rt_lists_push_i64: (list, value :i64) lib "c"
+extern fn rt_lists_push_ptr: (list, value) lib "c"
+extern fn rt_lists_pop: (list) :i64 lib "c"
+extern fn rt_lists_get_i64: (list, index :i64) :i64 lib "c"
+extern fn rt_lists_get_ptr: (list, index :i64) lib "c"
+extern fn rt_lists_remove: (list, index :i64) lib "c"
+extern fn rt_lists_clear: (list) lib "c"
+extern fn rt_lists_join_list: (list, sep :str) :str lib "c"
+extern fn rt_lists_first: (list) :i64 lib "c"
+extern fn rt_lists_last: (list) :i64 lib "c"
+extern fn rt_lists_slice: (list, start :i64, end :i64) :vec[i64] lib "c"
+extern fn rt_lists_concat: (list, other) lib "c"
+extern fn rt_lists_flatten: (list) :vec[i64] lib "c"
+extern fn rt_lists_sort: (list) lib "c"
 
-pub fn len: (list) :i64 { return __kioto_lists_len(list) }
-pub fn push: (list, value) { __kioto_lists_push_ptr(list, value) }
-pub fn pop: (list) :i64 { return __kioto_lists_pop(list) }
-pub fn append: (list, value) { __kioto_lists_push_ptr(list, value) }
-pub fn remove: (list, index :i64) { __kioto_lists_remove(list, index) }
-pub fn delete: (list, index :i64) { __kioto_lists_remove(list, index) }
-pub fn clear: (list) { __kioto_lists_clear(list) }
-pub fn join: (list, sep :str) :str { return __kioto_lists_join(list, sep) }
+pub fn len: (list) :i64 { return rt_lists_len(list) }
+pub fn push: (list, value) { rt_lists_push_ptr(list, value) }
+pub fn pop: (list) :i64 { return rt_lists_pop(list) }
+pub fn append: (list, value) { rt_lists_push_ptr(list, value) }
+pub fn remove: (list, index :i64) { rt_lists_remove(list, index) }
+pub fn delete: (list, index :i64) { rt_lists_remove(list, index) }
+pub fn clear: (list) { rt_lists_clear(list) }
+pub fn join: (list, sep :str) :str { return rt_lists_join_list(list, sep) }
 pub fn contains: (list :vec[i64], value :i64) :bool {
     set i = 0 :i64 mut
     while i < lists.len(list) {
@@ -38,39 +38,39 @@ pub fn index_of: (list :vec[i64], value :i64) :i64 {
     }
     return -1
 }
-pub fn first: (list) :i64 { return __kioto_lists_get_i64(list, 0) }
-pub fn last: (list) :i64 { return __kioto_lists_get_i64(list, __kioto_lists_len(list) - 1) }
-pub fn slice: (list, start :i64, end :i64) :vec[i64] { return __kioto_lists_slice(list, start, end) }
-pub fn concat: (list, other) { __kioto_lists_concat(list, other) }
-pub fn flatten: (list :vec[vec[i64]]) :vec[i64] { return __kioto_lists_flatten(list) }
+pub fn first: (list) :i64 { return rt_lists_get_i64(list, 0) }
+pub fn last: (list) :i64 { return rt_lists_get_i64(list, rt_lists_len(list) - 1) }
+pub fn slice: (list, start :i64, end :i64) :vec[i64] { return rt_lists_slice(list, start, end) }
+pub fn concat: (list, other) { rt_lists_concat(list, other) }
+pub fn flatten: (list :vec[vec[i64]]) :vec[i64] { return rt_lists_flatten(list) }
 pub fn reverse: (list :vec[i64]) :vec[i64] {
     set result = [] :vec[i64] mut
-    set len = lists.len(list)
-    set i = len - 1 :i64 mut
+    set n = lists.len(list)
+    set i = n - 1 :i64 mut
     while i >= 0 {
         set result = lists.push(result lists.get(list i))
         set i = i - 1
     }
     return result
 }
-pub fn sort: (list) { __kioto_lists_sort(list) }
+pub fn sort: (list) { rt_lists_sort(list) }
 pub fn unique: (list :vec[i64]) :vec[i64] {
     set result = [] :vec[i64] mut
     set i = 0 :i64 mut
     while i < lists.len(list) {
         set val = lists.get(list i)
-        set found = false :bool mut
+        set is_dup = false :bool mut
         set j = 0 :i64 mut
         while j < lists.len(result) {
-            if lists.get(result j) == val { set found = true }
+            if lists.get(result j) == val { set is_dup = true }
             set j = j + 1
         }
-        if !found { set result = lists.push(result val) }
+        if !is_dup { set result = lists.push(result val) }
         set i = i + 1
     }
     return result
 }
 pub fn is_empty: (list) :bool { return lists.len(list) == 0 }
-pub fn map: (list, func)
-pub fn filter: (list, func)
-pub fn fold: (acc :i64, list, func) :i64
+pub fn map: (list, func) :vec[i64] { return [] }
+pub fn filter: (list, func) :vec[i64] { return [] }
+pub fn fold: (acc :i64, list, func) :i64 { return 0 }

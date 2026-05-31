@@ -7,127 +7,128 @@ Mire Program
      │
      ▼
 ┌─────────────────────┐
-│   Kioto (Mire)      │  Higher-level logic (reverse, unique, filter, ...)
-│   Core + Extensions  │  Implemented in Mire where possible
+│  std/ (Kioto)       │  Higher-level logic (reverse, unique, filter, ...)
+│  Core + Extensions  │  Implemented in Mire where possible
 └─────────┬───────────┘
           │ extern fn __kioto_*
           ▼
 ┌─────────────────────┐
-│   Runtime Core      │  Platform-independent data structures
-│   (C)               │  managed, strings, lists, dicts
+│  kioto_exports.c    │  TEMP shim: __kioto_* → rt_* / pal_*
+│  (C, temporary)     │  Will be deleted once std/ is ported to rt_*/pal_*
 └─────────┬───────────┘
-          │ pal_*()
+          │ direct calls
           ▼
 ┌─────────────────────┐
-│   PAL (C)           │  Platform Abstraction Layer
-│   linux/  win32/    │  fs, env, proc, time, cpu, mem, gpu, term
+│  Runtime Core (C)   │  Platform-independent: managed, strings, lists, dicts
+└─────────┬───────────┘
+          │
+          ▼
+┌─────────────────────┐
+│  PAL (C)            │  Platform Abstraction Layer
+│  linux/  wasm/      │  fs, env, proc, time, cpu, mem, gpu, term
 └─────────┬───────────┘
           │ OS calls
           ▼
 ┌─────────────────────┐
-│   Operating System  │  Linux, Windows, WASM, ...
+│  Operating System   │  Linux, WASM, ...
 └─────────────────────┘
 ```
 
-## Goal
-
-Replace the monolithic `runtime_support.c` with a clean separation:
-
-- **Runtime Core** — data structures (managed strings, lists, dicts). Pure C, no OS calls.
-- **PAL** — OS/platform interface (fs, env, proc, time, cpu, mem, gpu, term). Platform-specific backends.
-- **Kioto** — higher-level logic in Mire (reverse, unique, contains, repeat, ...).
+The LLVM codegen emits `rt_*()` and `pal_*()` calls directly. The old
+`@mire_*` symbols have been renamed to `@rt_*` / `@pal_*`. kioto_exports.c
+is a temporary bridge for the `__kioto_*` externs that std/ still uses.
+Once std/ modules are updated to call `rt_*` / `pal_*` directly (or are
+replaced by inline Mire logic), the shim gets deleted.
 
 ## Directory Layout
 
 ```
 src/
   runtime/                  # Platform-independent
-    runtime.h               # Umbrella header
-    managed.h / managed.c   # Ref-counted strings, GC
-    strings.h / strings.c   # String primitives (concat, split, substr, len, cmp)
-    lists.h / lists.c       # List primitives (len, get, set, push, pop, remove, clear)
-    dicts.h / dicts.c       # Dict primitives (len, get, set, has, keys, values, remove)
-    kioto_abi.c             # __kioto_* wrappers → runtime_*() / pal_*()
+    runtime.h               # Umbrella header for all runtime types
+    managed.c               # Ref-counted strings
+    strings.c               # String ops (concat, split, substr, contains, pad, ...)
+    lists.c                 # List ops (create, push, pop, slice, concat)
+    dicts.c                 # Dict ops (get, set, keys, values)
+    kioto_exports.c         # TEMP: __kioto_* wrappers → rt_*() / pal_*()
 
   pal/
-    pal.h                   # Umbrella + platform selection (#ifdef)
-    pal_fs.h / linux/pal_fs.c
-    pal_env.h / linux/pal_env.c
-    pal_proc.h / linux/pal_proc.c
-    pal_time.h / linux/pal_time.c
-    pal_cpu.h / linux/pal_cpu.c
-    pal_mem.h / linux/pal_mem.c
-    pal_gpu.h / linux/pal_gpu.c
-    pal_term.h / linux/pal_term.c
-    win32/                  # Future
-    wasm/                   # Future
+    pal.h                   # Umbrella header, platform selection
+    linux/
+      pal_fs.c
+      pal_env.c
+      pal_proc.c
+      pal_time.c
+      pal_cpu.c
+      pal_mem.c
+      pal_gpu.c
+      pal_term.c
+    wasm/                   # Stub implementations for WASM targets
 ```
 
 ## Runtime Core (platform-independent)
 
-| Module | File | Functions |
-|--------|------|-----------|
-| Managed | `managed.h/c` | `managed_alloc`, `managed_ref`, `managed_unref`, `managed_from_cstr`, `managed_from_slice`, `managed_len`, `managed_data` |
-| Strings | `strings.h/c` | `concat`, `split`, `substr`, `len`, `cmp`, `to_upper`, `to_lower`, `trim`, `replace`, `contains`, `starts_with`, `ends_with`, `pad_left`, `pad_right` |
-| Lists | `lists.h/c` | `len`, `get_i64`, `get_ptr`, `set_i64`, `set_ptr`, `push_i64`, `push_ptr`, `pop`, `remove`, `clear`, `concat` |
-| Dicts | `dicts.h/c` | `len`, `get`, `set`, `has`, `keys`, `values`, `remove`, `is_empty` |
+All declared in `runtime.h`:
+
+| Module | Functions |
+|--------|-----------|
+| Managed | `rt_managed_alloc`, `rt_managed_ref`, `rt_managed_unref`, `rt_managed_from_cstr`, `rt_managed_from_slice`, `rt_managed_len`, `rt_managed_data`, `rt_managed_free` |
+| Strings | `rt_string_copy`, `rt_string_concat`, `rt_string_append_owned`, `rt_i64_to_string`, `rt_bool_to_string`, `rt_f64_to_string`, `rt_string_to_upper`, `rt_string_to_lower`, `rt_strings_replace`, `rt_strings_replace_first`, `rt_strings_split_list`, `rt_strings_join`, `rt_strings_trim`, `rt_strings_starts_with`, `rt_strings_ends_with`, `rt_strings_contains`, `rt_strings_substr`, `rt_strings_pad_left`, `rt_strings_pad_right`, `rt_read_line`, `rt_get_args` |
+| Lists | `rt_list_create`, `rt_list_push_i64`, `rt_list_push_scalar`, `rt_list_push_ptr`, `rt_list_pop_i64`, `rt_list_concat`, `rt_list_slice` |
+| Dicts | `rt_dict_get_i64`, `rt_dict_get_ptr`, `rt_dict_set_i64`, `rt_dict_set_ptr`, `rt_dict_to_string`, `rt_dict_keys`, `rt_dict_values` |
 
 ## PAL (platform-dependent)
 
-| Module | Header | Functions |
-|--------|--------|-----------|
-| FS | `pal_fs.h` | `read`, `write`, `append`, `exists`, `is_dir`, `size`, `copy`, `move`, `drop`, `list`, `mkdir`, `rmdir`, `join`, `dir`, `name`, `ext` |
-| Env | `pal_env.h` | `get`, `set`, `all`, `args`, `cwd`, `chdir` |
-| Proc | `pal_proc.h` | `run`, `spawn`, `shell`, `wait`, `kill`, `exit`, `exists`, `pipe`, `stdin`, `read`, `write` |
-| Time | `pal_time.h` | `unix_ms`, `unix_ns`, `sleep_ms`, `sleep_ns`, `mark`, `elapsed_ms`, `elapsed_ns` |
-| CPU | `pal_cpu.h` | `time_ns`, `time_ms`, `mark`, `elapsed_ms`, `elapsed_ns`, `count`, `freq_mhz`, `cycles_est`, `loadavg`, `snapshot` |
-| Mem | `pal_mem.h` | `used`, `total`, `free`, `available`, `percent`, `process`, `snapshot`, `format` |
-| GPU | `pal_gpu.h` | `available`, `snapshot` |
-| Term | `pal_term.h` | `style`, `hr`, `clear` |
+All declared in `pal.h`. Each backend implements the same signatures.
 
-## Implementation Phases
+| Module | Functions |
+|--------|-----------|
+| FS | `pal_fs_write`, `pal_fs_append`, `pal_fs_read`, `pal_fs_copy`, `pal_fs_move`, `pal_fs_delete`, `pal_fs_mkdir`, `pal_fs_rmdir`, `pal_fs_exists`, `pal_fs_is_dir`, `pal_fs_size`, `pal_fs_list`, `pal_fs_join`, `pal_fs_dir`, `pal_fs_name`, `pal_fs_ext` |
+| Env | `pal_env_get`, `pal_env_set`, `pal_env_all`, `pal_env_cwd`, `pal_env_chdir` |
+| Proc | `pal_proc_run`, `pal_proc_exec`, `pal_proc_shell`, `pal_proc_wait`, `pal_proc_kill`, `pal_proc_exit`, `pal_proc_exists` |
+| Time | `pal_time_unix_ms`, `pal_time_unix_ns`, `pal_time_since_ms`, `pal_time_since_ns`, `pal_time_sleep_ms`, `pal_time_sleep_ns`, `pal_time_mark`, `pal_time_elapsed_ms`, `pal_time_elapsed_ns` |
+| CPU | `pal_cpu_time_ns`, `pal_cpu_time_ms`, `pal_cpu_mark`, `pal_cpu_elapsed_ms`, `pal_cpu_elapsed_ns`, `pal_cpu_count`, `pal_cpu_freq_mhz`, `pal_cpu_cycles_est`, `pal_cpu_loadavg`, `pal_cpu_snapshot` |
+| Mem | `pal_mem_used`, `pal_mem_total`, `pal_mem_free`, `pal_mem_available`, `pal_mem_percent`, `pal_mem_process_bytes`, `pal_mem_format`, `pal_mem_snapshot` |
+| GPU | `pal_gpu_snapshot` |
+| Term | `pal_term_style`, `pal_term_hr`, `pal_term_clear` |
+| I/O | `pal_io_print`, `pal_io_print_err`, `pal_io_readln` |
 
-### Phase 0 — Fix clippy warnings
-- `src/loader.rs:545` — collapse nested `if`
-- `src/loader.rs:637` — remove unnecessary borrow
+## ABI Map
 
-### Phase A — Split runtime_support.c → Runtime Core + PAL
-- A1–A4: Create `src/runtime/{managed,strings,lists,dicts}.h/.c`
-- A5–A13: Create `src/pal/{fs,env,proc,time,cpu,mem,gpu,term}.h` + `linux/*.c`
-- A14: Create `src/runtime/kioto_abi.c` (thin shim mapping `__kioto_*` → `pal_*` / `runtime_*`)
-- A15: Update `toolchain.rs` to compile `src/runtime/*.c` + `src/pal/linux/*.c`
-- A16: **Delete `src/avens/runtime_support.c`**
+`abi_map.toml` at the project root lists every `@mire_*` → `@rt_*` / `@pal_*`
+mapping. It's the source of truth if you need to trace what happened during
+the migration.
 
-### Phase B — Move logic from C to Mire (kioto)
-- Implement `lists.reverse`, `lists.unique`, `lists.contains`, `lists.index_of` in Mire
-- Implement `strings.repeat`, `strings.is_empty`, `strings.index_of` in Mire
-- Add minimal get/set primitives to Runtime Lists if needed
+## What's Done
 
-### Phase C — Remove std, Kioto as sole library
-- Add missing low-level extern fns to kioto (gpu, expanded time/cpu/mem/proc)
-- Delete `src/modules/std/`
-- Remove `__std_all__` magic from type checker + loader
-- Backward compat: `import std` → kioto
+- Phase 0: Clippy warnings fixed
+- Phase A: runtime_support.c split into Runtime Core + PAL + kioto_exports.c
+- Phase B: All @mire_* symbols renamed to @rt_* / @pal_* in LLVM codegen.
+  kioto_abi.c deleted. Build clean, 127 regressions pass.
+- kioto_exports.c is the only remaining bridge (temporary).
 
-### Phase D — Kioto Core + Extensions
-- **Core** (frozen ABI): strings, fs, env, proc, time, cpu, mem, lists, dicts, gpu, term, math
-- **Extensions** (open): iter, maybe, result, tuple, types, future modules
+## WASM Backend
 
-### Phase E — Owl test subcommand
-- `mire test [paths...] [--all] [--no-run] [--verbose]`
-- Auto-detect `tests/` directory in project root, scan for `*.mire`
-- Compile each and report pass/fail
-- Warning when tests exist but aren't run:
-  ```
-  warning: N test(s) in tests/ were not executed (use 'mire test --all' to run them)
-  ```
-- If no `tests/` dir:
-  ```
-  no extra tests found
-  ```
+`src/pal/wasm/` contains stub implementations for WASM targets.
+Most functions return errors or empty results since WASM has no
+real filesystem, process, or OS-level introspection. Time functions
+use standard `clock_gettime` (available through WASI).
 
-### Phase F — Test strategy
-- Rust `#[test]` for compiler-level regressions (existing)
-- C unit tests for PAL (via `cc` crate)
-- `mire test --all` for integration tests
-- Manual smoke tests
+Select the WASM backend at build time:
+
+```bash
+MIRE_PAL=wasm cargo run -- run hello.mire
+```
+
+For WASM cross-compilation, pass `--target` to clang (not yet wired
+automatically):
+
+```bash
+MIRE_PAL=wasm clang --target=wasm32-unknown-wasi ...
+```
+
+## What's Next
+
+- Phase C: Update std/ modules to call rt_*/pal_* directly, delete kioto_exports.c
+- Phase D: Move more C logic into Mire (kioto core modules)
+- Phase E: Remove std/, promote kioto as sole library

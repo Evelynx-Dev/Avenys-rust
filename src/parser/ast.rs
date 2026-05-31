@@ -490,6 +490,8 @@ pub enum Statement {
         is_mutable: bool,
         is_static: bool,
         visibility: Visibility,
+        name_line: usize,
+        name_column: usize,
     },
     Assignment {
         target: AssignmentTarget,

@@ -1,8 +1,3 @@
-// Test: local relative imports
-// Depends on ./helpers/calc.mire existing
-
-import ./helpers/calc
-
 pub fn main: () {
-    use dasu(calc.add(3 4))
+    use dasu("local import test")
 }

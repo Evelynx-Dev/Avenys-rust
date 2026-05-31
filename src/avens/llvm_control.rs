@@ -611,7 +611,7 @@ impl LlvmIrGen {
         self.body.push(format!("{fail_label}:"));
         let message_value = self.string_value(message);
         self.body.push(format!(
-            "  call void @mire_runtime_panic(ptr {})",
+            "  call void @rt_panic(ptr {})",
             message_value.repr
         ));
         self.body.push("  unreachable".to_string());

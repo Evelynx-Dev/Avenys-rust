@@ -63,7 +63,7 @@ impl LlvmIrGen {
 
         let initial_list = self.tmp();
         self.body.push(format!(
-            "  {initial_list} = call ptr @mire_list_create(i64 4, i64 {})",
+            "  {initial_list} = call ptr @rt_list_create(i64 4, i64 {})",
             elem_size
         ));
         self.body
@@ -173,11 +173,11 @@ impl LlvmIrGen {
         let result_list_new = self.tmp();
         if elem_size == 8 {
             self.body.push(format!(
-                "  {result_list_new} = call ptr @mire_list_push_i64(ptr {current_list}, i64 {result_i64_repr})"
+                "  {result_list_new} = call ptr @rt_list_push_i64(ptr {current_list}, i64 {result_i64_repr})"
             ));
         } else {
             self.body.push(format!(
-                "  {result_list_new} = call ptr @mire_list_push_scalar(ptr {current_list}, i64 {result_i64_repr}, i64 {})",
+                "  {result_list_new} = call ptr @rt_list_push_scalar(ptr {current_list}, i64 {result_i64_repr}, i64 {})",
                 elem_size
             ));
         }
@@ -394,13 +394,13 @@ impl LlvmIrGen {
         if ll_ty == LlType::I64 && elem_size == 8 {
             let casted = self.cast_to_i64(value)?;
             self.body.push(format!(
-                "  {result} = call ptr @mire_list_push_i64(ptr {}, i64 {})",
+                "  {result} = call ptr @rt_list_push_i64(ptr {}, i64 {})",
                 list.repr, casted.repr
             ));
         } else {
             let casted = self.cast_to_i64(value)?;
             self.body.push(format!(
-                "  {result} = call ptr @mire_list_push_scalar(ptr {}, i64 {}, i64 {})",
+                "  {result} = call ptr @rt_list_push_scalar(ptr {}, i64 {}, i64 {})",
                 list.repr, casted.repr, elem_size
             ));
         }
@@ -423,7 +423,7 @@ impl LlvmIrGen {
             } else {
                 let copied = self.tmp();
                 self.body.push(format!(
-                    "  {copied} = call ptr @mire_string_copy(ptr {})",
+                    "  {copied} = call ptr @rt_string_copy(ptr {})",
                     compiled.repr
                 ));
                 LlValue {
@@ -949,14 +949,23 @@ impl LlvmIrGen {
         target_data_type: &DataType,
         result_data_type: &DataType,
     ) -> Result<LlValue> {
-        if target.ty != LlType::Ptr {
+        let mut target = target;
+        if target.ty == LlType::I64 {
+            let tmp = self.tmp();
+            self.body.push(format!("  {tmp} = inttoptr i64 {} to ptr", target.repr));
+            target = LlValue {
+                ty: LlType::Ptr,
+                repr: tmp,
+                owned: false,
+            };
+        } else if target.ty != LlType::Ptr {
             return Err(MireError::new(ErrorKind::Runtime {
-                message: "Avenys cannot index non-pointer type".to_string(),
+                message: format!("Avenys cannot index non-pointer type (function '{}')", self.current_function),
             }));
         }
 
         match target_data_type {
-            DataType::List | DataType::Vector { .. } | DataType::Slice { .. } | DataType::Tuple => {
+            DataType::Unknown | DataType::List | DataType::Vector { .. } | DataType::Slice { .. } | DataType::Tuple => {
                 let index = self.cast_to_i64(index)?;
                 let len = self.compile_list_len_value(target.clone())?;
                 self.emit_bounds_check(index.clone(), len, "index out of bounds");
@@ -1156,6 +1165,48 @@ impl LlvmIrGen {
         }
     }
 
+    pub(super) fn compile_type_matches(&mut self, args: &[Expression]) -> Result<LlValue> {
+        if args.len() != 2 {
+            return Err(MireError::new(ErrorKind::Runtime {
+                message: "Avenys __type_matches expects 2 arguments".to_string(),
+            }));
+        }
+        let expr_type = self.expression_data_type(&args[0]);
+        let type_name = match &args[1] {
+            Expression::Literal(Literal::Str(s)) => s.clone(),
+            other => {
+                let compiled = self.compile_expr(other)?;
+                return Ok(LlValue { ty: LlType::I1, repr: compiled.repr, owned: false });
+            }
+        };
+        let expected_type = match type_name.as_str() {
+            "i64" => DataType::I64,
+            "str" => DataType::Str,
+            "bool" => DataType::Bool,
+            "f64" => DataType::F64,
+            "vec[anything]" | "vec" => DataType::Vector {
+                element_type: Box::new(DataType::Anything),
+                dynamic: true,
+            },
+            "map[anything anything]" | "map" => DataType::Map {
+                key_type: Box::new(DataType::Anything),
+                value_type: Box::new(DataType::Anything),
+            },
+            _ => return Ok(LlValue { ty: LlType::I1, repr: "false".to_string(), owned: false }),
+        };
+        let expr_llvm_ty = self.map_type(&expr_type).unwrap_or(LlType::I64);
+        let expected_llvm_ty = self.map_type(&expected_type).unwrap_or(LlType::I64);
+        let result = if expr_llvm_ty == expected_llvm_ty
+            || expr_type == DataType::Unknown
+            || expr_type == DataType::Anything
+        {
+            "true".to_string()
+        } else {
+            "false".to_string()
+        };
+        Ok(LlValue { ty: LlType::I1, repr: result, owned: false })
+    }
+
     pub(super) fn compile_contains(&mut self, args: &[Expression]) -> Result<LlValue> {
         if args.len() != 2 {
             return Err(MireError::new(ErrorKind::Runtime {
@@ -1172,7 +1223,7 @@ impl LlvmIrGen {
         let needle = self.compile_expr(&args[1])?;
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call i64 @mire_strings_contains(ptr {}, ptr {})",
+            "  {result} = call i64 @rt_strings_contains(ptr {}, ptr {})",
             haystack.repr, needle.repr
         ));
         Ok(LlValue {
@@ -1289,6 +1340,7 @@ impl LlvmIrGen {
         let loop_cond_label = self.label("math_sum_cond");
         let loop_body_label = self.label("math_sum_body");
         let end_label = self.label("math_sum_end");
+        let list = self.ensure_ptr(list);
         self.body
             .push(format!("  {is_null} = icmp eq ptr {}, null", list.repr));
         self.body.push(format!(
@@ -1393,7 +1445,7 @@ impl LlvmIrGen {
     pub(super) fn concat_values(&mut self, lhs: LlValue, rhs: LlValue) -> LlValue {
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call ptr @mire_string_concat(ptr {}, ptr {})",
+            "  {result} = call ptr @rt_string_concat(ptr {}, ptr {})",
             lhs.repr, rhs.repr
         ));
         LlValue {

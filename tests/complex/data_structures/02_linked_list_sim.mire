@@ -10,7 +10,7 @@ fn create_node: (val :i64, next_idx :i64) :Node {
 }
 
 pub fn main: () {
-    set node0 = create_node(10 -1)
+    set node0 = create_node(10 0 - 1)
     set node1 = create_node(20 0)
     set node2 = create_node(30 1)
 

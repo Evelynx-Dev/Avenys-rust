@@ -172,6 +172,8 @@ mod tests {
                         is_mutable: false,
                         is_static: false,
                         visibility: Visibility::Public,
+                        name_line: 1,
+                        name_column: 1,
                     },
                     Statement::Move {
                         target: "y".to_string(),

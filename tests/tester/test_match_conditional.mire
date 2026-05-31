@@ -16,7 +16,7 @@ pub fn main: () {
     } :bool
     
     if is_active {
-        use dasu(active)
+        use dasu("active")
     }
     
     set label = match s {

@@ -134,6 +134,28 @@ impl TypeChecker {
             return Ok(Some(DataType::None));
         }
 
+        if name == "strings.join" {
+            let parts_type = arg_types.first().cloned().unwrap_or(DataType::Unknown);
+            let sep_type = arg_types.get(1).cloned().unwrap_or(DataType::Unknown);
+            if !matches!(
+                parts_type,
+                DataType::Vector { .. } | DataType::List | DataType::Unknown | DataType::Anything
+            ) {
+                return Err(type_error(format!(
+                    "strings.join expects vec input, got {:?}",
+                    parts_type
+                )));
+            }
+            if sep_type != DataType::Str && sep_type != DataType::Unknown {
+                return Err(type_error(format!(
+                    "strings.join separator expects Str, got {:?}",
+                    sep_type
+                )));
+            }
+            *data_type = DataType::Str;
+            return Ok(Some(DataType::Str));
+        }
+
         Ok(None)
     }
 }

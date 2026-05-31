@@ -10,6 +10,8 @@ pub(super) fn hash_statement(statement: &Statement, hasher: &mut FxHasher) {
             is_mutable,
             is_static,
             visibility,
+            name_line: _,
+            name_column: _,
         } => {
             hasher.write_u8(0);
             name.hash(hasher);

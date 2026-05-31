@@ -2,7 +2,7 @@
 
 Mire is a compiled, statically typed programming language with ownership-oriented memory safety checks and an LLVM-based backend.
 
-Current compiler crate version: `3.10.0`.
+Current compiler crate version: `3.11.0`.
 
 ## Status
 
@@ -11,7 +11,10 @@ Current compiler crate version: `3.10.0`.
 - Incremental compilation: enabled (cache, reuse, LRU pruning)
 - Optimization profiles: `debug/release` + `-O0/-O1/-O2/-O3/-Os/-Oz`
 - Public CLI surface: `run`, `build`, `check`, `debug`, `import`
-- Standard library (`std/`): fully implemented via Kioto ABI v1 — 116 C wrappers covering fs, env, strings, lists, dicts, time, cpu, mem, proc, gpu, term, math, io.
+- Standard library (`std/`): provides fs, env, strings, lists, dicts, time, cpu, mem, proc, gpu, term, math, io via `__kioto_*` externs bridged through `kioto_exports.c` (temporary shim, being phased out).
+- LLVM codegen emits `rt_*` / `pal_*` calls directly — the old `@mire_*` symbols are gone.
+- PAL (Platform Abstraction Layer): `src/pal/` with linux backend. WASM backend in progress.
+- Runtime core: `src/runtime/` — platform-independent managed strings, lists, dicts.
 - TOML-based import management: `owl.toml` `[imports]` section with `mire import` CLI command.
 
 ## Quick Start

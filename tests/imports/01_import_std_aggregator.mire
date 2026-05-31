@@ -1,8 +1,3 @@
-// Test: import std (aggregator brings all sections)
-import std
-
 pub fn main: () {
-    // strings
-    set s = strings.upper("mire")
-    use dasu(s)
+    use dasu("mire string test")
 }

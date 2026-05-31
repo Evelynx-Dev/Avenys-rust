@@ -1197,32 +1197,40 @@ fn advanced_literals_compile_and_run() {
     )
     .expect("write source");
 
-    let build = compile_file_with_avenys(
-        &source_path,
-        &BuildOptions {
-            mode: BuildMode::Debug,
-            opt_level: OptLevel::O0,
-            debug_dump: false,
-            output: None,
-            emit_binary: true,
-            persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
-            cache: Default::default(),
-            warning_filter: mire::error::diagnostic::WarningFilter::Default,
-            deny_warnings: std::collections::HashSet::new(),
-            module_paths: vec![],
-        },
-    )
-    .expect("advanced literals should compile");
+    let opts = BuildOptions {
+        mode: BuildMode::Debug,
+        opt_level: OptLevel::O0,
+        debug_dump: true,
+        output: None,
+        emit_binary: true,
+        persist_ir: true,
+        import_mode: mire::ImportMode::Legacy,
+        cache: Default::default(),
+        warning_filter: mire::error::diagnostic::WarningFilter::Default,
+        deny_warnings: std::collections::HashSet::new(),
+        module_paths: vec![],
+    };
 
-    let output = Command::new(&build.binary_path)
-        .output()
-        .expect("run binary");
+    let ir_path = root.join("bin").join("debug").join("advanced_literals.ll");
 
-    assert!(output.status.success(), "binary should run successfully");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("true"), "{stdout}");
-    assert!(stdout.contains("hello \"world\" with ##"), "{stdout}");
+    let build = compile_file_with_avenys(&source_path, &opts);
+
+    if let Ok(ref build) = build {
+        let output = Command::new(&build.binary_path)
+            .output()
+            .expect("run binary");
+        assert!(output.status.success(), "binary should run successfully");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("true"), "{stdout}");
+        assert!(stdout.contains("hello \"world\" with ##"), "{stdout}");
+    } else {
+        if ir_path.exists() {
+            let ir = std::fs::read_to_string(&ir_path).expect("read ir");
+            eprintln!("=== LLVM IR ===\n{}", ir);
+        }
+        let err = build.unwrap_err();
+        panic!("advanced literals should compile: {err:?}");
+    }
 }
 
 #[test]

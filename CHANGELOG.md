@@ -2,6 +2,33 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.11.0] - 2026-05-30
+
+### Removed
+- `kioto_abi.c` (643 lines) deleted — all `@mire_*` LLVM symbols renamed.
+- Dead declarations removed: `mire_list_new`, `mire_strings_split`, `mire_option_wrap`.
+
+### Changed
+- Every `@mire_*` LLVM IR symbol renamed to `@rt_*` (runtime core) or `@pal_*`
+  (platform layer). The only `@mire_*` left is `@mire_main`, the user entry
+  point. 76+ mappings catalogued in `abi_map.toml`.
+- Codegen in all 8 `llvm_*.rs` files updated: declarations and call sites.
+- `strings.c` extended with 14 new `rt_*` implementations migrated from kioto_abi.c
+  (contains, replace, replace_first, starts_with, ends_with, substr, pad_left,
+  pad_right, trim, split_list, join, read_line, get_args, time/cpu elapsed_ms_str).
+- `kioto_exports.c` created as a temporary shim (`__kioto_*` → `rt_*` / `pal_*`),
+  replacing the old kioto_abi.c. Will be deleted once std/ modules call
+  `rt_*` / `pal_*` directly.
+- ABI migration registry: `abi_map.toml` at project root documents every
+  symbol rename and its category (runtime / pal / removed).
+- Build pipeline unchanged — `build_pipeline.rs` already compiled all `.c`
+  files from `src/runtime/` and `src/pal/linux/`.
+- Crate version bumped to `3.11.0`.
+
+### Added
+- PAL documentation in `PAL.md` updated with current architecture, directory
+  layout, full function tables for runtime core and PAL, and ABI map reference.
+
 ## [3.10.0] - 2026-05-30
 
 ### Added

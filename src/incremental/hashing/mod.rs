@@ -450,6 +450,8 @@ mod tests {
                         is_mutable: false,
                         is_static: false,
                         visibility: Visibility::Public,
+                        name_line: 1,
+                        name_column: 1,
                     }],
                 },
                 Statement::Impl {
@@ -730,6 +732,8 @@ mod tests {
                         is_mutable: false,
                         is_static: false,
                         visibility: Visibility::Public,
+                        name_line: 1,
+                        name_column: 1,
                     }],
                 },
                 Statement::Function {

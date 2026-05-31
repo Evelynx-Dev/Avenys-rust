@@ -198,7 +198,7 @@ impl LlvmIrGen {
         self.body.push(format!("  {argc_val} = load i32, ptr @.argc"));
         self.body.push(format!("  {argv_val} = load ptr, ptr @.argv"));
         self.body.push(format!(
-            "  {tmp} = call ptr @mire_get_args(i32 {argc_val}, ptr {argv_val})"
+            "  {tmp} = call ptr @rt_get_args(i32 {argc_val}, ptr {argv_val})"
         ));
         Ok(LlValue {
             ty: LlType::Ptr,
@@ -215,7 +215,7 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let content = self.compile_expr(&args[1])?;
-        self.body.push(format!("  call i32 @mire_fs_write(ptr {}, ptr {})", path.repr, content.repr));
+        self.body.push(format!("  call i32 @pal_fs_write(ptr {}, ptr {})", path.repr, content.repr));
         Ok(LlValue { ty: LlType::I64, repr: "0".to_string(), owned: false })
     }
 
@@ -227,7 +227,7 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let content = self.compile_expr(&args[1])?;
-        self.body.push(format!("  call i32 @mire_fs_append(ptr {}, ptr {})", path.repr, content.repr));
+        self.body.push(format!("  call i32 @pal_fs_append(ptr {}, ptr {})", path.repr, content.repr));
         Ok(LlValue { ty: LlType::I64, repr: "0".to_string(), owned: false })
     }
 
@@ -239,7 +239,7 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_fs_read(ptr {})", path.repr));
+        self.body.push(format!("  {tmp} = call ptr @pal_fs_read(ptr {})", path.repr));
         Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: true })
     }
 
@@ -252,7 +252,7 @@ impl LlvmIrGen {
         let src = self.compile_expr(&args[0])?;
         let dst = self.compile_expr(&args[1])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call i32 @mire_fs_copy(ptr {}, ptr {})", src.repr, dst.repr));
+        self.body.push(format!("  {tmp} = call i32 @pal_fs_copy(ptr {}, ptr {})", src.repr, dst.repr));
         Ok(LlValue { ty: LlType::I64, repr: tmp, owned: false })
     }
 
@@ -265,7 +265,7 @@ impl LlvmIrGen {
         let src = self.compile_expr(&args[0])?;
         let dst = self.compile_expr(&args[1])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call i32 @mire_fs_move(ptr {}, ptr {})", src.repr, dst.repr));
+        self.body.push(format!("  {tmp} = call i32 @pal_fs_move(ptr {}, ptr {})", src.repr, dst.repr));
         Ok(LlValue { ty: LlType::I64, repr: tmp, owned: false })
     }
 
@@ -277,7 +277,7 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call i32 @mire_fs_drop(ptr {})", path.repr));
+        self.body.push(format!("  {tmp} = call i32 @pal_fs_delete(ptr {})", path.repr));
         Ok(LlValue { ty: LlType::I64, repr: tmp, owned: false })
     }
 
@@ -289,7 +289,7 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call i32 @mire_fs_mkdir(ptr {})", path.repr));
+        self.body.push(format!("  {tmp} = call i32 @pal_fs_mkdir(ptr {})", path.repr));
         Ok(LlValue { ty: LlType::I64, repr: tmp, owned: false })
     }
 
@@ -301,7 +301,7 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call i32 @mire_fs_rmdir(ptr {})", path.repr));
+        self.body.push(format!("  {tmp} = call i32 @pal_fs_rmdir(ptr {})", path.repr));
         Ok(LlValue { ty: LlType::I64, repr: tmp, owned: false })
     }
 
@@ -313,7 +313,7 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call i64 @mire_fs_exists(ptr {})", path.repr));
+        self.body.push(format!("  {tmp} = call i64 @pal_fs_exists(ptr {})", path.repr));
         Ok(LlValue { ty: LlType::I64, repr: tmp, owned: false })
     }
 
@@ -325,7 +325,7 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call i64 @mire_fs_is_dir(ptr {})", path.repr));
+        self.body.push(format!("  {tmp} = call i64 @pal_fs_is_dir(ptr {})", path.repr));
         Ok(LlValue { ty: LlType::I64, repr: tmp, owned: false })
     }
 
@@ -337,7 +337,7 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call i64 @mire_fs_size(ptr {})", path.repr));
+        self.body.push(format!("  {tmp} = call i64 @pal_fs_size(ptr {})", path.repr));
         Ok(LlValue { ty: LlType::I64, repr: tmp, owned: false })
     }
 
@@ -349,7 +349,7 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_fs_list(ptr {})", path.repr));
+        self.body.push(format!("  {tmp} = call ptr @pal_fs_list(ptr {})", path.repr));
         Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: false })
     }
 
@@ -362,7 +362,7 @@ impl LlvmIrGen {
         let a = self.compile_expr(&args[0])?;
         let b = self.compile_expr(&args[1])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_fs_join(ptr {}, ptr {})", a.repr, b.repr));
+        self.body.push(format!("  {tmp} = call ptr @pal_fs_join(ptr {}, ptr {})", a.repr, b.repr));
         Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: true })
     }
 
@@ -374,7 +374,7 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_fs_dir(ptr {})", path.repr));
+        self.body.push(format!("  {tmp} = call ptr @pal_fs_dir(ptr {})", path.repr));
         Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: true })
     }
 
@@ -386,7 +386,7 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_fs_name(ptr {})", path.repr));
+        self.body.push(format!("  {tmp} = call ptr @pal_fs_name(ptr {})", path.repr));
         Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: true })
     }
 
@@ -398,7 +398,7 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_fs_ext(ptr {})", path.repr));
+        self.body.push(format!("  {tmp} = call ptr @pal_fs_ext(ptr {})", path.repr));
         Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: true })
     }
 
@@ -412,7 +412,7 @@ impl LlvmIrGen {
         }
         let cmd = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_proc_run(ptr {})", cmd.repr));
+        self.body.push(format!("  {tmp} = call ptr @pal_proc_run(ptr {})", cmd.repr));
         Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: true })
     }
 
@@ -424,7 +424,7 @@ impl LlvmIrGen {
         }
         let cmd = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_proc_exec(ptr {})", cmd.repr));
+        self.body.push(format!("  {tmp} = call ptr @pal_proc_exec(ptr {})", cmd.repr));
         Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: false })
     }
 
@@ -438,7 +438,7 @@ impl LlvmIrGen {
         let pid_i32 = self.tmp();
         self.body.push(format!("  {pid_i32} = trunc i64 {} to i32", pid.repr));
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call i64 @mire_proc_wait(i32 {pid_i32})"));
+        self.body.push(format!("  {tmp} = call i64 @pal_proc_wait(i32 {pid_i32})"));
         Ok(LlValue { ty: LlType::I64, repr: tmp, owned: false })
     }
 
@@ -451,7 +451,7 @@ impl LlvmIrGen {
         let pid = self.compile_expr(&args[0])?;
         let pid_i32 = self.tmp();
         self.body.push(format!("  {pid_i32} = trunc i64 {} to i32", pid.repr));
-        self.body.push(format!("  call i32 @mire_proc_kill(i32 {pid_i32})"));
+        self.body.push(format!("  call i32 @pal_proc_kill(i32 {pid_i32})"));
         Ok(LlValue { ty: LlType::I64, repr: "0".to_string(), owned: false })
     }
 
@@ -464,7 +464,7 @@ impl LlvmIrGen {
         let code = self.compile_expr(&args[0])?;
         let code_i32 = self.tmp();
         self.body.push(format!("  {code_i32} = trunc i64 {} to i32", code.repr));
-        self.body.push(format!("  call void @mire_proc_exit(i32 {code_i32})"));
+        self.body.push(format!("  call void @pal_proc_exit(i32 {code_i32})"));
         Ok(LlValue { ty: LlType::I64, repr: "0".to_string(), owned: false })
     }
 
@@ -476,7 +476,7 @@ impl LlvmIrGen {
         }
         let cmd = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_proc_shell(ptr {})", cmd.repr));
+        self.body.push(format!("  {tmp} = call ptr @pal_proc_shell(ptr {})", cmd.repr));
         Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: true })
     }
 
@@ -490,7 +490,7 @@ impl LlvmIrGen {
         let pid_i32 = self.tmp();
         self.body.push(format!("  {pid_i32} = trunc i64 {} to i32", pid.repr));
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call i32 @mire_proc_exists(i32 {pid_i32})"));
+        self.body.push(format!("  {tmp} = call i32 @pal_proc_exists(i32 {pid_i32})"));
         Ok(LlValue { ty: LlType::I64, repr: tmp, owned: false })
     }
 
@@ -504,7 +504,7 @@ impl LlvmIrGen {
         }
         let name = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_env_get(ptr {})", name.repr));
+        self.body.push(format!("  {tmp} = call ptr @pal_env_get(ptr {})", name.repr));
         Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: true })
     }
 
@@ -516,26 +516,26 @@ impl LlvmIrGen {
         }
         let name = self.compile_expr(&args[0])?;
         let value = self.compile_expr(&args[1])?;
-        self.body.push(format!("  call i32 @mire_env_set(ptr {}, ptr {})", name.repr, value.repr));
+        self.body.push(format!("  call i32 @pal_env_set(ptr {}, ptr {})", name.repr, value.repr));
         Ok(LlValue { ty: LlType::I64, repr: "0".to_string(), owned: false })
     }
 
     pub(super) fn compile_env_cwd(&mut self) -> Result<LlValue> {
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_env_cwd()"));
+        self.body.push(format!("  {tmp} = call ptr @pal_env_cwd()"));
         Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: true })
     }
 
     pub(super) fn compile_env_all(&mut self) -> Result<LlValue> {
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_env_all()"));
+        self.body.push(format!("  {tmp} = call ptr @pal_env_all()"));
         Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: false })
     }
 
     pub(super) fn compile_time_mark(&mut self, _args: &[Expression]) -> Result<LlValue> {
         let tmp = self.tmp();
         self.body
-            .push(format!("  {tmp} = call i64 @mire_wall_mark_ns()"));
+            .push(format!("  {tmp} = call i64 @pal_time_mark()"));
         Ok(LlValue {
             ty: LlType::I64,
             repr: tmp,
@@ -552,7 +552,7 @@ impl LlvmIrGen {
         let start = self.compile_expr(&args[0])?;
         let diff = self.tmp();
         self.body.push(format!(
-            "  {diff} = call ptr @mire_wall_elapsed_ms_str(i64 {})",
+            "  {diff} = call ptr @rt_time_elapsed_ms_str(i64 {})",
             start.repr
         ));
         Ok(LlValue {
@@ -571,7 +571,7 @@ impl LlvmIrGen {
         let mark = self.compile_expr(&args[0])?;
         let diff = self.tmp();
         self.body.push(format!(
-            "  {diff} = call i64 @mire_wall_elapsed_ms(i64 {})",
+            "  {diff} = call i64 @pal_time_elapsed_ms(i64 {})",
             mark.repr
         ));
         Ok(LlValue {
@@ -584,7 +584,7 @@ impl LlvmIrGen {
     pub(super) fn compile_cpu_mark(&mut self, _args: &[Expression]) -> Result<LlValue> {
         let result = self.tmp();
         self.body
-            .push(format!("  {result} = call i64 @mire_cpu_mark_ns()"));
+            .push(format!("  {result} = call i64 @pal_cpu_mark()"));
         Ok(LlValue {
             ty: LlType::I64,
             repr: result,
@@ -601,7 +601,7 @@ impl LlvmIrGen {
         let start = self.compile_expr(&args[0])?;
         let diff = self.tmp();
         self.body.push(format!(
-            "  {diff} = call ptr @mire_cpu_elapsed_ms_str(i64 {})",
+            "  {diff} = call ptr @rt_cpu_elapsed_ms_str(i64 {})",
             start.repr
         ));
         Ok(LlValue {
@@ -620,7 +620,7 @@ impl LlvmIrGen {
         let mark = self.compile_expr(&args[0])?;
         let diff = self.tmp();
         self.body.push(format!(
-            "  {diff} = call i64 @mire_cpu_elapsed_ms(i64 {})",
+            "  {diff} = call i64 @pal_cpu_elapsed_ms(i64 {})",
             mark.repr
         ));
         Ok(LlValue {
@@ -639,7 +639,7 @@ impl LlvmIrGen {
         let start = self.compile_expr(&args[0])?;
         let diff = self.tmp();
         self.body.push(format!(
-            "  {diff} = call i64 @mire_cpu_cycles_est(i64 {})",
+            "  {diff} = call i64 @pal_cpu_cycles_est(i64 {})",
             start.repr
         ));
         Ok(LlValue {
@@ -652,7 +652,7 @@ impl LlvmIrGen {
     pub(super) fn compile_gpu_snapshot(&mut self, _args: &[Expression]) -> Result<LlValue> {
         let result = self.tmp();
         self.body
-            .push(format!("  {result} = call ptr @mire_gpu_snapshot()"));
+            .push(format!("  {result} = call ptr @pal_gpu_snapshot()"));
         Ok(LlValue {
             ty: LlType::Ptr,
             repr: result,
@@ -670,7 +670,7 @@ impl LlvmIrGen {
         let value = self.cast_to_i64(value_expr)?;
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call ptr @mire_mem_format(i64 {})",
+            "  {result} = call ptr @pal_mem_format(i64 {})",
             value.repr
         ));
         Ok(LlValue {
@@ -683,7 +683,7 @@ impl LlvmIrGen {
     pub(super) fn compile_mem_process(&mut self, _args: &[Expression]) -> Result<LlValue> {
         let result = self.tmp();
         self.body
-            .push(format!("  {result} = call i64 @mire_mem_process_bytes()"));
+            .push(format!("  {result} = call i64 @pal_mem_process_bytes()"));
         Ok(LlValue {
             ty: LlType::I64,
             repr: result,

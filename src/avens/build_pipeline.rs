@@ -29,6 +29,7 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
         .persist_ir
         .then(|| output_dir.join(format!("{stem}.opt.ll")));
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let pal_backend = std::env::var("MIRE_PAL").unwrap_or_else(|_| "linux".to_string());
     let c_source_files: Vec<String> = {
         let mut files = Vec::new();
         for entry in std::fs::read_dir(manifest_dir.join("src/runtime")).map_err(|err| {
@@ -46,9 +47,9 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
                 files.push(path.to_string_lossy().to_string());
             }
         }
-        for entry in std::fs::read_dir(manifest_dir.join("src/pal/linux")).map_err(|err| {
+        for entry in std::fs::read_dir(manifest_dir.join(format!("src/pal/{pal_backend}"))).map_err(|err| {
             MireError::new(ErrorKind::Runtime {
-                message: format!("Could not read src/pal/linux: {}", err),
+                message: format!("Could not read src/pal/{pal_backend}: {}", err),
             })
         })? {
             let entry = entry.map_err(|err| {
@@ -253,7 +254,7 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
     }
 
     if options.emit_binary {
-        compile_binary_from_ir(&final_ir, &c_source_files, &binary_path, options.opt_level, &extern_libs, &manifest_dir)?;
+        compile_binary_from_ir(&final_ir, &c_source_files, &binary_path, options.opt_level, &extern_libs, &manifest_dir, &pal_backend)?;
     }
 
     cache.store_build(
