@@ -2,6 +2,19 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.11.2] - 2026-05-31
+
+### Added
+- Kioto `math` now executes through real runtime/PAL-backed wrappers for sum,
+  mean/avg, variance, stddev, median, range, trigonometric functions, powers,
+  constants, and rounding helpers, without changing syntax.
+
+### Fixed
+- `math.sum` no longer lowers through a stale Avenys special-case.
+- Top-level numeric helpers (`float`, `pow`, `round`, `floor`, `ceil`) now map
+  to real math runtime functions instead of identity-style stubs.
+- `math` module docs and regression tests now cover the live ABI surface.
+
 ## [3.11.1] - 2026-05-31
 
 ### Added

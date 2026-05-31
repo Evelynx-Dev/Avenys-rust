@@ -339,7 +339,11 @@ impl LlvmIrGen {
             "declare i32 @pal_proc_kill(i64)".to_string(),
             "declare void @pal_proc_exit(i64)".to_string(),
             "declare i64 @pal_proc_exists(i64)".to_string(),
-            "declare double @sqrt(double)".to_string(),
+            "declare double @rt_math_sqrt(double)".to_string(),
+            "declare double @rt_math_pow(double, double)".to_string(),
+            "declare i64 @rt_math_round(double)".to_string(),
+            "declare i64 @rt_math_floor(double)".to_string(),
+            "declare i64 @rt_math_ceil(double)".to_string(),
             // ENV functions
             "declare ptr @pal_env_get(ptr)".to_string(),
             "declare i32 @pal_env_set(ptr, ptr)".to_string(),
@@ -1606,9 +1610,6 @@ impl LlvmIrGen {
             }
             Expression::Call { name, args, .. } if name == "__type_matches" => {
                 self.compile_type_matches(args)
-            }
-            Expression::Call { name, args, .. } if name == "math.sum" => {
-                self.compile_math_sum(args)
             }
             Expression::Call {
                 name,

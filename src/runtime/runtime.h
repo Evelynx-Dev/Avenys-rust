@@ -169,4 +169,33 @@ int64_t rt_dicts_entries(void *dict);
 void   *rt_dicts_merge(void *a, void *b);
 int64_t rt_dicts_is_empty(void *dict);
 
+// ── Math operations ─────────────────────────────────────────────────
+double  rt_math_pi(void);
+double  rt_math_e(void);
+double  rt_math_tau(void);
+double  rt_math_sin(double value);
+double  rt_math_cos(double value);
+double  rt_math_tan(double value);
+double  rt_math_sqrt(double value);
+double  rt_math_pow(double base, double exponent);
+double  rt_math_log(double value);
+double  rt_math_log10(double value);
+double  rt_math_exp(double value);
+double  rt_math_atan2(double y, double x);
+double  rt_math_asin(double value);
+double  rt_math_acos(double value);
+int64_t rt_math_round(double value);
+int64_t rt_math_floor(double value);
+int64_t rt_math_ceil(double value);
+int64_t rt_math_sum_i64(void *list);
+int64_t rt_math_min_list_i64(void *list);
+int64_t rt_math_max_list_i64(void *list);
+double  rt_math_mean_i64(void *list);
+double  rt_math_variance_i64(void *list);
+double  rt_math_stddev_i64(void *list);
+double  rt_math_median_i64(void *list);
+void   *rt_math_range_i64(int64_t end);
+void   *rt_math_range_between_i64(int64_t start, int64_t end);
+void   *rt_math_range_step_i64(int64_t start, int64_t end, int64_t step);
+
 #endif // MIRE_RUNTIME_H

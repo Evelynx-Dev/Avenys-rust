@@ -3542,6 +3542,86 @@ fn kioto_async_ready_value_compiles_and_runs() {
 }
 
 #[test]
+fn kioto_math_module_compiles_and_runs_real_wrappers() {
+    let root = make_temp_project_root("mire_kioto_math_real");
+    let source_path = root.join("math_real.mire");
+    fs::write(
+        root.join("owl.toml"),
+        "[project]\nname = \"math-real\"\nversion = \"0.1.0\"\nentry = \"math_real.mire\"\n",
+    )
+    .expect("write project");
+    fs::write(
+        &source_path,
+        "import std\n\npub fn main: () {\n    set nums = [1 2 3 4 5] :vec[i64]\n    set avg = math.mean(nums)\n    use dasu(\"{math.sum(nums)}-{math.round(avg)}-{math.round(2.6)}-{math.floor(2.6)}-{math.ceil(2.1)}\")\n}\n",
+    )
+    .expect("write source");
+
+    let build = compile_file_with_avenys(
+        &source_path,
+        &BuildOptions {
+            mode: BuildMode::Debug,
+            opt_level: OptLevel::O0,
+            debug_dump: false,
+            output: None,
+            emit_binary: true,
+            persist_ir: false,
+            import_mode: mire::ImportMode::Legacy,
+            cache: Default::default(),
+            warning_filter: mire::error::diagnostic::WarningFilter::Default,
+            deny_warnings: std::collections::HashSet::new(),
+            module_paths: vec![],
+        },
+    )
+    .expect("math sample should compile");
+
+    let output = Command::new(&build.binary_path)
+        .output()
+        .expect("run binary");
+    assert!(output.status.success(), "binary should run successfully");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("15-3-3-2-3"), "{stdout}");
+}
+
+#[test]
+fn math_sum_lowers_to_runtime_math_abi() {
+    let root = make_temp_project_root("mire_math_ir");
+    let source_path = root.join("math_ir.mire");
+    fs::write(
+        root.join("owl.toml"),
+        "[project]\nname = \"math-ir\"\nversion = \"0.1.0\"\nentry = \"math_ir.mire\"\n",
+    )
+    .expect("write project");
+    fs::write(
+        &source_path,
+        "import std\n\npub fn main: () {\n    set nums = [1 2 3] :vec[i64]\n    use dasu(str(math.sum(nums)))\n}\n",
+    )
+    .expect("write source");
+
+    let build = compile_file_with_avenys(
+        &source_path,
+        &BuildOptions {
+            mode: BuildMode::Debug,
+            opt_level: OptLevel::O0,
+            debug_dump: false,
+            output: None,
+            emit_binary: false,
+            persist_ir: true,
+            import_mode: mire::ImportMode::Legacy,
+            cache: Default::default(),
+            warning_filter: mire::error::diagnostic::WarningFilter::Default,
+            deny_warnings: std::collections::HashSet::new(),
+            module_paths: vec![],
+        },
+    )
+    .expect("math IR sample should compile");
+
+    let ir_path = build.ir_path.expect("IR path");
+    let ir = fs::read_to_string(&ir_path).expect("read IR");
+    assert!(ir.contains("@rt_math_sum_i64"), "{ir}");
+    assert!(!ir.contains("math_sum_body"), "{ir}");
+}
+
+#[test]
 fn import_command_json_output_updates_manifest() {
     let root = make_temp_project_root("mire_import_json");
     let exe = env!("CARGO_BIN_EXE_mire");

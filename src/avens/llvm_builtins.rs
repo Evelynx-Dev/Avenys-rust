@@ -8,7 +8,7 @@ impl LlvmIrGen {
             }));
         }
         let value = self.compile_expr(&args[0])?;
-        self.cast_to_i64(value)
+        self.cast_to_f64(value)
     }
 
     pub(super) fn compile_int(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -58,7 +58,7 @@ impl LlvmIrGen {
         let input = self.cast_to_f64(value)?;
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call double @sqrt(double {})",
+            "  {result} = call double @rt_math_sqrt(double {})",
             input.repr
         ));
         Ok(LlValue {
@@ -76,13 +76,15 @@ impl LlvmIrGen {
         }
         let base = self.compile_expr(&args[0])?;
         let exp = self.compile_expr(&args[1])?;
+        let base = self.cast_to_f64(base)?;
+        let exp = self.cast_to_f64(exp)?;
         let tmp = self.tmp();
         self.body.push(format!(
-            "  {tmp} = call i64 @pow(i64 {}, i64 {})",
+            "  {tmp} = call double @rt_math_pow(double {}, double {})",
             base.repr, exp.repr
         ));
         Ok(LlValue {
-            ty: LlType::I64,
+            ty: LlType::F64,
             repr: tmp,
             owned: false,
         })
@@ -94,7 +96,18 @@ impl LlvmIrGen {
                 message: "Avenys floor(...) expects 1 argument".to_string(),
             }));
         }
-        self.compile_expr(&args[0])
+        let value = self.compile_expr(&args[0])?;
+        let input = self.cast_to_f64(value)?;
+        let result = self.tmp();
+        self.body.push(format!(
+            "  {result} = call i64 @rt_math_floor(double {})",
+            input.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: result,
+            owned: false,
+        })
     }
 
     pub(super) fn compile_ceil(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -103,7 +116,18 @@ impl LlvmIrGen {
                 message: "Avenys ceil(...) expects 1 argument".to_string(),
             }));
         }
-        self.compile_expr(&args[0])
+        let value = self.compile_expr(&args[0])?;
+        let input = self.cast_to_f64(value)?;
+        let result = self.tmp();
+        self.body.push(format!(
+            "  {result} = call i64 @rt_math_ceil(double {})",
+            input.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: result,
+            owned: false,
+        })
     }
 
     pub(super) fn compile_round(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -112,7 +136,18 @@ impl LlvmIrGen {
                 message: "Avenys round(...) expects 1 argument".to_string(),
             }));
         }
-        self.compile_expr(&args[0])
+        let value = self.compile_expr(&args[0])?;
+        let input = self.cast_to_f64(value)?;
+        let result = self.tmp();
+        self.body.push(format!(
+            "  {result} = call i64 @rt_math_round(double {})",
+            input.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: result,
+            owned: false,
+        })
     }
 
     pub(super) fn compile_min(&mut self, args: &[Expression]) -> Result<LlValue> {

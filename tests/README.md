@@ -86,7 +86,8 @@ tests/
 ## Known Issues
 
 See `docs/issues.md` for documented issues and limitations.
-- **math.avg**: Function not available, use `math.sum(x) / len(x)`
+- **math advanced surface**: core helpers now exist, but further overloads and
+  vectorized statistics are still open work.
 - **List HOF scope**: `lists.fold/map/filter` are working with inline closures; generic callback values are still not documented as stable surface. Current checked order is `lists.fold(acc, closure, list)`.
 - **proc.run/exec args**: process helpers currently preserve the frozen
   two-argument surface, but shell-backed spawn executes the command string and
