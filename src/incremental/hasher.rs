@@ -52,4 +52,3 @@ impl Hasher for FxHasher {
         self.write(&i.to_le_bytes());
     }
 }
-

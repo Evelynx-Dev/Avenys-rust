@@ -154,7 +154,11 @@ impl ImportResolver {
                     let selected = if items.is_some() {
                         items
                     } else if matches!(self.import_mode, ImportMode::Reachable) {
-                        self.infer_reachable_import_items(&imported_path, None, &imported_symbol_candidates)?
+                        self.infer_reachable_import_items(
+                            &imported_path,
+                            None,
+                            &imported_symbol_candidates,
+                        )?
                     } else {
                         None
                     };
@@ -201,7 +205,11 @@ impl ImportResolver {
                     let selected = if items.is_some() {
                         items
                     } else if matches!(self.import_mode, ImportMode::Reachable) {
-                        self.infer_reachable_import_items(&imported_path, None, &imported_symbol_candidates)?
+                        self.infer_reachable_import_items(
+                            &imported_path,
+                            None,
+                            &imported_symbol_candidates,
+                        )?
                     } else {
                         None
                     };
@@ -226,11 +234,11 @@ impl ImportResolver {
                     && !path.starts_with("__")
                     && !path.starts_with("stdall:")
                     && !path.starts_with("stdselect:")
-                    && !path.starts_with("stdalias:") => {
+                    && !path.starts_with("stdalias:") =>
+                {
                     if let Some(submodules) = items {
                         let module_dir = self.resolve_module_dir(&path)?;
-                        let imported =
-                            self.load_all_modules(&path, &module_dir, &submodules)?;
+                        let imported = self.load_all_modules(&path, &module_dir, &submodules)?;
                         direct_dependencies.extend(imported.iter().map(|e| e.origin.clone()));
                         expanded.extend(imported);
                     } else {
@@ -268,7 +276,8 @@ impl ImportResolver {
                 direct_dependencies,
             },
         );
-        self.expanded_cache.insert(canonical.clone(), expanded.clone());
+        self.expanded_cache
+            .insert(canonical.clone(), expanded.clone());
         Ok(expanded)
     }
 
@@ -285,13 +294,17 @@ impl ImportResolver {
 
         let mut selected = Vec::new();
         for export in &parsed.exports {
-            let export_tail = export.rsplit_once('.').map_or(export.as_str(), |(_, tail)| tail);
+            let export_tail = export
+                .rsplit_once('.')
+                .map_or(export.as_str(), |(_, tail)| tail);
             let prefixed = module_prefix.map(|prefix| format!("{prefix}.{export_tail}"));
             let prefixed_double_colon =
                 module_prefix.map(|prefix| format!("{prefix}::{export_tail}"));
             if candidates.contains(export)
                 || candidates.contains(export_tail)
-                || prefixed.as_ref().is_some_and(|value| candidates.contains(value))
+                || prefixed
+                    .as_ref()
+                    .is_some_and(|value| candidates.contains(value))
                 || prefixed_double_colon
                     .as_ref()
                     .is_some_and(|value| candidates.contains(value))
@@ -478,7 +491,11 @@ impl ImportResolver {
                 }
                 MireImportEntry::PathOnly { path } | MireImportEntry::WithPath { path, .. } => {
                     let p = PathBuf::from(path);
-                    let candidate = if p.is_absolute() { p } else { self.project_root.join(&p) };
+                    let candidate = if p.is_absolute() {
+                        p
+                    } else {
+                        self.project_root.join(&p)
+                    };
                     // Try direct file, then <path>/lib.mire
                     if candidate.exists() && candidate.extension().is_some() {
                         Some(candidate)
@@ -502,7 +519,11 @@ impl ImportResolver {
             return Ok(path);
         }
         // 2. Project modules dir: ./modules/<name>/lib.mire
-        let local_modules_candidate = self.project_root.join("modules").join(name).join("lib.mire");
+        let local_modules_candidate = self
+            .project_root
+            .join("modules")
+            .join(name)
+            .join("lib.mire");
         if let Ok(path) = local_modules_candidate.canonicalize() {
             return Ok(path);
         }
@@ -512,7 +533,11 @@ impl ImportResolver {
             return Ok(path);
         }
         // 4. Global owl modules with code/: ~/.owl/modules/<name>/code/lib.mire
-        let owl_code_candidate = self.owl_home_modules().join(name).join("code").join("lib.mire");
+        let owl_code_candidate = self
+            .owl_home_modules()
+            .join(name)
+            .join("code")
+            .join("lib.mire");
         if let Ok(path) = owl_code_candidate.canonicalize() {
             return Ok(path);
         }
@@ -525,20 +550,18 @@ impl ImportResolver {
             return Ok(path);
         }
         // 6. Bundled with compiler (src): <CARGO_MANIFEST_DIR>/src/modules/<name>/lib.mire
-        let bundled_candidate =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("src/modules")
-                .join(name)
-                .join("lib.mire");
+        let bundled_candidate = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("src/modules")
+            .join(name)
+            .join("lib.mire");
         if let Ok(path) = bundled_candidate.canonicalize() {
             return Ok(path);
         }
         // 7. Bundled with compiler (src): <CARGO_MANIFEST_DIR>/src/modules/<name>/mod.mire
-        let bundled_mod_candidate =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("src/modules")
-                .join(name)
-                .join("mod.mire");
+        let bundled_mod_candidate = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("src/modules")
+            .join(name)
+            .join("mod.mire");
         bundled_mod_candidate.canonicalize().map_err(|err| {
             MireError::new(ErrorKind::Runtime {
                 message: format!(
@@ -590,14 +613,16 @@ impl ImportResolver {
             return Ok(path);
         }
         // 6. Bundled with compiler (workspace): <CARGO_MANIFEST_DIR>/<name>/modules/
-        let workspace_project_candidate =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(name).join("modules");
+        let workspace_project_candidate = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join(name)
+            .join("modules");
         if let Ok(path) = workspace_project_candidate.canonicalize() {
             return Ok(path);
         }
         // 7. Bundled with compiler (src): <CARGO_MANIFEST_DIR>/src/modules/<name>/
-        let bundled_candidate =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/modules").join(name);
+        let bundled_candidate = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("src/modules")
+            .join(name);
         bundled_candidate.canonicalize().map_err(|err| {
             MireError::new(ErrorKind::Runtime {
                 message: format!(
@@ -757,7 +782,10 @@ fn select_imported_statements(
             let mut deps = Vec::new();
             collect_statement_dependencies(&statements[idx].statement, &mut deps);
             for dependency in deps {
-                for candidate in [Some(dependency.as_str()), dependency.rsplit_once('.').map(|(_, tail)| tail)] {
+                for candidate in [
+                    Some(dependency.as_str()),
+                    dependency.rsplit_once('.').map(|(_, tail)| tail),
+                ] {
                     let Some(candidate_name) = candidate else {
                         continue;
                     };

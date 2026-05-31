@@ -13,7 +13,10 @@ pub fn format_diagnostic(diag: &Diagnostic, use_color: bool) -> String {
     };
 
     let filename = diag.filename.as_deref().unwrap_or("main.mire");
-    let primary = diag.labels.iter().find(|label| label.style == LabelStyle::Primary);
+    let primary = diag
+        .labels
+        .iter()
+        .find(|label| label.style == LabelStyle::Primary);
     let line = primary
         .map(|label| label.line.max(1))
         .unwrap_or_else(|| if diag.line == 0 { 1 } else { diag.line });
@@ -22,10 +25,9 @@ pub fn format_diagnostic(diag: &Diagnostic, use_color: bool) -> String {
         .unwrap_or_else(|| if diag.column == 0 { 1 } else { diag.column });
     let has_default_anchor = line == 1
         && col == 1
-        && diag
-            .labels
-            .iter()
-            .any(|label| label.style == LabelStyle::Primary && label.line <= 1 && label.column <= 1);
+        && diag.labels.iter().any(|label| {
+            label.style == LabelStyle::Primary && label.line <= 1 && label.column <= 1
+        });
 
     let mut out = String::new();
     out.push_str(&format!(

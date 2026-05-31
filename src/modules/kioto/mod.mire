@@ -5,6 +5,7 @@ import ./core/time
 import ./core/fs
 import ./core/env
 import ./core/proc
+import ./core/async
 import ./core/mem
 import ./core/cpu
 import ./core/gpu

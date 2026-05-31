@@ -6,7 +6,7 @@ use crate::parser::ast::{
 use crate::compiler::typeck::typeck_returns::{
     implicit_return_expression_mut, statements_contain_explicit_return,
 };
-use crate::compiler::typeck::{type_error, FunctionSig, TypeChecker};
+use crate::compiler::typeck::{FunctionSig, TypeChecker, type_error};
 impl TypeChecker {
     pub(super) fn check_let_statement(
         &mut self,
@@ -72,7 +72,9 @@ impl TypeChecker {
         }
 
         match target {
-            AssignmentTarget::Field(path) => self.check_field_assignment(path, value, &value_type)?,
+            AssignmentTarget::Field(path) => {
+                self.check_field_assignment(path, value, &value_type)?
+            }
             AssignmentTarget::Index { .. } => {}
             AssignmentTarget::Variable(name) => {
                 Self::validate_explicit_nested_literal(&target_type, value)?;
@@ -353,10 +355,7 @@ impl TypeChecker {
         Ok(())
     }
 
-    pub(super) fn check_return_statement(
-        &mut self,
-        expr: &mut Option<Expression>,
-    ) -> Result<()> {
+    pub(super) fn check_return_statement(&mut self, expr: &mut Option<Expression>) -> Result<()> {
         let return_type = if let Some(expression) = expr {
             self.check_expression(expression)?
         } else {
@@ -522,7 +521,9 @@ impl TypeChecker {
 
         let old_self = self.impl_self_type.take();
         let old_self_name = self.impl_self_name.take();
-        let method_mask = self.current_nested_statement_mask().map(|mask| mask.to_vec());
+        let method_mask = self
+            .current_nested_statement_mask()
+            .map(|mask| mask.to_vec());
 
         for (method_index, method) in methods.iter_mut().enumerate() {
             if method_mask

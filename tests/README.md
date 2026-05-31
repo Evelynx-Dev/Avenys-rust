@@ -88,7 +88,9 @@ tests/
 See `docs/issues.md` for documented issues and limitations.
 - **math.avg**: Function not available, use `math.sum(x) / len(x)`
 - **List HOF scope**: `lists.fold/map/filter` are working with inline closures; generic callback values are still not documented as stable surface. Current checked order is `lists.fold(acc, closure, list)`.
-- **std/proc.run/exec with args**: `run(cmd, args)` and `exec(cmd, args)` require string joining from extern — implemented as declarations pending cross-module import resolution within std sub-modules.
+- **proc.run/exec args**: process helpers currently preserve the frozen
+  two-argument surface, but shell-backed spawn executes the command string and
+  does not yet join the `args` list into argv.
 
 ## Incremental Compilation
 

@@ -1,7 +1,7 @@
 use crate::error::Result;
 use crate::parser::ast::{DataType, Expression, Literal, Statement};
 
-use crate::compiler::typeck::{type_error, FunctionSig, TypeChecker};
+use crate::compiler::typeck::{FunctionSig, TypeChecker, type_error};
 impl TypeChecker {
     pub(super) fn infer_collection_call(
         &self,
@@ -263,7 +263,9 @@ impl TypeChecker {
         if name == "new::" {
             if args.is_empty() {
                 if *data_type == DataType::Unknown {
-                    return Err(type_error("new::() requires a type annotation (:T)".to_string()));
+                    return Err(type_error(
+                        "new::() requires a type annotation (:T)".to_string(),
+                    ));
                 }
                 return Ok(Some(data_type.clone()));
             }
@@ -277,7 +279,9 @@ impl TypeChecker {
         if name == "own::" {
             if args.is_empty() {
                 if *data_type == DataType::Unknown {
-                    return Err(type_error("own::() requires a type annotation (:T)".to_string()));
+                    return Err(type_error(
+                        "own::() requires a type annotation (:T)".to_string(),
+                    ));
                 }
                 *data_type = DataType::Box;
                 return Ok(Some(DataType::Box));
@@ -441,7 +445,10 @@ impl TypeChecker {
         }
 
         let all = self.enum_variant_names_for(enum_name);
-        let missing: Vec<String> = all.into_iter().filter(|name| !covered.contains(name)).collect();
+        let missing: Vec<String> = all
+            .into_iter()
+            .filter(|name| !covered.contains(name))
+            .collect();
         if missing.is_empty() {
             return Ok(());
         }
@@ -486,7 +493,10 @@ impl TypeChecker {
         }
 
         let all = self.enum_variant_names_for(enum_name);
-        let missing: Vec<String> = all.into_iter().filter(|name| !covered.contains(name)).collect();
+        let missing: Vec<String> = all
+            .into_iter()
+            .filter(|name| !covered.contains(name))
+            .collect();
         if missing.is_empty() {
             return Ok(());
         }

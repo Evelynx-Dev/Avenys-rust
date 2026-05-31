@@ -1,7 +1,6 @@
 use super::*;
 
 impl LlvmIrGen {
-
     pub(super) fn compile_dict_get(&mut self, args: &[Expression]) -> Result<LlValue> {
         if args.len() != 2 && args.len() != 3 {
             return Err(MireError::new(ErrorKind::Runtime {
@@ -195,7 +194,10 @@ impl LlvmIrGen {
         })
     }
 
-    pub(super) fn compile_dict_literal(&mut self, entries: &[(Expression, Expression)]) -> Result<LlValue> {
+    pub(super) fn compile_dict_literal(
+        &mut self,
+        entries: &[(Expression, Expression)],
+    ) -> Result<LlValue> {
         let mut current = LlValue {
             ty: LlType::Ptr,
             repr: "null".to_string(),

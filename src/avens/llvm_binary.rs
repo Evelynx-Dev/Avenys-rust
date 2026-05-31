@@ -42,8 +42,6 @@ impl LlvmIrGen {
         }
     }
 
-
-
     pub(super) fn cast_to_i64(&mut self, value: LlValue) -> Result<LlValue> {
         match value.ty {
             LlType::I64 => Ok(value),
@@ -513,8 +511,10 @@ impl LlvmIrGen {
             "-" => {
                 if value.ty == LlType::F64 {
                     let float_value = self.cast_to_f64(value)?;
-                    self.body
-                        .push(format!("  {result} = fsub double 0.0, {}", float_value.repr));
+                    self.body.push(format!(
+                        "  {result} = fsub double 0.0, {}",
+                        float_value.repr
+                    ));
                     Ok(LlValue {
                         ty: LlType::F64,
                         repr: result,
@@ -559,7 +559,8 @@ impl LlvmIrGen {
             LlType::Ptr if value.ty == LlType::Ptr => Ok(value),
             LlType::Ptr if value.ty == LlType::I64 => {
                 let tmp = self.tmp();
-                self.body.push(format!("  {tmp} = inttoptr i64 {} to ptr", value.repr));
+                self.body
+                    .push(format!("  {tmp} = inttoptr i64 {} to ptr", value.repr));
                 Ok(LlValue {
                     ty: LlType::Ptr,
                     repr: tmp,
@@ -567,7 +568,10 @@ impl LlvmIrGen {
                 })
             }
             LlType::Ptr => Err(MireError::new(ErrorKind::Runtime {
-                message: format!("Avenys cannot cast non-pointer value (ty={:?}) to string (function '{}', ret={:?})", value.ty, self.current_function, self.current_return),
+                message: format!(
+                    "Avenys cannot cast non-pointer value (ty={:?}) to string (function '{}', ret={:?})",
+                    value.ty, self.current_function, self.current_return
+                ),
             })),
         }
     }
@@ -587,7 +591,8 @@ impl LlvmIrGen {
             LlType::Ptr if value.ty == LlType::Ptr => value,
             LlType::Ptr if value.ty == LlType::I64 => {
                 let tmp = self.tmp();
-                self.body.push(format!("  {tmp} = inttoptr i64 {} to ptr", value.repr));
+                self.body
+                    .push(format!("  {tmp} = inttoptr i64 {} to ptr", value.repr));
                 LlValue {
                     ty: LlType::Ptr,
                     repr: tmp,
@@ -596,7 +601,10 @@ impl LlvmIrGen {
             }
             LlType::Ptr => {
                 return Err(MireError::new(ErrorKind::Runtime {
-                    message: format!("Avenys cannot cast non-pointer value to string (function '{}')", self.current_function),
+                    message: format!(
+                        "Avenys cannot cast non-pointer value to string (function '{}')",
+                        self.current_function
+                    ),
                 }));
             }
         };

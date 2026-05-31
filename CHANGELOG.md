@@ -2,6 +2,20 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.11.1] - 2026-05-31
+
+### Added
+- Kioto `async` module with task-result helpers and process-backed spawn/join
+  wrappers, without adding or changing language syntax.
+- `mire import --json` for CI/editor tooling.
+- PAL process spawn API (`pal_proc_spawn`) for Linux, with a safe WASM stub.
+
+### Fixed
+- Crate/package version now matches the documented 3.11 series.
+- CLI help now reads the crate version at build time instead of a stale literal.
+- PAL process declarations now use consistent `i64` PIDs across LLVM, C headers,
+  Linux, and WASM.
+
 ## [3.11.0] - 2026-05-30
 
 ### Removed

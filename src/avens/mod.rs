@@ -18,38 +18,38 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-mod config;
-mod utils;
-mod manifest;
-mod toolchain;
-mod reuse;
 mod build_pipeline;
-mod llvm_types;
-mod llvm_helpers;
-mod llvm_control;
+mod config;
 mod llvm_binary;
-mod llvm_strings;
 mod llvm_builtins;
 mod llvm_collections;
+mod llvm_control;
 mod llvm_dicts;
 mod llvm_functions;
+mod llvm_helpers;
 mod llvm_lists;
+mod llvm_strings;
+mod llvm_types;
+mod manifest;
+mod reuse;
+mod toolchain;
+mod utils;
+pub use build_pipeline::{compile_file_with_avenys, default_output_dir};
 pub use config::{
     BuildMode, BuildOptions, BuildResult, ImportMode, MireCacheConfig, MireImportEntry,
     MireImports, MireLock, MireLockBuild, MireLockProject, MireManifest, MireProject, OptLevel,
 };
-pub use build_pipeline::{compile_file_with_avenys, default_output_dir};
 use llvm_types::*;
-use utils::{
-    escape_llvm_string, normalize_nominal_name, sanitize_symbol, string_byte_len,
-    strip_root_namespace,
-};
 pub use manifest::{
     find_project_root, load_manifest_imports, load_project_manifest, project_lock_path,
     project_manifest_path, write_lock_file, write_manifest,
 };
-use toolchain::{compile_binary_from_ir, optimize_ir};
 use reuse::prepare_program_with_partial_analysis_reuse;
+use toolchain::{compile_binary_from_ir, optimize_ir};
+use utils::{
+    escape_llvm_string, normalize_nominal_name, sanitize_symbol, string_byte_len,
+    strip_root_namespace,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct LlvmIrGen {
@@ -102,5 +102,4 @@ impl LlvmIrGen {
             emitted_monomorph_wrappers: HashSet::new(),
         }
     }
-
 }

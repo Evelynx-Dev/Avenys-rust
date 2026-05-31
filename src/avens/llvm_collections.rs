@@ -1,7 +1,11 @@
 use super::*;
 
 impl LlvmIrGen {
-    pub(super) fn compile_pipeline_len(&mut self, input: &Expression, value: LlValue) -> Result<LlValue> {
+    pub(super) fn compile_pipeline_len(
+        &mut self,
+        input: &Expression,
+        value: LlValue,
+    ) -> Result<LlValue> {
         match self.expression_data_type(input) {
             DataType::Str => {
                 let tmp = self.tmp();
@@ -412,7 +416,11 @@ impl LlvmIrGen {
         })
     }
 
-    pub(super) fn compile_field_assignment(&mut self, target: &str, value: &Expression) -> Result<()> {
+    pub(super) fn compile_field_assignment(
+        &mut self,
+        target: &str,
+        value: &Expression,
+    ) -> Result<()> {
         let (field_ptr, field_ty, field_data_type) =
             self.resolve_struct_field_ptr_from_target(target)?;
         let compiled = self.compile_expr(value)?;
@@ -780,7 +788,11 @@ impl LlvmIrGen {
         }))
     }
 
-    pub(super) fn compile_member_access(&mut self, target: &Expression, member: &str) -> Result<LlValue> {
+    pub(super) fn compile_member_access(
+        &mut self,
+        target: &Expression,
+        member: &str,
+    ) -> Result<LlValue> {
         let target_val = self.compile_expr(target)?;
         let struct_name = self.struct_name_from_expr(target).ok_or_else(|| {
             MireError::new(ErrorKind::Runtime {
@@ -952,7 +964,8 @@ impl LlvmIrGen {
         let mut target = target;
         if target.ty == LlType::I64 {
             let tmp = self.tmp();
-            self.body.push(format!("  {tmp} = inttoptr i64 {} to ptr", target.repr));
+            self.body
+                .push(format!("  {tmp} = inttoptr i64 {} to ptr", target.repr));
             target = LlValue {
                 ty: LlType::Ptr,
                 repr: tmp,
@@ -960,12 +973,19 @@ impl LlvmIrGen {
             };
         } else if target.ty != LlType::Ptr {
             return Err(MireError::new(ErrorKind::Runtime {
-                message: format!("Avenys cannot index non-pointer type (function '{}')", self.current_function),
+                message: format!(
+                    "Avenys cannot index non-pointer type (function '{}')",
+                    self.current_function
+                ),
             }));
         }
 
         match target_data_type {
-            DataType::Unknown | DataType::List | DataType::Vector { .. } | DataType::Slice { .. } | DataType::Tuple => {
+            DataType::Unknown
+            | DataType::List
+            | DataType::Vector { .. }
+            | DataType::Slice { .. }
+            | DataType::Tuple => {
                 let index = self.cast_to_i64(index)?;
                 let len = self.compile_list_len_value(target.clone())?;
                 self.emit_bounds_check(index.clone(), len, "index out of bounds");
@@ -1176,7 +1196,11 @@ impl LlvmIrGen {
             Expression::Literal(Literal::Str(s)) => s.clone(),
             other => {
                 let compiled = self.compile_expr(other)?;
-                return Ok(LlValue { ty: LlType::I1, repr: compiled.repr, owned: false });
+                return Ok(LlValue {
+                    ty: LlType::I1,
+                    repr: compiled.repr,
+                    owned: false,
+                });
             }
         };
         let expected_type = match type_name.as_str() {
@@ -1192,7 +1216,13 @@ impl LlvmIrGen {
                 key_type: Box::new(DataType::Anything),
                 value_type: Box::new(DataType::Anything),
             },
-            _ => return Ok(LlValue { ty: LlType::I1, repr: "false".to_string(), owned: false }),
+            _ => {
+                return Ok(LlValue {
+                    ty: LlType::I1,
+                    repr: "false".to_string(),
+                    owned: false,
+                });
+            }
         };
         let expr_llvm_ty = self.map_type(&expr_type).unwrap_or(LlType::I64);
         let expected_llvm_ty = self.map_type(&expected_type).unwrap_or(LlType::I64);
@@ -1204,7 +1234,11 @@ impl LlvmIrGen {
         } else {
             "false".to_string()
         };
-        Ok(LlValue { ty: LlType::I1, repr: result, owned: false })
+        Ok(LlValue {
+            ty: LlType::I1,
+            repr: result,
+            owned: false,
+        })
     }
 
     pub(super) fn compile_contains(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -1454,5 +1488,4 @@ impl LlvmIrGen {
             owned: true,
         }
     }
-
 }

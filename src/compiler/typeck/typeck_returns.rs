@@ -35,7 +35,9 @@ fn statement_contains_explicit_return(statement: &Statement) -> bool {
     }
 }
 
-pub(super) fn implicit_return_expression_mut(statements: &mut [Statement]) -> Option<&mut Expression> {
+pub(super) fn implicit_return_expression_mut(
+    statements: &mut [Statement],
+) -> Option<&mut Expression> {
     match statements.last_mut()? {
         Statement::Expression(expr) => Some(expr),
         _ => None,

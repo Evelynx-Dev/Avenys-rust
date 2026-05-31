@@ -35,9 +35,19 @@ char *pal_proc_shell(const char *cmd) {
     return pal_proc_run(cmd);
 }
 
+int64_t pal_proc_spawn(const char *cmd) {
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
+        execl("/bin/sh", "sh", "-c", cmd ? cmd : "", (char *)NULL);
+        _exit(127);
+    }
+    return (int64_t)pid;
+}
+
 int64_t pal_proc_wait(int64_t pid) {
     int status;
-    waitpid((pid_t)pid, &status, 0);
+    if (waitpid((pid_t)pid, &status, 0) < 0) return -1;
     if (WIFEXITED(status)) return WEXITSTATUS(status);
     return -1;
 }

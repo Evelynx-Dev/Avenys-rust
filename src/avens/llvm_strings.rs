@@ -246,7 +246,11 @@ impl LlvmIrGen {
             let result = input.starts_with(prefix.as_str());
             return Ok(LlValue {
                 ty: LlType::I64,
-                repr: if result { "1".to_string() } else { "0".to_string() },
+                repr: if result {
+                    "1".to_string()
+                } else {
+                    "0".to_string()
+                },
                 owned: false,
             });
         }
@@ -280,7 +284,11 @@ impl LlvmIrGen {
             let result = input.ends_with(suffix.as_str());
             return Ok(LlValue {
                 ty: LlType::I64,
-                repr: if result { "1".to_string() } else { "0".to_string() },
+                repr: if result {
+                    "1".to_string()
+                } else {
+                    "0".to_string()
+                },
                 owned: false,
             });
         }
@@ -315,7 +323,11 @@ impl LlvmIrGen {
             "  {result} = call ptr @rt_strings_substr(ptr {}, i64 {}, i64 {})",
             input.repr, start.repr, len.repr
         ));
-        Ok(LlValue { ty: LlType::Ptr, repr: result, owned: true })
+        Ok(LlValue {
+            ty: LlType::Ptr,
+            repr: result,
+            owned: true,
+        })
     }
 
     pub(super) fn compile_pad_left(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -337,7 +349,11 @@ impl LlvmIrGen {
             "  {result} = call ptr @rt_strings_pad_left(ptr {}, i64 {}, ptr {})",
             input.repr, width.repr, pad.repr
         ));
-        Ok(LlValue { ty: LlType::Ptr, repr: result, owned: true })
+        Ok(LlValue {
+            ty: LlType::Ptr,
+            repr: result,
+            owned: true,
+        })
     }
 
     pub(super) fn compile_pad_right(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -359,7 +375,11 @@ impl LlvmIrGen {
             "  {result} = call ptr @rt_strings_pad_right(ptr {}, i64 {}, ptr {})",
             input.repr, width.repr, pad.repr
         ));
-        Ok(LlValue { ty: LlType::Ptr, repr: result, owned: true })
+        Ok(LlValue {
+            ty: LlType::Ptr,
+            repr: result,
+            owned: true,
+        })
     }
 
     pub(super) fn emit_print(&mut self, value: &LlValue) -> Result<()> {

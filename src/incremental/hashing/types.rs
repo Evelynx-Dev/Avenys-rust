@@ -64,10 +64,7 @@ pub(super) fn hash_data_type(data_type: &DataType, hasher: &mut FxHasher) {
             hasher.write_u8(32);
             trait_name.hash(hasher);
         }
-        DataType::Array {
-            element_type,
-            size,
-        } => {
+        DataType::Array { element_type, size } => {
             hasher.write_u8(33);
             hash_data_type(element_type, hasher);
             size.hash(hasher);

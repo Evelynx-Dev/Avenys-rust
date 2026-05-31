@@ -160,16 +160,20 @@ fn debug_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
     let source = fs::read_to_string(&path).map_err(runtime_err)?;
 
     if options.show_tokens {
-        let tokens = tokenize(&source)
-            .map_err(|err| err.with_source(source.clone()).with_filename(path.display().to_string()))?;
+        let tokens = tokenize(&source).map_err(|err| {
+            err.with_source(source.clone())
+                .with_filename(path.display().to_string())
+        })?;
         for token in &tokens {
             println!("{:?}", token);
         }
     }
 
     if options.show_ast {
-        let program = parse(&source)
-            .map_err(|err| err.with_source(source.clone()).with_filename(path.display().to_string()))?;
+        let program = parse(&source).map_err(|err| {
+            err.with_source(source.clone())
+                .with_filename(path.display().to_string())
+        })?;
         println!("{:#?}", program);
     }
 
@@ -201,7 +205,9 @@ fn debug_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
         println!("OPT IR: {}", ir.display());
     }
     if options.run_binary && !options.emit_ir_only {
-        let status = Command::new(&build.binary_path).status().map_err(runtime_err)?;
+        let status = Command::new(&build.binary_path)
+            .status()
+            .map_err(runtime_err)?;
         return Ok(status.code().unwrap_or(1));
     }
     Ok(0)
@@ -256,11 +262,7 @@ fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
     let mut failed = 0u32;
 
     for file in &test_files {
-        let display = file
-            .strip_prefix(cwd)
-            .unwrap_or(file)
-            .display()
-            .to_string();
+        let display = file.strip_prefix(cwd).unwrap_or(file).display().to_string();
 
         if verbose {
             print!("test {} ... ", display);
@@ -351,14 +353,18 @@ fn walkdir(dir: &Path, _pattern: &str) -> Result<Vec<PathBuf>, MireError> {
     }
     let mut stack = vec![dir.to_path_buf()];
     while let Some(current) = stack.pop() {
-        let Ok(entries) = fs::read_dir(&current) else { continue };
+        let Ok(entries) = fs::read_dir(&current) else {
+            continue;
+        };
         for entry in entries {
             let Ok(entry) = entry else { continue };
             let path = entry.path();
             if path.is_dir() {
                 stack.push(path);
-            } else if let Some(ext) = path.extension() && ext == "mire" {
-                    results.push(path);
+            } else if let Some(ext) = path.extension()
+                && ext == "mire"
+            {
+                results.push(path);
             }
         }
     }
@@ -417,9 +423,9 @@ fn parse_common_with_file(
             }
             "-O" | "--opt-level" => {
                 i += 1;
-                let level = args
-                    .get(i)
-                    .ok_or_else(|| runtime_msg("Missing optimization level after -O/--opt-level"))?;
+                let level = args.get(i).ok_or_else(|| {
+                    runtime_msg("Missing optimization level after -O/--opt-level")
+                })?;
                 opt_level = OptLevel::parse(level)
                     .ok_or_else(|| runtime_msg("Invalid optimization level, use 0/1/2/3/s/z"))?;
             }
@@ -560,21 +566,29 @@ fn import_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
     let module = &args[0];
     let mut version = String::new();
     let mut path = String::new();
+    let mut json_output = false;
 
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
             "--version" | "-v" => {
                 i += 1;
-                version = args.get(i).ok_or_else(|| {
-                    MireError::runtime("Missing version after --version".to_string())
-                })?.clone();
+                version = args
+                    .get(i)
+                    .ok_or_else(|| {
+                        MireError::runtime("Missing version after --version".to_string())
+                    })?
+                    .clone();
             }
             "--path" | "-p" => {
                 i += 1;
-                path = args.get(i).ok_or_else(|| {
-                    MireError::runtime("Missing path after --path".to_string())
-                })?.clone();
+                path = args
+                    .get(i)
+                    .ok_or_else(|| MireError::runtime("Missing path after --path".to_string()))?
+                    .clone();
+            }
+            "--json" => {
+                json_output = true;
             }
             _ => {
                 return Err(MireError::runtime(format!("Unknown option: {}", args[i])));
@@ -584,6 +598,16 @@ fn import_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
     }
 
     let manifest_path = project_manifest_path(cwd);
+    let output_version = if version.is_empty() {
+        "latest".to_string()
+    } else {
+        version.clone()
+    };
+    let output_path = if path.is_empty() {
+        None
+    } else {
+        Some(path.clone())
+    };
 
     // Load or create manifest
     let mut manifest = match load_project_manifest(cwd) {
@@ -609,9 +633,7 @@ fn import_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
                 path: path.clone(),
             }
         } else {
-            MireImportEntry::PathOnly {
-                path: path.clone(),
-            }
+            MireImportEntry::PathOnly { path: path.clone() }
         }
     } else if !version.is_empty() {
         MireImportEntry::Simple { version }
@@ -623,7 +645,20 @@ fn import_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
 
     manifest.imports.entries.insert(module.clone(), entry);
     write_manifest(&manifest, &manifest_path)?;
-    println!("Added import '{}' to {}", module, manifest_path.display());
+    if json_output {
+        println!(
+            "{}",
+            serde_json::json!({
+                "status": "ok",
+                "module": module,
+                "manifest": manifest_path,
+                "version": output_version,
+                "path": output_path,
+            })
+        );
+    } else {
+        println!("Added import '{}' to {}", module, manifest_path.display());
+    }
     Ok(0)
 }
 
@@ -650,9 +685,16 @@ fn resolve_source_path(cwd: &Path, file: Option<String>) -> Result<PathBuf, Mire
         runtime_msg("No input file provided and no `entry` was found in owl.toml")
     })?;
     let path = PathBuf::from(&file);
-    let resolved = if path.is_absolute() { path } else { cwd.join(path) };
+    let resolved = if path.is_absolute() {
+        path
+    } else {
+        cwd.join(path)
+    };
     if !resolved.exists() {
-        return Err(runtime_msg(&format!("Input file not found: {}", resolved.display())));
+        return Err(runtime_msg(&format!(
+            "Input file not found: {}",
+            resolved.display()
+        )));
     }
     Ok(resolved)
 }
@@ -720,7 +762,7 @@ fn runtime_err(err: std::io::Error) -> MireError {
 }
 
 fn print_help() {
-    println!("Mire / Avenys v2.8.0");
+    println!("Mire / Avenys v{}", env!("CARGO_PKG_VERSION"));
     println!("Usage: mire <run|build|check|debug> [file] [options]\n");
     println!("Profiles:");
     println!("  --debug               Build profile debug (default)");
@@ -733,6 +775,7 @@ fn print_help() {
     println!("  check [file]          Analyze only");
     println!("  debug [file]          Debug build, emits IR");
     println!("  import <module>       Add import to owl.toml");
+    println!("    --json              Emit machine-readable import result");
     println!("  test [paths...]       Run integration tests from tests/");
     println!("    --no-run            Compile only, skip execution");
     println!("    --verbose, -v       Show per-test results");

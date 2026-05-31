@@ -1,7 +1,10 @@
 use super::*;
 
 impl LlvmIrGen {
-    pub(super) fn compile_program(mut self, program: &Program) -> Result<(String, Vec<(String, String)>)> {
+    pub(super) fn compile_program(
+        mut self,
+        program: &Program,
+    ) -> Result<(String, Vec<(String, String)>)> {
         // First pass: collect struct definitions
         for stmt in &program.statements {
             if let Statement::Type { name, fields, .. } = stmt {
@@ -208,8 +211,7 @@ impl LlvmIrGen {
                         ..
                     } = method
                     {
-                        let full_name =
-                            format!("{}.{}", normalize_nominal_name(type_name), name);
+                        let full_name = format!("{}.{}", normalize_nominal_name(type_name), name);
                         let returns_value = *return_type != DataType::None;
                         let fn_ir = self.compile_function_ir(
                             &full_name,
@@ -307,10 +309,7 @@ impl LlvmIrGen {
             "@.fmt_bool_true = private unnamed_addr constant [5 x i8] c\"true\\00\"".to_string(),
             "@.fmt_bool_false = private unnamed_addr constant [6 x i8] c\"false\\00\"".to_string(),
             "@.fmt_i32 = private unnamed_addr constant [4 x i8] c\"%d\\0A\\00\"".to_string(),
-            // NOTE: stdin I/O builtins are planned for migration to kioto ABI
-            //       (see __kioto_io_readln in kioto_abi_v1.md §3.11).
-            //       ireru itself will remain as the language builtin, but
-            //       std::io functions will delegate to kioto extern fns.
+            // ireru remains a language builtin; library I/O uses rt_/pal_ externs.
             "@.argc = global i32 0".to_string(),
             "@.argv = global ptr null".to_string(),
             "declare ptr @rt_get_args(i32, ptr)".to_string(),
@@ -334,11 +333,12 @@ impl LlvmIrGen {
             // PROC functions
             "declare ptr @pal_proc_run(ptr)".to_string(),
             "declare ptr @pal_proc_exec(ptr)".to_string(),
-            "declare i64 @pal_proc_wait(i32)".to_string(),
-            "declare i32 @pal_proc_kill(i32)".to_string(),
-            "declare void @pal_proc_exit(i32)".to_string(),
             "declare ptr @pal_proc_shell(ptr)".to_string(),
-            "declare i32 @pal_proc_exists(i32)".to_string(),
+            "declare i64 @pal_proc_spawn(ptr)".to_string(),
+            "declare i64 @pal_proc_wait(i64)".to_string(),
+            "declare i32 @pal_proc_kill(i64)".to_string(),
+            "declare void @pal_proc_exit(i64)".to_string(),
+            "declare i64 @pal_proc_exists(i64)".to_string(),
             "declare double @sqrt(double)".to_string(),
             // ENV functions
             "declare ptr @pal_env_get(ptr)".to_string(),
@@ -355,12 +355,11 @@ impl LlvmIrGen {
                 let end = decl[start..].find('(')?;
                 Some(&decl[start + 1..start + end])
             }
-            let mut seen: std::collections::HashSet<&str> = 
+            let mut seen: std::collections::HashSet<&str> =
                 out.iter().filter_map(|s| extract_fn_name(s)).collect();
-            self.extern_decls.iter()
-                .filter(|decl| {
-                    extract_fn_name(decl).map_or(true, |name| seen.insert(name))
-                })
+            self.extern_decls
+                .iter()
+                .filter(|decl| extract_fn_name(decl).map_or(true, |name| seen.insert(name)))
                 .cloned()
                 .collect()
         };
@@ -616,8 +615,7 @@ impl LlvmIrGen {
             | Statement::Skill { .. }
             | Statement::Impl { .. }
             | Statement::Enum { .. }
-            | Statement::Query { .. }
-            => Err(MireError::new(ErrorKind::Backend {
+            | Statement::Query { .. } => Err(MireError::new(ErrorKind::Backend {
                 message: "Avenys statement is parsed/typechecked but not lowered in backend yet"
                     .to_string(),
             })),
@@ -632,10 +630,13 @@ impl LlvmIrGen {
                 if dropped.ty == LlType::Ptr {
                     let dropped_ty = self.expression_data_type(value);
                     if dropped_ty == DataType::Str {
-                        self.body
-                            .push(format!("  call void @rt_managed_free(ptr {})", dropped.repr));
+                        self.body.push(format!(
+                            "  call void @rt_managed_free(ptr {})",
+                            dropped.repr
+                        ));
                     } else {
-                        self.body.push(format!("  call void @free(ptr {})", dropped.repr));
+                        self.body
+                            .push(format!("  call void @free(ptr {})", dropped.repr));
                     }
                 }
                 Ok(())
@@ -727,15 +728,10 @@ impl LlvmIrGen {
                         owned: var.owns_heap_string,
                     });
                 }
-                if let Some(fn_info) = self
-                    .user_functions
-                    .get(name)
-                    .cloned()
-                    .or_else(|| {
-                        strip_root_namespace(name)
-                            .and_then(|alias| self.user_functions.get(&alias).cloned())
-                    })
-                {
+                if let Some(fn_info) = self.user_functions.get(name).cloned().or_else(|| {
+                    strip_root_namespace(name)
+                        .and_then(|alias| self.user_functions.get(&alias).cloned())
+                }) {
                     let tmp = self.tmp();
                     let signature = format!(
                         "{} ({})*",
@@ -960,16 +956,17 @@ impl LlvmIrGen {
                             .get(&ident.name)
                             .cloned()
                             .unwrap_or_else(|| ident.name.clone());
-                        let fn_info = self
-                            .user_functions
-                            .get(&callback_name)
-                            .cloned()
-                            .or_else(|| {
-                                strip_root_namespace(&callback_name)
-                                    .and_then(|alias| self.user_functions.get(&alias).cloned())
-                            });
+                        let fn_info =
+                            self.user_functions
+                                .get(&callback_name)
+                                .cloned()
+                                .or_else(|| {
+                                    strip_root_namespace(&callback_name)
+                                        .and_then(|alias| self.user_functions.get(&alias).cloned())
+                                });
                         if fn_info.is_none() {
-                            let dynamic_sig = self.function_value_signatures.get(&ident.name).cloned();
+                            let dynamic_sig =
+                                self.function_value_signatures.get(&ident.name).cloned();
                             if let Some(sig) = dynamic_sig {
                                 if sig.params.len() != args.len() - 1 {
                                     return Err(MireError::new(ErrorKind::Runtime {
@@ -1024,8 +1021,7 @@ impl LlvmIrGen {
                                     LlType::Ptr => ("ptr".to_string(), value.repr),
                                     LlType::Struct(_) => {
                                         return Err(MireError::new(ErrorKind::Backend {
-                                            message: "Cannot pass struct to callback"
-                                                .to_string(),
+                                            message: "Cannot pass struct to callback".to_string(),
                                         }));
                                     }
                                 };
@@ -1132,8 +1128,9 @@ impl LlvmIrGen {
                         let callback_ptr = self.compile_expr(callback_expr)?;
                         if callback_ptr.ty != LlType::Ptr {
                             return Err(MireError::new(ErrorKind::Backend {
-                                message: "Avenys call(...) dynamic callback must be a function pointer"
-                                    .to_string(),
+                                message:
+                                    "Avenys call(...) dynamic callback must be a function pointer"
+                                        .to_string(),
                             }));
                         }
                         let mut rendered_args = Vec::with_capacity(args.len() - 1);
@@ -1187,9 +1184,7 @@ impl LlvmIrGen {
                 args,
                 data_type,
                 ..
-            }
-                if name == "new::" || name == "move::"
-            => {
+            } if name == "new::" || name == "move::" => {
                 if let Some(first) = args.first() {
                     self.compile_expr(first)
                 } else {
@@ -1215,10 +1210,13 @@ impl LlvmIrGen {
                     if dropped.ty == LlType::Ptr {
                         let dropped_ty = self.expression_data_type(arg);
                         if dropped_ty == DataType::Str {
-                            self.body
-                                .push(format!("  call void @rt_managed_free(ptr {})", dropped.repr));
+                            self.body.push(format!(
+                                "  call void @rt_managed_free(ptr {})",
+                                dropped.repr
+                            ));
                         } else {
-                            self.body.push(format!("  call void @free(ptr {})", dropped.repr));
+                            self.body
+                                .push(format!("  call void @free(ptr {})", dropped.repr));
                         }
                     }
                 }
@@ -1232,8 +1230,7 @@ impl LlvmIrGen {
                     result.repr
                 ));
                 let is_ok = self.tmp();
-                self.body
-                    .push(format!("  {is_ok} = icmp eq i8 {tag}, 0"));
+                self.body.push(format!("  {is_ok} = icmp eq i8 {tag}, 0"));
                 let ok_label = self.label("try_ok");
                 let err_label = self.label("try_err");
                 self.body.push(format!(
@@ -1457,7 +1454,9 @@ impl LlvmIrGen {
                 self.compile_trim(args)
             }
             Expression::Call { name, args, .. }
-                if name == "strings.strip" || name == "strings.ltrim" || name == "strings.rtrim" =>
+                if name == "strings.strip"
+                    || name == "strings.ltrim"
+                    || name == "strings.rtrim" =>
             {
                 self.compile_trim(args)
             }
@@ -1493,16 +1492,28 @@ impl LlvmIrGen {
             Expression::Call { name, args, .. } if name == "exit" => self.compile_exit(args),
             Expression::Call { name, args, .. } if name == "env_args" => self.compile_env_args(),
             // FS functions
-            Expression::Call { name, args, .. } if name == "fs_write" => self.compile_fs_write(args),
-            Expression::Call { name, args, .. } if name == "fs_append" => self.compile_fs_append(args),
+            Expression::Call { name, args, .. } if name == "fs_write" => {
+                self.compile_fs_write(args)
+            }
+            Expression::Call { name, args, .. } if name == "fs_append" => {
+                self.compile_fs_append(args)
+            }
             Expression::Call { name, args, .. } if name == "fs_read" => self.compile_fs_read(args),
             Expression::Call { name, args, .. } if name == "fs_copy" => self.compile_fs_copy(args),
             Expression::Call { name, args, .. } if name == "fs_move" => self.compile_fs_move(args),
             Expression::Call { name, args, .. } if name == "fs_drop" => self.compile_fs_drop(args),
-            Expression::Call { name, args, .. } if name == "fs_mkdir" => self.compile_fs_mkdir(args),
-            Expression::Call { name, args, .. } if name == "fs_rmdir" => self.compile_fs_rmdir(args),
-            Expression::Call { name, args, .. } if name == "fs_exists" => self.compile_fs_exists(args),
-            Expression::Call { name, args, .. } if name == "fs_is_dir" => self.compile_fs_is_dir(args),
+            Expression::Call { name, args, .. } if name == "fs_mkdir" => {
+                self.compile_fs_mkdir(args)
+            }
+            Expression::Call { name, args, .. } if name == "fs_rmdir" => {
+                self.compile_fs_rmdir(args)
+            }
+            Expression::Call { name, args, .. } if name == "fs_exists" => {
+                self.compile_fs_exists(args)
+            }
+            Expression::Call { name, args, .. } if name == "fs_is_dir" => {
+                self.compile_fs_is_dir(args)
+            }
             Expression::Call { name, args, .. } if name == "fs_size" => self.compile_fs_size(args),
             Expression::Call { name, args, .. } if name == "fs_list" => self.compile_fs_list(args),
             Expression::Call { name, args, .. } if name == "fs_join" => self.compile_fs_join(args),
@@ -1510,13 +1521,30 @@ impl LlvmIrGen {
             Expression::Call { name, args, .. } if name == "fs_name" => self.compile_fs_name(args),
             Expression::Call { name, args, .. } if name == "fs_ext" => self.compile_fs_ext(args),
             // PROC functions
-            Expression::Call { name, args, .. } if name == "proc_run" => self.compile_proc_run(args),
-            Expression::Call { name, args, .. } if name == "proc_exec" => self.compile_proc_exec(args),
-            Expression::Call { name, args, .. } if name == "proc_wait" => self.compile_proc_wait(args),
-            Expression::Call { name, args, .. } if name == "proc_kill" => self.compile_proc_kill(args),
-            Expression::Call { name, args, .. } if name == "proc_exit" => self.compile_proc_exit(args),
-            Expression::Call { name, args, .. } if name == "proc_shell" => self.compile_proc_shell(args),
-            Expression::Call { name, args, .. } if name == "proc_exists" => self.compile_proc_exists(args),
+            Expression::Call { name, args, .. } if name == "proc_run" => {
+                self.compile_proc_run(args)
+            }
+            Expression::Call { name, args, .. } if name == "proc_exec" => {
+                self.compile_proc_exec(args)
+            }
+            Expression::Call { name, args, .. } if name == "proc_spawn" => {
+                self.compile_proc_spawn(args)
+            }
+            Expression::Call { name, args, .. } if name == "proc_wait" => {
+                self.compile_proc_wait(args)
+            }
+            Expression::Call { name, args, .. } if name == "proc_kill" => {
+                self.compile_proc_kill(args)
+            }
+            Expression::Call { name, args, .. } if name == "proc_exit" => {
+                self.compile_proc_exit(args)
+            }
+            Expression::Call { name, args, .. } if name == "proc_shell" => {
+                self.compile_proc_shell(args)
+            }
+            Expression::Call { name, args, .. } if name == "proc_exists" => {
+                self.compile_proc_exists(args)
+            }
             // ENV functions
             Expression::Call { name, args, .. } if name == "env_get" => self.compile_env_get(args),
             Expression::Call { name, args, .. } if name == "env_set" => self.compile_env_set(args),
@@ -1690,9 +1718,7 @@ impl LlvmIrGen {
                     owned: false,
                 })
             }
-            Expression::Pipeline {
-                input, stage, ..
-            } => {
+            Expression::Pipeline { input, stage, .. } => {
                 let input_val = self.compile_expr(input)?;
 
                 match stage.as_ref() {
@@ -1800,7 +1826,9 @@ impl LlvmIrGen {
                 }
             }
             Expression::NamedArg { value, .. } => self.compile_expr(value),
-            Expression::Tuple { elements, .. } => self.compile_list_literal(elements, &DataType::Unknown),
+            Expression::Tuple { elements, .. } => {
+                self.compile_list_literal(elements, &DataType::Unknown)
+            }
             Expression::Box { value, .. } => self.compile_expr(value),
             Expression::Closure { .. } => Ok(self.string_value("<closure>")),
         };
@@ -1850,7 +1878,9 @@ impl LlvmIrGen {
     pub(super) fn statement_location(statement: &Statement) -> (usize, usize) {
         match statement {
             Statement::Let {
-                name_line, name_column, ..
+                name_line,
+                name_column,
+                ..
             } => (*name_line, *name_column),
             Statement::Assignment { value, .. }
             | Statement::Expression(value)
@@ -1900,10 +1930,9 @@ impl LlvmIrGen {
             Expression::Index { target, .. } | Expression::MemberAccess { target, .. } => {
                 Self::expression_location(target)
             }
-            Expression::Closure { body, .. } => body
-                .first()
-                .map(Self::statement_location)
-                .unwrap_or((1, 1)),
+            Expression::Closure { body, .. } => {
+                body.first().map(Self::statement_location).unwrap_or((1, 1))
+            }
             Expression::Match { value, .. } => Self::expression_location(value),
             Expression::EnumVariant { payloads, .. } => payloads
                 .first()
@@ -1913,9 +1942,11 @@ impl LlvmIrGen {
         }
     }
 
-
-
-    pub(super) fn compile_input_expr(&mut self, args: &[Expression], data_type: &DataType) -> Result<LlValue> {
+    pub(super) fn compile_input_expr(
+        &mut self,
+        args: &[Expression],
+        data_type: &DataType,
+    ) -> Result<LlValue> {
         // ireru accepts 0 or 1 argument:
         //   ireru()          — read line with no prompt
         //   ireru("prompt")  — show prompt, then read line
@@ -1941,9 +1972,8 @@ impl LlvmIrGen {
         match data_type {
             DataType::I64 | DataType::I32 | DataType::I16 | DataType::I8 => {
                 let parsed = self.tmp();
-                self.body.push(format!(
-                    "  {parsed} = call i64 @atoll(ptr {input})"
-                ));
+                self.body
+                    .push(format!("  {parsed} = call i64 @atoll(ptr {input})"));
                 Ok(LlValue {
                     ty: LlType::I64,
                     repr: parsed,
@@ -1952,9 +1982,8 @@ impl LlvmIrGen {
             }
             DataType::F64 => {
                 let parsed = self.tmp();
-                self.body.push(format!(
-                    "  {parsed} = call double @atof(ptr {input})"
-                ));
+                self.body
+                    .push(format!("  {parsed} = call double @atof(ptr {input})"));
                 Ok(LlValue {
                     ty: LlType::F64,
                     repr: parsed,
@@ -1973,36 +2002,29 @@ impl LlvmIrGen {
                     "  {cmp_true} = call i32 @strcmp(ptr {input}, ptr {})",
                     true_str.repr
                 ));
-                self.body.push(format!(
-                    "  {is_true} = icmp eq i32 {cmp_true}, 0"
-                ));
+                self.body
+                    .push(format!("  {is_true} = icmp eq i32 {cmp_true}, 0"));
                 self.body.push(format!(
                     "  {cmp_one} = call i32 @strcmp(ptr {input}, ptr {})",
                     one_str.repr
                 ));
-                self.body.push(format!(
-                    "  {is_one} = icmp eq i32 {cmp_one}, 0"
-                ));
-                self.body.push(format!(
-                    "  {result} = or i1 {is_true}, {is_one}"
-                ));
+                self.body
+                    .push(format!("  {is_one} = icmp eq i32 {cmp_one}, 0"));
+                self.body
+                    .push(format!("  {result} = or i1 {is_true}, {is_one}"));
                 Ok(LlValue {
                     ty: LlType::I1,
                     repr: result,
                     owned: false,
                 })
             }
-            _ => {
-                Ok(LlValue {
-                    ty: LlType::Ptr,
-                    repr: input,
-                    owned: true,
-                })
-            }
+            _ => Ok(LlValue {
+                ty: LlType::Ptr,
+                repr: input,
+                owned: true,
+            }),
         }
     }
-
-
 
     pub(super) fn runtime_kind_code(&self, data_type: &DataType) -> i64 {
         match data_type {
@@ -2078,15 +2100,6 @@ impl LlvmIrGen {
 
         wrapper_name
     }
-
-
-
-
-
-
-
-
-
 
     fn llvm_fn_name(&mut self, name: &str) -> String {
         if name == "main" {

@@ -1,5 +1,5 @@
-use super::*;
 use super::toolchain::llvm_version;
+use super::*;
 use std::collections::HashMap;
 
 pub fn load_project_manifest(cwd: &Path) -> Result<Option<MireManifest>> {
@@ -85,7 +85,10 @@ pub fn project_manifest_path(cwd: &Path) -> PathBuf {
     if cwd.join("owl.toml").exists() {
         return cwd.join("owl.toml");
     }
-    cwd.join("Mire.toml")
+    if cwd.join("Mire.toml").exists() {
+        return cwd.join("Mire.toml");
+    }
+    cwd.join("owl.toml")
 }
 
 pub fn project_lock_path(cwd: &Path) -> PathBuf {

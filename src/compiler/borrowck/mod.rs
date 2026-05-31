@@ -7,8 +7,8 @@ use crate::error::mss::MssError;
 use crate::error::{ErrorKind, MireError, Result};
 use crate::incremental::analysis_unit_key;
 use crate::parser::ast::{AssignmentTarget, DataType, Expression, Program, QueryOp, Statement};
-mod helpers;
 mod borrowck_expressions;
+mod helpers;
 use self::helpers::{
     assignment_binding_target, implicit_return_expression, statements_contain_explicit_return,
 };
@@ -274,14 +274,14 @@ impl<'a> BorrowChecker<'a> {
                 else_branch,
             } => {
                 self.check_expression(condition)?;
-                
+
                 let scopes_before = self.scopes.clone();
-                
+
                 self.push_scope();
                 self.check_statements(then_branch)?;
                 self.pop_scope();
                 let scopes_after_then = self.scopes.clone();
-                
+
                 let scopes_after_else = if let Some(else_branch) = else_branch {
                     self.scopes = scopes_before.clone();
                     self.push_scope();
@@ -291,18 +291,19 @@ impl<'a> BorrowChecker<'a> {
                 } else {
                     scopes_before.clone()
                 };
-                
-                self.scopes = Self::merge_scopes(&scopes_before, &scopes_after_then, &scopes_after_else);
+
+                self.scopes =
+                    Self::merge_scopes(&scopes_before, &scopes_after_then, &scopes_after_else);
             }
             Statement::While { condition, body } => {
                 let scopes_before = self.scopes.clone();
-                
+
                 // Pass 1
                 self.check_expression(condition)?;
                 self.push_scope();
                 self.check_statements(body)?;
                 self.pop_scope();
-                
+
                 let mut moved_vars = Vec::new();
                 for (i, scope) in scopes_before.iter().enumerate() {
                     for (name, state) in scope {
@@ -311,7 +312,7 @@ impl<'a> BorrowChecker<'a> {
                         }
                     }
                 }
-                
+
                 if !moved_vars.is_empty() {
                     self.scopes = scopes_before.clone();
                     for name in &moved_vars {
@@ -333,7 +334,7 @@ impl<'a> BorrowChecker<'a> {
             } => {
                 self.check_expression(iterable)?;
                 let scopes_before = self.scopes.clone();
-                
+
                 // Pass 1
                 self.push_scope();
                 self.insert_binding(variable.clone(), BindingState::default());
@@ -342,7 +343,7 @@ impl<'a> BorrowChecker<'a> {
                 }
                 self.check_statements(body)?;
                 self.pop_scope();
-                
+
                 let mut moved_vars = Vec::new();
                 for (i, scope) in scopes_before.iter().enumerate() {
                     for (name, state) in scope {
@@ -351,7 +352,7 @@ impl<'a> BorrowChecker<'a> {
                         }
                     }
                 }
-                
+
                 if !moved_vars.is_empty() {
                     self.scopes = scopes_before.clone();
                     for name in &moved_vars {
@@ -375,13 +376,13 @@ impl<'a> BorrowChecker<'a> {
             } => {
                 self.check_expression(iterable)?;
                 let scopes_before = self.scopes.clone();
-                
+
                 // Pass 1
                 self.push_scope();
                 self.insert_binding(variable.clone(), BindingState::default());
                 self.check_statements(body)?;
                 self.pop_scope();
-                
+
                 let mut moved_vars = Vec::new();
                 for (i, scope) in scopes_before.iter().enumerate() {
                     for (name, state) in scope {
@@ -390,7 +391,7 @@ impl<'a> BorrowChecker<'a> {
                         }
                     }
                 }
-                
+
                 if !moved_vars.is_empty() {
                     self.scopes = scopes_before.clone();
                     for name in &moved_vars {
@@ -413,7 +414,7 @@ impl<'a> BorrowChecker<'a> {
                 default,
             } => {
                 self.check_expression(value)?;
-                
+
                 let scopes_before = self.scopes.clone();
                 let mut branch_scopes = Vec::new();
                 for (case_expr, case_body) in cases {
@@ -424,13 +425,13 @@ impl<'a> BorrowChecker<'a> {
                     self.pop_scope();
                     branch_scopes.push(self.scopes.clone());
                 }
-                
+
                 self.scopes = scopes_before.clone();
                 self.push_scope();
                 self.check_statements(default)?;
                 self.pop_scope();
                 branch_scopes.push(self.scopes.clone());
-                
+
                 self.scopes = Self::merge_multiple_scopes(&scopes_before, &branch_scopes);
             }
             Statement::Impl {
@@ -728,7 +729,9 @@ impl<'a> BorrowChecker<'a> {
 
     fn collect_ref_targets_rec(expression: &Expression, targets: &mut Vec<ReferenceBinding>) {
         match expression {
-            Expression::Reference { expr, is_mutable, .. } => {
+            Expression::Reference {
+                expr, is_mutable, ..
+            } => {
                 if let Some(name) = Self::identifier_name(expr) {
                     targets.push(ReferenceBinding {
                         target: name,
@@ -750,9 +753,11 @@ impl<'a> BorrowChecker<'a> {
 
     fn promote_temporary_borrows(&mut self, targets: &[ReferenceBinding]) {
         for target in targets {
-            if let Some(pos) = self.temporary_borrows.iter().position(|r| {
-                r.target == target.target && r.is_mutable == target.is_mutable
-            }) {
+            if let Some(pos) = self
+                .temporary_borrows
+                .iter()
+                .position(|r| r.target == target.target && r.is_mutable == target.is_mutable)
+            {
                 self.temporary_borrows.remove(pos);
             }
         }
@@ -930,7 +935,9 @@ impl<'a> BorrowChecker<'a> {
     }
 
     fn mark_moved_if_non_copy(&mut self, name: &str) {
-        if self.is_non_copy_binding(name) && let Some(state) = self.lookup_binding_mut(name) {
+        if self.is_non_copy_binding(name)
+            && let Some(state) = self.lookup_binding_mut(name)
+        {
             state.is_moved = true;
         }
     }
@@ -963,7 +970,9 @@ impl<'a> BorrowChecker<'a> {
     fn statement_location(statement: &Statement) -> (usize, usize) {
         match statement {
             Statement::Let {
-                name_line, name_column, ..
+                name_line,
+                name_column,
+                ..
             } => (*name_line, *name_column),
             Statement::Assignment { value, .. }
             | Statement::Expression(value)
@@ -1035,7 +1044,6 @@ impl<'a> BorrowChecker<'a> {
             .find_map(|(rev_index, scope)| scope.contains_key(name).then_some(depth - rev_index))
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -1223,8 +1231,8 @@ mod tests {
         let program = Program {
             statements: vec![Statement::Function {
                 name: "bad".to_string(),
-            type_params: Vec::new(),
-            type_param_bounds: Vec::new(),
+                type_params: Vec::new(),
+                type_param_bounds: Vec::new(),
                 params: vec![],
                 body: vec![
                     let_stmt("x", Some(Expression::Literal(Literal::Int(1)))),
@@ -1260,12 +1268,12 @@ mod tests {
                 Statement::Impl {
                     trait_name: None,
                     type_name: "Point".to_string(),
-            type_params: Vec::new(),
-            type_param_bounds: Vec::new(),
+                    type_params: Vec::new(),
+                    type_param_bounds: Vec::new(),
                     methods: vec![Statement::Function {
                         name: "leak".to_string(),
-            type_params: Vec::new(),
-            type_param_bounds: Vec::new(),
+                        type_params: Vec::new(),
+                        type_param_bounds: Vec::new(),
                         params: vec![(
                             "self".to_string(),
                             DataType::StructNamed("Point".to_string()),
@@ -1298,8 +1306,8 @@ mod tests {
             statements: vec![
                 Statement::Function {
                     name: "mutate".to_string(),
-            type_params: Vec::new(),
-            type_param_bounds: Vec::new(),
+                    type_params: Vec::new(),
+                    type_param_bounds: Vec::new(),
                     params: vec![(
                         "value".to_string(),
                         DataType::mutable_ref(DataType::Unknown),
@@ -1347,7 +1355,7 @@ mod tests {
                 Statement::Expression(Expression::Call {
                     name: "move::".to_string(),
                     args: vec![ident("item")],
-            type_args: Vec::new(),
+                    type_args: Vec::new(),
                     data_type: DataType::Unknown,
                 }),
                 Statement::Expression(ident("item")),
@@ -1365,8 +1373,8 @@ mod tests {
             statements: vec![
                 Statement::Function {
                     name: "show".to_string(),
-            type_params: Vec::new(),
-            type_param_bounds: Vec::new(),
+                    type_params: Vec::new(),
+                    type_param_bounds: Vec::new(),
                     params: vec![("value".to_string(), DataType::I64)],
                     body: vec![],
                     return_type: DataType::None,
@@ -1377,7 +1385,7 @@ mod tests {
                 Statement::Expression(Expression::Call {
                     name: "show".to_string(),
                     args: vec![ident("x")],
-            type_args: Vec::new(),
+                    type_args: Vec::new(),
                     data_type: DataType::Unknown,
                 }),
                 Statement::Expression(ident("x")),
@@ -1436,13 +1444,13 @@ mod tests {
                 Statement::Impl {
                     trait_name: None,
                     type_name: "Point".to_string(),
-            type_params: Vec::new(),
-            type_param_bounds: Vec::new(),
+                    type_params: Vec::new(),
+                    type_param_bounds: Vec::new(),
                     methods: vec![
                         Statement::Function {
                             name: "good".to_string(),
-            type_params: Vec::new(),
-            type_param_bounds: Vec::new(),
+                            type_params: Vec::new(),
+                            type_param_bounds: Vec::new(),
                             params: vec![],
                             body: vec![Statement::Expression(Expression::Literal(Literal::Int(1)))],
                             return_type: DataType::None,
@@ -1451,8 +1459,8 @@ mod tests {
                         },
                         Statement::Function {
                             name: "bad".to_string(),
-            type_params: Vec::new(),
-            type_param_bounds: Vec::new(),
+                            type_params: Vec::new(),
+                            type_param_bounds: Vec::new(),
                             params: vec![],
                             body: vec![
                                 let_stmt(
@@ -1502,8 +1510,8 @@ mod tests {
             statements: vec![
                 Statement::Function {
                     name: "leak".to_string(),
-            type_params: Vec::new(),
-            type_param_bounds: Vec::new(),
+                    type_params: Vec::new(),
+                    type_param_bounds: Vec::new(),
                     params: vec![],
                     body: vec![
                         let_stmt("x", Some(Expression::Literal(Literal::Int(1)))),
@@ -1533,12 +1541,12 @@ mod tests {
             statements: vec![Statement::Impl {
                 trait_name: None,
                 type_name: "Point".to_string(),
-            type_params: Vec::new(),
-            type_param_bounds: Vec::new(),
+                type_params: Vec::new(),
+                type_param_bounds: Vec::new(),
                 methods: vec![Statement::Function {
                     name: "leak".to_string(),
-            type_params: Vec::new(),
-            type_param_bounds: Vec::new(),
+                    type_params: Vec::new(),
+                    type_param_bounds: Vec::new(),
                     params: vec![(
                         "self".to_string(),
                         DataType::StructNamed("Point".to_string()),

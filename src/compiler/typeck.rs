@@ -1,28 +1,28 @@
-mod typeck_returns;
 mod typeck_check_expression;
-mod typeck_signatures;
-mod typeck_statements;
-mod typeck_expressions;
-mod typeck_type_parsing;
 mod typeck_closures;
 mod typeck_enums;
-mod typeck_types;
+mod typeck_expressions;
 mod typeck_generics;
-mod typeck_validate;
-mod typeck_scope;
 mod typeck_resolve;
+mod typeck_returns;
+mod typeck_scope;
+mod typeck_signatures;
+mod typeck_statements;
+mod typeck_type_parsing;
+mod typeck_types;
+mod typeck_validate;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
+use self::typeck_returns::{implicit_return_expression_mut, statements_contain_explicit_return};
 use crate::compiler::AnalysisSelection;
 use crate::error::{MireError, Result};
 use crate::incremental::analysis_unit_key;
 use crate::parser::ast::{
-    AssignmentTarget, DataType, Expression, Identifier, Literal, MireValue, Program,
-    Statement, TraitMethodSig,
+    AssignmentTarget, DataType, Expression, Identifier, Literal, MireValue, Program, Statement,
+    TraitMethodSig,
 };
-use self::typeck_returns::{implicit_return_expression_mut, statements_contain_explicit_return};
 #[derive(Debug, Clone)]
 struct FunctionSig {
     type_params: Vec<String>,
@@ -390,19 +390,21 @@ impl TypeChecker {
 
     fn statement_location(statement: &Statement) -> (usize, usize) {
         match statement {
-        Statement::Let {
-            name_line, name_column, ..
-        } => (*name_line, *name_column),
-        Statement::Assignment { value, .. }
-        | Statement::Expression(value)
-        | Statement::Drop { value }
-        | Statement::New {
-            value: Some(value), ..
-        }
-        | Statement::Own {
-            value: Some(value), ..
-        }
-        | Statement::Move { value, .. } => Self::expression_location(value),
+            Statement::Let {
+                name_line,
+                name_column,
+                ..
+            } => (*name_line, *name_column),
+            Statement::Assignment { value, .. }
+            | Statement::Expression(value)
+            | Statement::Drop { value }
+            | Statement::New {
+                value: Some(value), ..
+            }
+            | Statement::Own {
+                value: Some(value), ..
+            }
+            | Statement::Move { value, .. } => Self::expression_location(value),
             Statement::Return(Some(value)) => Self::expression_location(value),
             Statement::If { condition, .. } | Statement::While { condition, .. } => {
                 Self::expression_location(condition)
@@ -441,10 +443,9 @@ impl TypeChecker {
             Expression::Index { target, .. } | Expression::MemberAccess { target, .. } => {
                 Self::expression_location(target)
             }
-            Expression::Closure { body, .. } => body
-                .first()
-                .map(Self::statement_location)
-                .unwrap_or((1, 1)),
+            Expression::Closure { body, .. } => {
+                body.first().map(Self::statement_location).unwrap_or((1, 1))
+            }
             Expression::Match { value, .. } => Self::expression_location(value),
             Expression::EnumVariant { payloads, .. } => payloads
                 .first()
@@ -463,7 +464,6 @@ fn type_error_at(line: usize, column: usize, message: String) -> MireError {
     let (err_line, err_col) = if line == 0 { (1, 1) } else { (line, column) };
     MireError::type_error_at(err_line, err_col, message)
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -490,8 +490,8 @@ mod tests {
                 is_mutable: false,
                 is_static: false,
                 visibility: Visibility::Public,
-            name_line: 1,
-            name_column: 1,
+                name_line: 1,
+                name_column: 1,
             }],
         };
 
@@ -543,8 +543,8 @@ mod tests {
             statements: vec![
                 Statement::Function {
                     name: "sum".to_string(),
-            type_params: Vec::new(),
-            type_param_bounds: Vec::new(),
+                    type_params: Vec::new(),
+                    type_param_bounds: Vec::new(),
                     params: vec![
                         ("a".to_string(), DataType::I64),
                         ("b".to_string(), DataType::I64),
@@ -643,7 +643,7 @@ mod tests {
                 Statement::Expression(Expression::Call {
                     name: "dasu".to_string(),
                     args: vec![Expression::Literal(Literal::Str("hello".to_string()))],
-            type_args: Vec::new(),
+                    type_args: Vec::new(),
                     data_type: DataType::Unknown,
                 }),
                 Statement::Expression(Expression::Call {
@@ -811,13 +811,13 @@ mod tests {
             statements: vec![Statement::Impl {
                 trait_name: None,
                 type_name: "Point".to_string(),
-            type_params: Vec::new(),
-            type_param_bounds: Vec::new(),
+                type_params: Vec::new(),
+                type_param_bounds: Vec::new(),
                 methods: vec![
                     Statement::Function {
                         name: "good".to_string(),
-            type_params: Vec::new(),
-            type_param_bounds: Vec::new(),
+                        type_params: Vec::new(),
+                        type_param_bounds: Vec::new(),
                         params: vec![],
                         body: vec![Statement::Return(Some(Expression::Literal(Literal::Int(
                             1,
@@ -828,8 +828,8 @@ mod tests {
                     },
                     Statement::Function {
                         name: "bad".to_string(),
-            type_params: Vec::new(),
-            type_param_bounds: Vec::new(),
+                        type_params: Vec::new(),
+                        type_param_bounds: Vec::new(),
                         params: vec![],
                         body: vec![Statement::Return(Some(Expression::Identifier(
                             Identifier {
@@ -881,8 +881,8 @@ mod tests {
                             is_mutable: false,
                             is_static: false,
                             visibility: Visibility::Public,
-                        name_line: 1,
-                        name_column: 1,
+                            name_line: 1,
+                            name_column: 1,
                         },
                         Statement::Let {
                             name: "broken".to_string(),
@@ -897,8 +897,8 @@ mod tests {
                             is_mutable: false,
                             is_static: false,
                             visibility: Visibility::Public,
-                        name_line: 1,
-                        name_column: 1,
+                            name_line: 1,
+                            name_column: 1,
                         },
                     ],
                 },
@@ -945,10 +945,7 @@ mod tests {
         check_program_types_partial_with_origins(
             &mut program,
             "",
-            &[
-                PathBuf::from("test.mire"),
-                PathBuf::from("test.mire"),
-            ],
+            &[PathBuf::from("test.mire"), PathBuf::from("test.mire")],
             &HashMap::new(),
             &AnalysisSelection {
                 statement_mask: vec![true, true],
@@ -1120,8 +1117,8 @@ mod tests {
             statements: vec![
                 Statement::Function {
                     name: "bump".to_string(),
-            type_params: Vec::new(),
-            type_param_bounds: Vec::new(),
+                    type_params: Vec::new(),
+                    type_param_bounds: Vec::new(),
                     params: vec![(
                         "value".to_string(),
                         DataType::RefMut {
@@ -1135,8 +1132,8 @@ mod tests {
                 },
                 Statement::Function {
                     name: "main".to_string(),
-            type_params: Vec::new(),
-            type_param_bounds: Vec::new(),
+                    type_params: Vec::new(),
+                    type_param_bounds: Vec::new(),
                     params: vec![],
                     body: vec![
                         Statement::Let {
@@ -1147,8 +1144,8 @@ mod tests {
                             is_mutable: false,
                             is_static: false,
                             visibility: Visibility::Public,
-                        name_line: 1,
-                        name_column: 1,
+                            name_line: 1,
+                            name_column: 1,
                         },
                         Statement::Let {
                             name: "shared".to_string(),
@@ -1168,8 +1165,8 @@ mod tests {
                             is_mutable: false,
                             is_static: false,
                             visibility: Visibility::Public,
-                        name_line: 1,
-                        name_column: 1,
+                            name_line: 1,
+                            name_column: 1,
                         },
                         Statement::Expression(Expression::Call {
                             name: "bump".to_string(),
@@ -1268,7 +1265,10 @@ mod tests {
 
         let err = check_program_types_with_origins(&mut program, "", &origins, &sources)
             .expect_err("must fail and attach origin source");
-        assert_eq!(err.filename().map(String::as_str), Some("prototype_typeck_context.mire"));
+        assert_eq!(
+            err.filename().map(String::as_str),
+            Some("prototype_typeck_context.mire")
+        );
         assert_eq!(err.source(), Some(&source.to_string()));
     }
 }

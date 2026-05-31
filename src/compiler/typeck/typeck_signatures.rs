@@ -189,7 +189,9 @@ impl TypeChecker {
                     self.collect_function_return_signatures(methods)?;
                 }
                 Statement::Module { body, .. } => self.collect_function_return_signatures(body)?,
-                Statement::Type { fields, .. } => self.collect_function_return_signatures(fields)?,
+                Statement::Type { fields, .. } => {
+                    self.collect_function_return_signatures(fields)?
+                }
                 _ => {}
             }
         }
@@ -198,14 +200,12 @@ impl TypeChecker {
 
     fn infer_returned_function_signature(&self, body: &[Statement]) -> Option<FunctionSig> {
         body.iter().find_map(|statement| match statement {
-            Statement::Return(Some(Expression::Identifier(ident))) => self
-                .functions
-                .get(&ident.name)
-                .cloned()
-                .or_else(|| {
+            Statement::Return(Some(Expression::Identifier(ident))) => {
+                self.functions.get(&ident.name).cloned().or_else(|| {
                     Self::strip_root_namespace(&ident.name)
                         .and_then(|alias| self.functions.get(&alias).cloned())
-                }),
+                })
+            }
             _ => None,
         })
     }

@@ -1,7 +1,7 @@
 use mire::parser::ast::{DataType, Expression, Statement};
 use mire::{
-    BuildMode, BuildOptions, CacheSettings, ErrorKind, MireError, OptLevel, analyze_program, cache_file_path,
-    check_program_types, compile_file_with_avenys, load_program_from_file,
+    BuildMode, BuildOptions, CacheSettings, ErrorKind, MireError, OptLevel, analyze_program,
+    cache_file_path, check_program_types, compile_file_with_avenys, load_program_from_file,
     load_program_with_metadata, load_program_with_metadata_with_settings, parse,
 };
 use std::fs;
@@ -601,17 +601,17 @@ fn incremental_recompile_keeps_enum_match_string_result_consistent() {
             &source_path,
             &BuildOptions {
                 mode: BuildMode::Release,
-            opt_level: OptLevel::O3,
+                opt_level: OptLevel::O3,
                 debug_dump: false,
                 output: None,
                 emit_binary: true,
                 persist_ir: false,
                 import_mode: mire::ImportMode::Legacy,
                 cache: Default::default(),
-            warning_filter: mire::error::diagnostic::WarningFilter::Default,
-            deny_warnings: std::collections::HashSet::new(),
-            module_paths: vec![],
-        },
+                warning_filter: mire::error::diagnostic::WarningFilter::Default,
+                deny_warnings: std::collections::HashSet::new(),
+                module_paths: vec![],
+            },
         )
         .expect("compile case");
 
@@ -1788,8 +1788,8 @@ fn syntax_reference_prototype_compiles_and_runs() {
         "[project]\nname = \"syntax-prototype\"\nversion = \"0.1.0\"\nentry = \"prototype.mire\"\n",
     )
     .expect("write project");
-    let prototype_source = fs::read_to_string("tests/syntax/prototype.mire")
-        .expect("read syntax prototype source");
+    let prototype_source =
+        fs::read_to_string("tests/syntax/prototype.mire").expect("read syntax prototype source");
     fs::write(&source_path, prototype_source).expect("write source");
 
     let build = compile_file_with_avenys(
@@ -2466,7 +2466,10 @@ fn generic_trait_bound_is_enforced() {
     let bad_source = "skill Show {\n    fn show: (self) :str\n}\n\nfn print_it[T: Show]: (x :T) {\n    use dasu(x)\n}\n\npub fn main: () {\n    print_it(42)\n}\n";
     let mut bad_program = parse(bad_source).expect("bad source should parse");
     let err = analyze_program(&mut bad_program, bad_source).expect_err("bound must fail");
-    assert!(err.to_string().contains("requires 'T' to implement trait 'Show'"));
+    assert!(
+        err.to_string()
+            .contains("requires 'T' to implement trait 'Show'")
+    );
 }
 
 #[test]
@@ -2523,10 +2526,12 @@ fn generic_impl_method_codegen_builds_for_concrete_type() {
 fn nongeneric_function_rejects_explicit_type_args() {
     let source = "fn plain: (x :i64) :i64 {\n    return x\n}\n\npub fn main: () {\n    set x = plain[i64](42)\n    use dasu(x)\n}\n";
     let mut program = parse(source).expect("source should parse");
-    let err = analyze_program(&mut program, source).expect_err("nongeneric function must reject type args");
-    assert!(err
-        .to_string()
-        .contains("is not generic; remove explicit type arguments"));
+    let err = analyze_program(&mut program, source)
+        .expect_err("nongeneric function must reject type args");
+    assert!(
+        err.to_string()
+            .contains("is not generic; remove explicit type arguments")
+    );
 }
 
 #[test]
@@ -2638,8 +2643,11 @@ fn kioto_double_colon_namespace_calls_resolve_with_selected_imports() {
     )
     .expect("write project");
     fs::create_dir_all(root.join("kioto")).expect("mkdir kioto");
-    fs::write(root.join("kioto").join("lib.mire"), "pub fn version: () :str { return \"0.1.0\" }\n")
-        .expect("write lib");
+    fs::write(
+        root.join("kioto").join("lib.mire"),
+        "pub fn version: () :str { return \"0.1.0\" }\n",
+    )
+    .expect("write lib");
     fs::write(
         root.join("kioto").join("fs.mire"),
         "pub fn read: (path: str) :str { return path }\n",
@@ -2647,8 +2655,7 @@ fn kioto_double_colon_namespace_calls_resolve_with_selected_imports() {
     .expect("write fs module");
 
     let main_path = root.join("main.mire");
-    let source =
-        "import kioto: (fs)\n\npub fn main: () {\n    set text = kioto::fs::read(\"ok\")\n    use dasu(text)\n}\n";
+    let source = "import kioto: (fs)\n\npub fn main: () {\n    set text = kioto::fs::read(\"ok\")\n    use dasu(text)\n}\n";
     fs::write(&main_path, source).expect("write main");
 
     let mut loaded = load_program_with_metadata(&main_path).expect("load with imports");
@@ -2963,7 +2970,10 @@ fn enum_match_statement_requires_exhaustive_coverage_without_default() {
     let mut program = parse(source).expect("source should parse");
     let err = check_program_types(&mut program, source).expect_err("typecheck should fail");
     let rendered = err.to_string();
-    assert!(rendered.contains("Non-exhaustive match for enum 'State'"), "{rendered}");
+    assert!(
+        rendered.contains("Non-exhaustive match for enum 'State'"),
+        "{rendered}"
+    );
 }
 
 #[test]
@@ -2972,7 +2982,10 @@ fn enum_match_expression_rejects_duplicate_variant_arms() {
     let mut program = parse(source).expect("source should parse");
     let err = check_program_types(&mut program, source).expect_err("typecheck should fail");
     let rendered = err.to_string();
-    assert!(rendered.contains("Duplicate match arm for enum variant 'State.Idle'"), "{rendered}");
+    assert!(
+        rendered.contains("Duplicate match arm for enum variant 'State.Idle'"),
+        "{rendered}"
+    );
 }
 
 #[test]
@@ -3245,7 +3258,8 @@ fn borrowck_moves_in_if_else_are_tracked_per_branch() {
     fs::write(
         root.join("owl.toml"),
         "[project]\nname = \"valid\"\nversion = \"0.1.0\"\nentry = \"valid.mire\"\n",
-    ).unwrap();
+    )
+    .unwrap();
     fs::write(
         &source_path,
         "import std\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    set cond = true :bool\n    if cond {\n        use consume(xs)\n    } else {\n        use dasu(len(xs))\n    }\n}\n"
@@ -3267,7 +3281,10 @@ fn borrowck_moves_in_if_else_are_tracked_per_branch() {
             module_paths: vec![],
         },
     );
-    assert!(build.is_ok(), "should compile: using variable in else branch when moved in then branch is valid");
+    assert!(
+        build.is_ok(),
+        "should compile: using variable in else branch when moved in then branch is valid"
+    );
 
     let err = expect_compile_error_from_source(
         "mire_borrowck_if_else_invalid",
@@ -3275,7 +3292,11 @@ fn borrowck_moves_in_if_else_are_tracked_per_branch() {
         "import std\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    set cond = true :bool\n    if cond {\n        use consume(xs)\n    }\n    use dasu(len(xs))\n}\n",
     );
     assert!(matches!(err.kind, ErrorKind::Ownership { .. }), "{err:?}");
-    assert!(err.to_string().contains("Use after move"), "{}", err.to_string());
+    assert!(
+        err.to_string().contains("Use after move"),
+        "{}",
+        err.to_string()
+    );
 }
 
 #[test]
@@ -3285,7 +3306,8 @@ fn borrowck_moves_in_match_arms_are_tracked_per_arm() {
     fs::write(
         root.join("owl.toml"),
         "[project]\nname = \"valid\"\nversion = \"0.1.0\"\nentry = \"valid.mire\"\n",
-    ).unwrap();
+    )
+    .unwrap();
     fs::write(
         &source_path,
         "import std\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    set val = 2 :i64\n    match val {\n        1 { use consume(xs) }\n        _ { use dasu(len(xs)) }\n    }\n}\n"
@@ -3307,7 +3329,10 @@ fn borrowck_moves_in_match_arms_are_tracked_per_arm() {
             module_paths: vec![],
         },
     );
-    assert!(build.is_ok(), "should compile: using variable in default match branch when moved in arm 1 is valid");
+    assert!(
+        build.is_ok(),
+        "should compile: using variable in default match branch when moved in arm 1 is valid"
+    );
 
     let err = expect_compile_error_from_source(
         "mire_borrowck_match_invalid",
@@ -3315,7 +3340,11 @@ fn borrowck_moves_in_match_arms_are_tracked_per_arm() {
         "import std\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    set val = 2 :i64\n    match val {\n        1 { use consume(xs) }\n        _ {} \n    }\n    use dasu(len(xs))\n}\n",
     );
     assert!(matches!(err.kind, ErrorKind::Ownership { .. }), "{err:?}");
-    assert!(err.to_string().contains("Use after move"), "{}", err.to_string());
+    assert!(
+        err.to_string().contains("Use after move"),
+        "{}",
+        err.to_string()
+    );
 }
 
 #[test]
@@ -3326,22 +3355,28 @@ fn borrowck_closure_captures_and_moves() {
     let root = make_temp_project_root("mire_borrowck_closure_move_after");
     let source_path = root.join("invalid.mire");
     fs::write(&source_path, "import std\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    set f = (mu) => len(xs)\n    set result = consume(xs)\n    use dasu(str(result))\n}\n").unwrap();
-    let build = compile_file_with_avenys(&source_path, &BuildOptions {
-        mode: BuildMode::Debug,
-        opt_level: OptLevel::O0,
-        debug_dump: false,
-        output: None,
-        emit_binary: true,
-        persist_ir: false,
-        import_mode: mire::ImportMode::Legacy,
-        cache: Default::default(),
-        warning_filter: mire::error::diagnostic::WarningFilter::Default,
-        deny_warnings: std::collections::HashSet::new(),
-        module_paths: vec![],
-    });
+    let build = compile_file_with_avenys(
+        &source_path,
+        &BuildOptions {
+            mode: BuildMode::Debug,
+            opt_level: OptLevel::O0,
+            debug_dump: false,
+            output: None,
+            emit_binary: true,
+            persist_ir: false,
+            import_mode: mire::ImportMode::Legacy,
+            cache: Default::default(),
+            warning_filter: mire::error::diagnostic::WarningFilter::Default,
+            deny_warnings: std::collections::HashSet::new(),
+            module_paths: vec![],
+        },
+    );
     // Currently compiles because closure capture is not tracked
     // TODO: Once closure capture analysis is implemented, should fail with "Move while borrowed"
-    assert!(build.is_ok(), "closure borrow tracking not yet implemented; should pass for now");
+    assert!(
+        build.is_ok(),
+        "closure borrow tracking not yet implemented; should pass for now"
+    );
 }
 
 #[test]
@@ -3352,7 +3387,11 @@ fn borrowck_ok_consumes_non_copy_binding() {
         "import std\n\npub fn main: () {\n    set val = \"hello\" :str\n    set r = ok(val) :result[str str]\n    use dasu(val)\n}\n",
     );
     assert!(matches!(err.kind, ErrorKind::Ownership { .. }), "{err:?}");
-    assert!(err.to_string().contains("Use after move"), "{}", err.to_string());
+    assert!(
+        err.to_string().contains("Use after move"),
+        "{}",
+        err.to_string()
+    );
 }
 
 #[test]
@@ -3363,7 +3402,11 @@ fn borrowck_try_consumes_result_binding() {
         "import std\n\nfn safe_div: (a :i64 b :i64) :result[i64 str] {\n    if b == 0 { return err(\"div by zero\") }\n    return ok(a / b)\n}\n\nfn helper: () :result[i64 str] {\n    set res = safe_div(10 2)\n    set val = res?\n    use dasu(str(val))\n    use dasu(str(res))\n    return ok(0)\n}\n\npub fn main: () {\n    use dasu(\"done\")\n}\n",
     );
     assert!(matches!(err.kind, ErrorKind::Ownership { .. }), "{err:?}");
-    assert!(err.to_string().contains("Use after move"), "{}", err.to_string());
+    assert!(
+        err.to_string().contains("Use after move"),
+        "{}",
+        err.to_string()
+    );
 }
 
 #[test]
@@ -3374,7 +3417,11 @@ fn borrowck_err_consumes_non_copy_binding() {
         "import std\n\npub fn main: () {\n    set msg = \"oops\" :str\n    set r = err(msg) :result[i64 str]\n    use dasu(msg)\n}\n",
     );
     assert!(matches!(err.kind, ErrorKind::Ownership { .. }), "{err:?}");
-    assert!(err.to_string().contains("Use after move"), "{}", err.to_string());
+    assert!(
+        err.to_string().contains("Use after move"),
+        "{}",
+        err.to_string()
+    );
 }
 
 #[test]
@@ -3385,7 +3432,11 @@ fn borrowck_match_expression_tracks_moves() {
         "import std\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    set val = 2 :i64\n    set result = match val {\n        1 { consume(xs) }\n        _ { consume(xs) }\n    }\n    use dasu(str(result))\n    use dasu(str(len(xs)))\n}\n",
     );
     assert!(matches!(err.kind, ErrorKind::Ownership { .. }), "{err:?}");
-    assert!(err.to_string().contains("Use after move"), "{}", err.to_string());
+    assert!(
+        err.to_string().contains("Use after move"),
+        "{}",
+        err.to_string()
+    );
 }
 
 #[test]
@@ -3396,7 +3447,11 @@ fn borrowck_loop_moves_are_tracked() {
         "import std\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    set i = 0 :i64 mut\n    while i < 3 {\n        use dasu(len(xs))\n        use consume(xs)\n        set i = i + 1 :i64\n    }\n}\n",
     );
     assert!(matches!(err.kind, ErrorKind::Ownership { .. }), "{err:?}");
-    assert!(err.to_string().contains("Use after move"), "{}", err.to_string());
+    assert!(
+        err.to_string().contains("Use after move"),
+        "{}",
+        err.to_string()
+    );
 }
 
 #[test]
@@ -3438,7 +3493,115 @@ fn local_import_restructured_module_dir() {
             module_paths: vec![],
         },
     );
-    assert!(result.is_ok(), "restructured module dir should compile: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "restructured module dir should compile: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn kioto_async_ready_value_compiles_and_runs() {
+    let root = make_temp_project_root("mire_kioto_async_ready");
+    let source_path = root.join("async_ready.mire");
+    fs::write(
+        root.join("owl.toml"),
+        "[project]\nname = \"async-ready\"\nversion = \"0.1.0\"\nentry = \"async_ready.mire\"\n",
+    )
+    .expect("write project");
+    fs::write(
+        &source_path,
+        "import std\n\npub fn main: () {\n    set task = async.ready(\"done\")\n    use dasu(async.value(task \"fallback\"))\n}\n",
+    )
+    .expect("write source");
+
+    let build = compile_file_with_avenys(
+        &source_path,
+        &BuildOptions {
+            mode: BuildMode::Debug,
+            opt_level: OptLevel::O0,
+            debug_dump: false,
+            output: None,
+            emit_binary: true,
+            persist_ir: false,
+            import_mode: mire::ImportMode::Legacy,
+            cache: Default::default(),
+            warning_filter: mire::error::diagnostic::WarningFilter::Default,
+            deny_warnings: std::collections::HashSet::new(),
+            module_paths: vec![],
+        },
+    )
+    .expect("async ready sample should compile");
+
+    let output = Command::new(&build.binary_path)
+        .output()
+        .expect("run binary");
+    assert!(output.status.success(), "binary should run successfully");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("done"), "{stdout}");
+}
+
+#[test]
+fn import_command_json_output_updates_manifest() {
+    let root = make_temp_project_root("mire_import_json");
+    let exe = env!("CARGO_BIN_EXE_mire");
+    let output = Command::new(exe)
+        .current_dir(&root)
+        .args(["import", "kioto", "--version", "0.2.0", "--json"])
+        .output()
+        .expect("run mire import");
+
+    assert!(output.status.success(), "{output:?}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("json output");
+    assert_eq!(json["status"], "ok");
+    assert_eq!(json["module"], "kioto");
+    assert_eq!(json["version"], "0.2.0");
+
+    let manifest = fs::read_to_string(root.join("owl.toml")).expect("manifest written");
+    assert!(manifest.contains("[imports.kioto]"), "{manifest}");
+    assert!(manifest.contains("version = \"0.2.0\""), "{manifest}");
+}
+
+#[test]
+fn kioto_async_spawn_wait_compiles_and_runs() {
+    let root = make_temp_project_root("mire_kioto_async_spawn_wait");
+    let source_path = root.join("async_spawn_wait.mire");
+    fs::write(
+        root.join("owl.toml"),
+        "[project]\nname = \"async-spawn-wait\"\nversion = \"0.1.0\"\nentry = \"async_spawn_wait.mire\"\n",
+    )
+    .expect("write project");
+    fs::write(
+        &source_path,
+        "import std\n\npub fn main: () {\n    set pid = async.spawn(\"true\")\n    set code = async.join(pid)\n    use dasu(str(code))\n}\n",
+    )
+    .expect("write source");
+
+    let build = compile_file_with_avenys(
+        &source_path,
+        &BuildOptions {
+            mode: BuildMode::Debug,
+            opt_level: OptLevel::O0,
+            debug_dump: false,
+            output: None,
+            emit_binary: true,
+            persist_ir: false,
+            import_mode: mire::ImportMode::Legacy,
+            cache: Default::default(),
+            warning_filter: mire::error::diagnostic::WarningFilter::Default,
+            deny_warnings: std::collections::HashSet::new(),
+            module_paths: vec![],
+        },
+    )
+    .expect("async spawn sample should compile");
+
+    let output = Command::new(&build.binary_path)
+        .output()
+        .expect("run binary");
+    assert!(output.status.success(), "binary should run successfully");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("0"), "{stdout}");
 }
 
 fn make_temp_project_root(prefix: &str) -> PathBuf {

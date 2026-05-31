@@ -102,7 +102,6 @@ impl TypeChecker {
         Ok(())
     }
 
-
     pub(super) fn resolve_pipeline_stage_type(
         &mut self,
         stage: &mut Expression,

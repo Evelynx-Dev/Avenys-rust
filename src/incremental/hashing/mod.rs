@@ -1,18 +1,18 @@
-use super::*;
 #[cfg(test)]
 use super::analysis::dependency_matches_unit;
+use super::*;
 
-mod statements;
 mod expressions;
+mod primitives;
+mod statements;
 mod types;
 mod values;
-mod primitives;
 
-use statements::*;
 use expressions::*;
+use primitives::*;
+use statements::*;
 use types::*;
 use values::*;
-use primitives::*;
 
 pub(super) fn stable_statement_hash(statement: &Statement) -> u64 {
     let mut hasher = FxHasher::new();
@@ -30,8 +30,8 @@ mod tests {
         Program {
             statements: vec![Statement::Function {
                 name: name.to_string(),
-            type_params: Vec::new(),
-            type_param_bounds: Vec::new(),
+                type_params: Vec::new(),
+                type_param_bounds: Vec::new(),
                 params: Vec::new(),
                 body: Vec::new(),
                 return_type: crate::parser::ast::DataType::None,
@@ -181,7 +181,8 @@ mod tests {
 
     #[test]
     fn blob_store_compaction_preserves_offsets_inside_merged_ranges() {
-        let root = std::env::temp_dir().join(format!("mire_cache_compact_ranges_{}", now_epoch_ms()));
+        let root =
+            std::env::temp_dir().join(format!("mire_cache_compact_ranges_{}", now_epoch_ms()));
         fs::create_dir_all(&root).expect("temp dir");
         let source_path = root.join("main.mire");
         let source_path2 = root.join("lib.mire");
@@ -401,9 +402,10 @@ mod tests {
         };
         let mut cache = IncrementalCache::load_with_settings(&source_path, settings).expect("load");
 
-        let older =
-            parse("fn helper: () :i64 {\n    return 1\n}\nfn main: () :i64 {\n    return helper()\n}\n")
-                .expect("parse older");
+        let older = parse(
+            "fn helper: () :i64 {\n    return 1\n}\nfn main: () :i64 {\n    return helper()\n}\n",
+        )
+        .expect("parse older");
         cache
             .store_analysis(&source_path, &older)
             .expect("store older analysis");
@@ -518,7 +520,9 @@ mod tests {
             type_params: Vec::new(),
             type_param_bounds: Vec::new(),
             params: Vec::new(),
-            body: vec![Statement::Return(Some(Expression::Literal(Literal::Int(1))))],
+            body: vec![Statement::Return(Some(Expression::Literal(Literal::Int(
+                1,
+            ))))],
             return_type: DataType::I64,
             visibility: Visibility::Public,
             is_method: false,
@@ -528,7 +532,9 @@ mod tests {
             type_params: Vec::new(),
             type_param_bounds: Vec::new(),
             params: Vec::new(),
-            body: vec![Statement::Return(Some(Expression::Literal(Literal::Int(2))))],
+            body: vec![Statement::Return(Some(Expression::Literal(Literal::Int(
+                2,
+            ))))],
             return_type: DataType::I64,
             visibility: Visibility::Public,
             is_method: false,
@@ -738,8 +744,8 @@ mod tests {
                 },
                 Statement::Function {
                     name: "main".to_string(),
-            type_params: Vec::new(),
-            type_param_bounds: Vec::new(),
+                    type_params: Vec::new(),
+                    type_param_bounds: Vec::new(),
                     params: vec![],
                     body: vec![Statement::Expression(Expression::MemberAccess {
                         target: Box::new(Expression::Identifier(Identifier {

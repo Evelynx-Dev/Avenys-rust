@@ -180,10 +180,9 @@ impl BorrowChecker<'_> {
             Expression::Index { target, .. } | Expression::MemberAccess { target, .. } => {
                 Self::expression_location(target)
             }
-            Expression::Closure { body, .. } => body
-                .first()
-                .map(Self::statement_location)
-                .unwrap_or((1, 1)),
+            Expression::Closure { body, .. } => {
+                body.first().map(Self::statement_location).unwrap_or((1, 1))
+            }
             Expression::Match { value, .. } => Self::expression_location(value),
             Expression::EnumVariant { payloads, .. } => payloads
                 .first()

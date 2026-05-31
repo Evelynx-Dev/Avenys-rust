@@ -154,7 +154,9 @@ impl TypeChecker {
         match pattern {
             Expression::Call { name, args, .. } if name == "__match_guard" => {
                 if args.len() != 2 {
-                    return Err(type_error("__match_guard expects pattern and guard".to_string()));
+                    return Err(type_error(
+                        "__match_guard expects pattern and guard".to_string(),
+                    ));
                 }
                 let pattern_type = self.check_match_pattern(&mut args[0])?;
                 let guard_type = self.check_expression(&mut args[1])?;
@@ -176,7 +178,9 @@ impl TypeChecker {
             }
             Expression::Call { name, args, .. } if name == "__match_range" => {
                 if args.len() != 2 {
-                    return Err(type_error("__match_range expects start and end".to_string()));
+                    return Err(type_error(
+                        "__match_range expects start and end".to_string(),
+                    ));
                 }
                 let start_ty = self.check_expression(&mut args[0])?;
                 let end_ty = self.check_expression(&mut args[1])?;
@@ -221,11 +225,11 @@ impl TypeChecker {
                         arg_types.push(
                             self.substitute_generics(
                                 variant_sig
-                                .payload_types
-                                .get(index)
-                                .cloned()
-                                .as_ref()
-                                .unwrap_or(&DataType::Unknown),
+                                    .payload_types
+                                    .get(index)
+                                    .cloned()
+                                    .as_ref()
+                                    .unwrap_or(&DataType::Unknown),
                                 &bindings,
                             ),
                         );

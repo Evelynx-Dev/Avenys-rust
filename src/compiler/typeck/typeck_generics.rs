@@ -66,7 +66,8 @@ impl TypeChecker {
         match (param_type, arg_type) {
             (DataType::Generic(name), actual) => {
                 if let Some(existing) = inferred.get(name) {
-                    if !self.is_assignable(existing, actual) || !self.is_assignable(actual, existing)
+                    if !self.is_assignable(existing, actual)
+                        || !self.is_assignable(actual, existing)
                     {
                         return Err(type_error(format!(
                             "Conflicting inference for generic '{}': {:?} vs {:?}",
@@ -87,13 +88,16 @@ impl TypeChecker {
                 },
             )
             | (
-                DataType::Array { element_type: a, .. },
-                DataType::Array { element_type: b, .. },
+                DataType::Array {
+                    element_type: a, ..
+                },
+                DataType::Array {
+                    element_type: b, ..
+                },
             )
-            | (
-                DataType::Slice { element_type: a },
-                DataType::Slice { element_type: b },
-            ) => self.infer_generic_from_pair(a, b, inferred),
+            | (DataType::Slice { element_type: a }, DataType::Slice { element_type: b }) => {
+                self.infer_generic_from_pair(a, b, inferred)
+            }
             (
                 DataType::Map {
                     key_type: ak,
@@ -172,7 +176,7 @@ impl TypeChecker {
                         return Err(type_error(format!(
                             "Function '{}' requires '{}' to implement trait '{}'",
                             fn_name, param, bound
-                        )))
+                        )));
                     }
                 };
                 let ok = self
@@ -213,7 +217,7 @@ impl TypeChecker {
                         return Err(type_error(format!(
                             "Type '{}' requires '{}' to implement trait '{}'",
                             nominal_name, param, bound
-                        )))
+                        )));
                     }
                 };
                 let ok = self
@@ -230,5 +234,4 @@ impl TypeChecker {
         }
         Ok(())
     }
-
 }

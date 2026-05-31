@@ -1,7 +1,6 @@
 use super::*;
 
 impl LlvmIrGen {
-
     pub(super) fn compile_list_len(&mut self, args: &[Expression]) -> Result<LlValue> {
         if args.len() != 1 {
             return Err(MireError::new(ErrorKind::Runtime {
@@ -586,5 +585,4 @@ impl LlvmIrGen {
             owned: false,
         })
     }
-
 }

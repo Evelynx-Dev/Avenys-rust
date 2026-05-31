@@ -7,7 +7,10 @@ impl LlvmIrGen {
                 name, data_type, ..
             } if data_type.is_struct_like() => {
                 data_type.struct_name().map(ToOwned::to_owned).or_else(|| {
-                    if self.user_structs.contains_key(&normalize_nominal_name(name)) {
+                    if self
+                        .user_structs
+                        .contains_key(&normalize_nominal_name(name))
+                    {
                         Some(normalize_nominal_name(name))
                     } else if let Some((owner, _method)) = name.split_once('.') {
                         self.vars

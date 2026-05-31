@@ -161,8 +161,9 @@ pub fn analysis_child_unit_key(parent_key: &str, child: &Statement, child_index:
             }
         }
         Statement::Let { name, .. } => format!("{parent_key}#{name}"),
-        Statement::Type { name, .. }
-        | Statement::Enum { name, .. } => format!("{parent_key}::{name}"),
+        Statement::Type { name, .. } | Statement::Enum { name, .. } => {
+            format!("{parent_key}::{name}")
+        }
         Statement::Impl {
             trait_name,
             type_name,
@@ -189,12 +190,7 @@ fn analysis_child_unit_for_statement(
 
     let unit_kind = match child {
         Statement::Function { .. } => AnalysisUnitKind::Function,
-        Statement::Let { .. }
-            if matches!(
-                parent_kind,
-                AnalysisUnitKind::Type
-            ) =>
-        {
+        Statement::Let { .. } if matches!(parent_kind, AnalysisUnitKind::Type) => {
             AnalysisUnitKind::Field
         }
         Statement::Type { .. } => AnalysisUnitKind::Type,
@@ -215,7 +211,7 @@ fn analysis_child_unit_for_statement(
 fn direct_analysis_children(statement: &Statement) -> Option<&[Statement]> {
     match statement {
         Statement::Type { fields, .. } => Some(fields.as_slice()),
-        | Statement::Impl { methods, .. } => Some(methods.as_slice()),
+        Statement::Impl { methods, .. } => Some(methods.as_slice()),
         _ => None,
     }
 }

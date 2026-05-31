@@ -1,7 +1,11 @@
 use super::*;
 
 impl LlvmIrGen {
-    pub(super) fn compile_if_expr(&mut self, args: &[Expression], data_type: &DataType) -> Result<LlValue> {
+    pub(super) fn compile_if_expr(
+        &mut self,
+        args: &[Expression],
+        data_type: &DataType,
+    ) -> Result<LlValue> {
         if args.len() != 3 {
             return Err(MireError::new(ErrorKind::Runtime {
                 message: "Avenys __if_expr expects 3 arguments".to_string(),
@@ -77,7 +81,8 @@ impl LlvmIrGen {
                 self.body.push(format!("{check_label}:"));
             }
 
-            let cond = self.compile_match_case_condition(&match_value, &match_data_type, pattern)?;
+            let cond =
+                self.compile_match_case_condition(&match_value, &match_data_type, pattern)?;
             self.body.push(format!(
                 "  br i1 {}, label %{body_label}, label %{fallthrough_label}",
                 cond.repr
@@ -137,7 +142,8 @@ impl LlvmIrGen {
                 self.body.push(format!("{check_label}:"));
             }
 
-            let cond = self.compile_match_case_condition(&match_value, &match_data_type, pattern)?;
+            let cond =
+                self.compile_match_case_condition(&match_value, &match_data_type, pattern)?;
             self.body.push(format!(
                 "  br i1 {}, label %{body_label}, label %{fallthrough_label}",
                 cond.repr
@@ -501,7 +507,10 @@ impl LlvmIrGen {
         Ok(previous)
     }
 
-    pub(super) fn restore_match_pattern_payloads(&mut self, previous: Vec<(String, Option<VarInfo>)>) {
+    pub(super) fn restore_match_pattern_payloads(
+        &mut self,
+        previous: Vec<(String, Option<VarInfo>)>,
+    ) {
         for (name, prior) in previous {
             if let Some(prior) = prior {
                 self.vars.insert(name, prior);
@@ -529,7 +538,11 @@ impl LlvmIrGen {
         Ok((enum_info, variant))
     }
 
-    pub(super) fn cast_enum_payload_value(&mut self, raw_value: String, target_ty: LlType) -> Result<LlValue> {
+    pub(super) fn cast_enum_payload_value(
+        &mut self,
+        raw_value: String,
+        target_ty: LlType,
+    ) -> Result<LlValue> {
         match target_ty {
             LlType::I64 => Ok(LlValue {
                 ty: LlType::I64,
@@ -610,10 +623,8 @@ impl LlvmIrGen {
         ));
         self.body.push(format!("{fail_label}:"));
         let message_value = self.string_value(message);
-        self.body.push(format!(
-            "  call void @rt_panic(ptr {})",
-            message_value.repr
-        ));
+        self.body
+            .push(format!("  call void @rt_panic(ptr {})", message_value.repr));
         self.body.push("  unreachable".to_string());
         self.body.push(format!("{ok_label}:"));
     }
@@ -716,7 +727,8 @@ impl LlvmIrGen {
         );
         let (index_ptr, saved_index) = if let Some(index_name) = index {
             let index_ptr = self.tmp();
-            self.entry_allocas.push(format!("  {index_ptr} = alloca i64"));
+            self.entry_allocas
+                .push(format!("  {index_ptr} = alloca i64"));
             self.body.push(format!("  store i64 0, ptr {index_ptr}"));
             let saved = self.vars.insert(
                 index_name.to_string(),
@@ -863,8 +875,10 @@ impl LlvmIrGen {
 
         let var_ll_ty = self.map_type(&element_type)?;
         let var_ptr = self.tmp();
-        self.entry_allocas
-            .push(format!("  {var_ptr} = alloca {}", self.ty(var_ll_ty.clone())));
+        self.entry_allocas.push(format!(
+            "  {var_ptr} = alloca {}",
+            self.ty(var_ll_ty.clone())
+        ));
         let saved = self.vars.insert(
             variable.to_string(),
             VarInfo {
@@ -899,7 +913,8 @@ impl LlvmIrGen {
         self.body.push(format!("{cond_label}:"));
         let idx_val = self.tmp();
         let cond = self.tmp();
-        self.body.push(format!("  {idx_val} = load i64, ptr {idx_ptr}"));
+        self.body
+            .push(format!("  {idx_val} = load i64, ptr {idx_ptr}"));
         self.body.push(format!(
             "  {cond} = icmp slt i64 {idx_val}, {}",
             len_val.repr
@@ -934,7 +949,8 @@ impl LlvmIrGen {
         let next_idx = self.tmp();
         self.body
             .push(format!("  {next_idx} = add i64 {idx_val}, 1"));
-        self.body.push(format!("  store i64 {next_idx}, ptr {idx_ptr}"));
+        self.body
+            .push(format!("  store i64 {next_idx}, ptr {idx_ptr}"));
         self.body.push(format!("  br label %{cond_label}"));
         self.body.push(format!("{end_label}:"));
 
@@ -952,5 +968,4 @@ impl LlvmIrGen {
         }
         Ok(())
     }
-
 }

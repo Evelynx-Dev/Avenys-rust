@@ -1,8 +1,7 @@
 use crate::error::Result;
 use crate::lexer::{Token, TokenType};
 use crate::parser::ast::{
-    DataType, EnumVariantDef, Expression, Literal, Statement, TraitMethodSig,
-    Visibility,
+    DataType, EnumVariantDef, Expression, Literal, Statement, TraitMethodSig, Visibility,
 };
 
 use super::Parser;
@@ -31,8 +30,10 @@ impl Parser {
                     TokenType::Skill => self.parse_skill_statement(visibility),
                     TokenType::Struct => self.parse_struct_statement(visibility),
                     TokenType::Enum => self.parse_enum_statement(visibility),
-                    _ => Err(self
-                        .error("Expected fn, type, skill, struct, or enum after visibility")),
+                    _ => {
+                        Err(self
+                            .error("Expected fn, type, skill, struct, or enum after visibility"))
+                    }
                 }
             }
             TokenType::Fn => self.parse_fn_statement(Visibility::Private),
@@ -167,7 +168,8 @@ impl Parser {
 
         if matches!(
             target,
-            crate::parser::ast::AssignmentTarget::Field(_) | crate::parser::ast::AssignmentTarget::Index { .. }
+            crate::parser::ast::AssignmentTarget::Field(_)
+                | crate::parser::ast::AssignmentTarget::Index { .. }
         ) {
             return Ok(Statement::Assignment {
                 target,
@@ -691,7 +693,8 @@ impl Parser {
             }
             let opcode = self.expect_ident()?;
             let mut operands = Vec::new();
-            while !self.check(TokenType::Newline) && !self.check_block_close() && !self.is_at_end() {
+            while !self.check(TokenType::Newline) && !self.check_block_close() && !self.is_at_end()
+            {
                 operands.push(self.advance());
             }
             if self.check(TokenType::Newline) {

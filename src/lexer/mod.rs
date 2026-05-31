@@ -506,9 +506,8 @@ impl Lexer {
 
             if c == 'r' && (self.peek(1) == Some('"') || self.peek(1) == Some('#')) {
                 let value = self.read_raw_string()?;
-                self.tokens.push(
-                    Token::new(TokenType::StrLit, self.line, self.column).with_value(value),
-                );
+                self.tokens
+                    .push(Token::new(TokenType::StrLit, self.line, self.column).with_value(value));
                 continue;
             }
 

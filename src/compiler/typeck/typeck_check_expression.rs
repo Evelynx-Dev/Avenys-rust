@@ -5,12 +5,9 @@ use crate::compiler::typeck::typeck_returns::{
     implicit_return_expression_mut, statements_contain_explicit_return,
 };
 use crate::compiler::typeck::typeck_type_parsing::data_type_name_for_diag;
-use crate::compiler::typeck::{type_error, type_error_at, TypeChecker};
+use crate::compiler::typeck::{TypeChecker, type_error, type_error_at};
 impl TypeChecker {
-    pub(super) fn check_expression(
-        &mut self,
-        expression: &mut Expression,
-    ) -> Result<DataType> {
+    pub(super) fn check_expression(&mut self, expression: &mut Expression) -> Result<DataType> {
         let (line, column) = Self::expression_location(expression);
         self.current_line = line;
         self.current_column = column;
@@ -97,7 +94,9 @@ impl TypeChecker {
                 }
                 if name == "call" {
                     if args.is_empty() {
-                        return Err(type_error("call expects at least a callback argument".to_string()));
+                        return Err(type_error(
+                            "call expects at least a callback argument".to_string(),
+                        ));
                     }
                     let (callback_expr, callback_args) = args
                         .split_first_mut()
@@ -140,9 +139,8 @@ impl TypeChecker {
                                     callback_args.len()
                                 )));
                             }
-                            for (actual_expr, expected_ty) in callback_args
-                                .iter_mut()
-                                .zip(callback_sig.params.iter())
+                            for (actual_expr, expected_ty) in
+                                callback_args.iter_mut().zip(callback_sig.params.iter())
                             {
                                 let actual_ty = self.check_expression(actual_expr)?;
                                 if !self.is_assignable(expected_ty, &actual_ty) {
@@ -210,13 +208,16 @@ impl TypeChecker {
                         }
                         callback_expr => {
                             let callback_ty = self.check_expression(callback_expr)?;
-                            if callback_ty != DataType::Function && callback_ty != DataType::Unknown {
+                            if callback_ty != DataType::Function && callback_ty != DataType::Unknown
+                            {
                                 return Err(type_error(format!(
                                     "call expects function callback, got {:?}",
                                     callback_ty
                                 )));
                             }
-                            if let Some(callback_sig) = self.function_signature_for_expr(callback_expr) {
+                            if let Some(callback_sig) =
+                                self.function_signature_for_expr(callback_expr)
+                            {
                                 if callback_sig.params.len() != callback_args.len() {
                                     return Err(type_error(format!(
                                         "call callback expression expects {} argument(s), got {}",
@@ -224,9 +225,8 @@ impl TypeChecker {
                                         callback_args.len()
                                     )));
                                 }
-                                for (actual_expr, expected_ty) in callback_args
-                                    .iter_mut()
-                                    .zip(callback_sig.params.iter())
+                                for (actual_expr, expected_ty) in
+                                    callback_args.iter_mut().zip(callback_sig.params.iter())
                                 {
                                     let actual_ty = self.check_expression(actual_expr)?;
                                     if !self.is_assignable(expected_ty, &actual_ty) {
@@ -281,7 +281,8 @@ impl TypeChecker {
                     return Ok(resolved);
                 }
 
-                if let Some(resolved) = self.infer_lifecycle_call(name, args, &arg_types, data_type)?
+                if let Some(resolved) =
+                    self.infer_lifecycle_call(name, args, &arg_types, data_type)?
                 {
                     return Ok(resolved);
                 }
@@ -308,18 +309,17 @@ impl TypeChecker {
                     nominal_type_args_from_name
                 };
                 if let Some(class_sig) = self.classes.get(base_name).cloned() {
-                    let bindings = self.bindings_for_nominal_type_args(&class_sig.type_params, &nominal_type_args)?;
+                    let bindings = self.bindings_for_nominal_type_args(
+                        &class_sig.type_params,
+                        &nominal_type_args,
+                    )?;
                     self.validate_nominal_generic_bounds(
                         base_name,
                         &class_sig.type_param_bounds,
                         &bindings,
                     )?;
                     self.check_class_constructor_call_with_bindings(
-                        name,
-                        &class_sig,
-                        &bindings,
-                        args,
-                        &arg_types,
+                        name, &class_sig, &bindings, args, &arg_types,
                     )?;
                     let typed_name = if nominal_type_args.is_empty() {
                         name.clone()
@@ -344,7 +344,10 @@ impl TypeChecker {
                         .split_once('.')
                         .map(|(n, _)| Self::split_nominal_type_args(n).1)
                         .unwrap_or_default();
-                    let bindings = self.bindings_for_nominal_type_args(&variant_sig.type_params, &call_type_args)?;
+                    let bindings = self.bindings_for_nominal_type_args(
+                        &variant_sig.type_params,
+                        &call_type_args,
+                    )?;
                     let enum_base = canonical_variant
                         .split_once('.')
                         .map(|(e, _)| e)
@@ -476,8 +479,10 @@ impl TypeChecker {
                     {
                         let (base_name, type_args) = Self::split_nominal_type_args(&struct_name);
                         if let Some(class_sig) = self.classes.get(base_name) {
-                            let bindings = self
-                                .bindings_for_nominal_type_args(&class_sig.type_params, &type_args)?;
+                            let bindings = self.bindings_for_nominal_type_args(
+                                &class_sig.type_params,
+                                &type_args,
+                            )?;
                             if let Some(field) = class_sig.fields.iter().find(|f| f.name == *member)
                             {
                                 let resolved_field =
@@ -522,7 +527,8 @@ impl TypeChecker {
                 variant_name,
                 data_type,
             } => {
-                let full_name = Self::canonical_enum_variant_name(&format!("{}.{}", enum_name, variant_name));
+                let full_name =
+                    Self::canonical_enum_variant_name(&format!("{}.{}", enum_name, variant_name));
                 if !self.enum_variants.contains_key(&full_name) {
                     return Err(type_error(format!("Unknown enum variant '{}'", full_name)));
                 }
@@ -537,11 +543,10 @@ impl TypeChecker {
             } => {
                 let typed_name = format!("{}.{}", enum_name, variant_name);
                 let full_name = Self::canonical_enum_variant_name(&typed_name);
-                let variant_sig = self
-                    .enum_variants
-                    .get(&full_name)
-                    .cloned()
-                    .ok_or_else(|| type_error(format!("Unknown enum variant '{}'", typed_name)))?;
+                let variant_sig =
+                    self.enum_variants.get(&full_name).cloned().ok_or_else(|| {
+                        type_error(format!("Unknown enum variant '{}'", typed_name))
+                    })?;
                 self.normalize_enum_variant_payloads(&typed_name, &variant_sig, payloads)?;
                 *data_type = DataType::EnumNamed(enum_name.clone());
                 Ok(DataType::EnumNamed(enum_name.clone()))
@@ -718,7 +723,8 @@ impl TypeChecker {
                     && !matches!(current_return, DataType::Result { .. })
                 {
                     return Err(type_error(
-                        "'?' operator can only be used in a function that returns result[T, E]".to_string(),
+                        "'?' operator can only be used in a function that returns result[T, E]"
+                            .to_string(),
                     ));
                 }
                 if *data_type == DataType::Unknown {

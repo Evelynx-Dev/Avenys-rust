@@ -112,7 +112,6 @@ impl TypeChecker {
         )
     }
 
-
     pub(super) fn is_logical_operator(operator: &str) -> bool {
         matches!(operator, "&&" | "||")
     }
@@ -515,8 +514,16 @@ impl TypeChecker {
         }
 
         match (expected, actual) {
-            (DataType::Result { ok: expected_ok, err: expected_err },
-             DataType::Result { ok: actual_ok, err: actual_err }) => {
+            (
+                DataType::Result {
+                    ok: expected_ok,
+                    err: expected_err,
+                },
+                DataType::Result {
+                    ok: actual_ok,
+                    err: actual_err,
+                },
+            ) => {
                 return self.is_assignable(expected_ok, actual_ok)
                     && self.is_assignable(expected_err, actual_err);
             }
@@ -554,5 +561,4 @@ impl TypeChecker {
 
         Self::is_numeric(expected) && Self::is_numeric(actual)
     }
-
 }

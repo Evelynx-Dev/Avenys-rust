@@ -37,6 +37,7 @@ int     pal_env_chdir(const char *path);
 char   *pal_proc_run(const char *cmd);
 char   *pal_proc_exec(const char *cmd);
 char   *pal_proc_shell(const char *cmd);
+int64_t pal_proc_spawn(const char *cmd);
 int64_t pal_proc_wait(int64_t pid);
 int     pal_proc_kill(int64_t pid);
 void    pal_proc_exit(int64_t status);

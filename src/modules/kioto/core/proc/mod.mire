@@ -4,13 +4,15 @@ extern fn pal_io_print_err: (msg :str) lib "c"
 extern fn pal_proc_run: (cmd :str) :str lib "c"
 extern fn pal_proc_exec: (cmd :str) :str lib "c"
 extern fn pal_proc_shell: (cmd :str) :str lib "c"
+extern fn pal_proc_spawn: (cmd :str) :i64 lib "c"
 extern fn pal_proc_wait: (pid :i64) :i64 lib "c"
 extern fn pal_proc_kill: (pid :i64) lib "c"
 extern fn pal_proc_exit: (status :i64) lib "c"
 extern fn pal_proc_exists: (pid :i64) :i64 lib "c"
 
-pub fn run: (cmd :str, args :vec[str]) :i64 { return 0 }
-pub fn spawn: (cmd :str, args :vec[str]) :i64 { return 0 }
+pub fn run: (cmd :str, args :vec[str]) :i64 { return pal_proc_spawn(cmd) }
+pub fn spawn: (cmd :str, args :vec[str]) :i64 { return pal_proc_spawn(cmd) }
+pub fn spawn_shell: (cmd :str) :i64 { return pal_proc_spawn(cmd) }
 pub fn pipe: (commands :vec[str]) :str { return "" }
 pub fn shell: (cmd :str) :str {
     return pal_proc_shell(cmd)
@@ -29,8 +31,8 @@ pub fn exit: (code :i64) {
     use pal_proc_exit(code)
 }
 pub fn err: () :str { return "" }
-pub fn exec: (cmd :str, args :vec[str]) :i64 { return 0 }
-pub fn exec_bg: (cmd :str, args :vec[str]) :i64 { return 0 }
+pub fn exec: (cmd :str, args :vec[str]) :i64 { return pal_proc_spawn(cmd) }
+pub fn exec_bg: (cmd :str, args :vec[str]) :i64 { return pal_proc_spawn(cmd) }
 pub fn kill: (pid :i64) {
     use pal_proc_kill(pid)
 }

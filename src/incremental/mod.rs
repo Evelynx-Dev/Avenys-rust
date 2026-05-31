@@ -4,8 +4,7 @@ use crate::error::{ErrorKind, MireError, Result};
 use crate::parser::Program;
 use crate::parser::ast::{
     AssignmentTarget, DataType, EnumVariantDef, Expression, FunctionDef, Identifier, Literal,
-    MireValue, QueryBinding, QueryGroup, QueryJoin, QueryOp, Statement, TraitMethodSig,
-    Visibility,
+    MireValue, QueryBinding, QueryGroup, QueryJoin, QueryOp, Statement, TraitMethodSig, Visibility,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -32,9 +31,11 @@ pub use hasher::FxHasher;
 use hashing::stable_statement_hash;
 mod serialize;
 mod utils;
-use serialize::{append_blob, cache_runtime_err, decode_cache_db, encode_cache_db, now_epoch_ms, read_blob};
+use serialize::{
+    append_blob, cache_runtime_err, decode_cache_db, encode_cache_db, now_epoch_ms, read_blob,
+};
 use utils::{analysis_cache_key, build_cache_key, manifest_cache_settings, normalize_path_key};
-pub use utils::{cache_file_path, source_hash, build_fingerprint, statement_export_name};
+pub use utils::{build_fingerprint, cache_file_path, source_hash, statement_export_name};
 
 const CACHE_DIR_NAME: &str = ".cache";
 const CACHE_FILE_NAME: &str = "incremental.bin";
@@ -613,11 +614,7 @@ impl IncrementalCache {
         }
     }
 
-    pub fn store_analysis(
-        &mut self,
-        source_path: &Path,
-        program: &Program,
-    ) -> Result<()> {
+    pub fn store_analysis(&mut self, source_path: &Path, program: &Program) -> Result<()> {
         if !self.settings.analysis_cache {
             return Ok(());
         }
@@ -878,9 +875,8 @@ impl IncrementalCache {
         }
 
         for entry in self.db.files.values_mut() {
-            if let Some((old_start, _old_end, new_start)) = relocated_ranges
-                .iter()
-                .find(|(old_start, old_end, _)| {
+            if let Some((old_start, _old_end, new_start)) =
+                relocated_ranges.iter().find(|(old_start, old_end, _)| {
                     entry.blob_offset >= *old_start
                         && entry.blob_offset.saturating_add(entry.blob_len) <= *old_end
                 })
@@ -889,9 +885,8 @@ impl IncrementalCache {
             }
         }
         for entry in self.db.analyses.values_mut() {
-            if let Some((old_start, _old_end, new_start)) = relocated_ranges
-                .iter()
-                .find(|(old_start, old_end, _)| {
+            if let Some((old_start, _old_end, new_start)) =
+                relocated_ranges.iter().find(|(old_start, old_end, _)| {
                     entry.blob_offset >= *old_start
                         && entry.blob_offset.saturating_add(entry.blob_len) <= *old_end
                 })

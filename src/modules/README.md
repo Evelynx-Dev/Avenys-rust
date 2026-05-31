@@ -1,39 +1,43 @@
 # Built-in Modules
 
-This directory holds Mire's standard library (`std/`).
+This directory holds Mire's bundled Kioto standard library.
 
 ## Layout
 
 ```
 src/modules/
-├── std/                  # Standard library (canonical)
+├── kioto/                # Standard library surface
 │   ├── mod.mire          # Aggregator: imports all sections
-│   ├── cpu/mod.mire
-│   ├── dicts/mod.mire
-│   ├── env/mod.mire
-│   ├── fs/mod.mire
-│   ├── gpu/mod.mire
-│   ├── lists/mod.mire
-│   ├── math/mod.mire
-│   ├── mem/mod.mire
-│   ├── proc/mod.mire
-│   ├── strings/mod.mire
-│   ├── term/mod.mire
-│   └── time/mod.mire
-├── kioto/                # DEPRECATED — use std/ instead
-│   └── ...
+│   ├── core/
+│   │   ├── async/mod.mire
+│   │   ├── cpu/mod.mire
+│   │   ├── dicts/mod.mire
+│   │   ├── env/mod.mire
+│   │   ├── fs/mod.mire
+│   │   ├── gpu/mod.mire
+│   │   ├── lists/mod.mire
+│   │   ├── math/mod.mire
+│   │   ├── mem/mod.mire
+│   │   ├── proc/mod.mire
+│   │   ├── strings/mod.mire
+│   │   ├── term/mod.mire
+│   │   ├── time/mod.mire
+│   │   └── ...
+│   ├── ext/
+│   │   └── ...
 └── README.md
 ```
 
 ## How externs work
 
-Each `std/<section>/mod.mire` declares `extern fn` signatures that map to
-C functions prefixed `__kioto_*`. Those are implemented in
-`src/runtime/kioto_exports.c`, which delegates to `rt_*` (runtime core) or
-`pal_*` (platform layer) under the hood.
+Kioto modules declare `extern fn` signatures that map directly to `rt_*`
+runtime functions or `pal_*` platform functions. The runtime core owns
+platform-independent data structures and strings; PAL owns filesystem, process,
+time, environment, CPU, memory, GPU, terminal, and I/O behavior.
 
-This is a temporary bridge. Eventually the `std/` modules will call `rt_*`
-and `pal_*` directly, at which point `kioto_exports.c` gets deleted.
+Higher-level modules stay in Mire where possible. For example, `core/async`
+currently exposes task-result helpers plus process-backed `spawn`/`join`
+without adding new language syntax.
 
 ## Import Management
 
@@ -50,4 +54,5 @@ kioto = { version = "0.2" }
 my-lib = { path = "./lib/my-lib" }
 ```
 
-Use `mire import <module> [--version <ver>] [--path <path>]` to add entries.
+Use `mire import <module> [--version <ver>] [--path <path>] [--json]` to add
+entries. The default manifest is `owl.toml`.

@@ -45,7 +45,12 @@ impl TypeChecker {
         self.bind_function_value_signature(name, data_type, value);
     }
 
-    fn bind_function_alias(&mut self, name: &str, data_type: &DataType, value: Option<&Expression>) {
+    fn bind_function_alias(
+        &mut self,
+        name: &str,
+        data_type: &DataType,
+        value: Option<&Expression>,
+    ) {
         let resolved_alias = if *data_type == DataType::Function {
             value.and_then(|expr| self.function_name_for_expr(expr))
         } else {
@@ -131,7 +136,12 @@ impl TypeChecker {
         None
     }
 
-    pub(super) fn bind_struct_name(&mut self, name: &str, data_type: &DataType, value: Option<&Expression>) {
+    pub(super) fn bind_struct_name(
+        &mut self,
+        name: &str,
+        data_type: &DataType,
+        value: Option<&Expression>,
+    ) {
         let struct_name = data_type
             .struct_name()
             .map(ToOwned::to_owned)
@@ -384,5 +394,4 @@ impl TypeChecker {
             other => other.clone(),
         }
     }
-
 }

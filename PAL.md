@@ -7,16 +7,10 @@ Mire Program
      │
      ▼
 ┌─────────────────────┐
-│  std/ (Kioto)       │  Higher-level logic (reverse, unique, filter, ...)
+│  std/ (Kioto)       │  Higher-level logic (async, iter, reverse, ...)
 │  Core + Extensions  │  Implemented in Mire where possible
 └─────────┬───────────┘
-          │ extern fn __kioto_*
-          ▼
-┌─────────────────────┐
-│  kioto_exports.c    │  TEMP shim: __kioto_* → rt_* / pal_*
-│  (C, temporary)     │  Will be deleted once std/ is ported to rt_*/pal_*
-└─────────┬───────────┘
-          │ direct calls
+          │ extern fn rt_* / pal_*
           ▼
 ┌─────────────────────┐
 │  Runtime Core (C)   │  Platform-independent: managed, strings, lists, dicts
@@ -34,11 +28,9 @@ Mire Program
 └─────────────────────┘
 ```
 
-The LLVM codegen emits `rt_*()` and `pal_*()` calls directly. The old
-`@mire_*` symbols have been renamed to `@rt_*` / `@pal_*`. kioto_exports.c
-is a temporary bridge for the `__kioto_*` externs that std/ still uses.
-Once std/ modules are updated to call `rt_*` / `pal_*` directly (or are
-replaced by inline Mire logic), the shim gets deleted.
+The LLVM codegen and Kioto modules emit `rt_*()` and `pal_*()` calls directly.
+The old `@mire_*` and `__kioto_*` runtime bridges have been removed; `@mire_main`
+is the only remaining `mire`-prefixed LLVM entry point.
 
 ## Directory Layout
 
@@ -50,7 +42,6 @@ src/
     strings.c               # String ops (concat, split, substr, contains, pad, ...)
     lists.c                 # List ops (create, push, pop, slice, concat)
     dicts.c                 # Dict ops (get, set, keys, values)
-    kioto_exports.c         # TEMP: __kioto_* wrappers → rt_*() / pal_*()
 
   pal/
     pal.h                   # Umbrella header, platform selection
@@ -85,7 +76,7 @@ All declared in `pal.h`. Each backend implements the same signatures.
 |--------|-----------|
 | FS | `pal_fs_write`, `pal_fs_append`, `pal_fs_read`, `pal_fs_copy`, `pal_fs_move`, `pal_fs_delete`, `pal_fs_mkdir`, `pal_fs_rmdir`, `pal_fs_exists`, `pal_fs_is_dir`, `pal_fs_size`, `pal_fs_list`, `pal_fs_join`, `pal_fs_dir`, `pal_fs_name`, `pal_fs_ext` |
 | Env | `pal_env_get`, `pal_env_set`, `pal_env_all`, `pal_env_cwd`, `pal_env_chdir` |
-| Proc | `pal_proc_run`, `pal_proc_exec`, `pal_proc_shell`, `pal_proc_wait`, `pal_proc_kill`, `pal_proc_exit`, `pal_proc_exists` |
+| Proc | `pal_proc_run`, `pal_proc_exec`, `pal_proc_shell`, `pal_proc_spawn`, `pal_proc_wait`, `pal_proc_kill`, `pal_proc_exit`, `pal_proc_exists` |
 | Time | `pal_time_unix_ms`, `pal_time_unix_ns`, `pal_time_since_ms`, `pal_time_since_ns`, `pal_time_sleep_ms`, `pal_time_sleep_ns`, `pal_time_mark`, `pal_time_elapsed_ms`, `pal_time_elapsed_ns` |
 | CPU | `pal_cpu_time_ns`, `pal_cpu_time_ms`, `pal_cpu_mark`, `pal_cpu_elapsed_ms`, `pal_cpu_elapsed_ns`, `pal_cpu_count`, `pal_cpu_freq_mhz`, `pal_cpu_cycles_est`, `pal_cpu_loadavg`, `pal_cpu_snapshot` |
 | Mem | `pal_mem_used`, `pal_mem_total`, `pal_mem_free`, `pal_mem_available`, `pal_mem_percent`, `pal_mem_process_bytes`, `pal_mem_format`, `pal_mem_snapshot` |
@@ -102,10 +93,10 @@ the migration.
 ## What's Done
 
 - Phase 0: Clippy warnings fixed
-- Phase A: runtime_support.c split into Runtime Core + PAL + kioto_exports.c
+- Phase A: runtime_support.c split into Runtime Core + PAL
 - Phase B: All @mire_* symbols renamed to @rt_* / @pal_* in LLVM codegen.
   kioto_abi.c deleted. Build clean, 127 regressions pass.
-- kioto_exports.c is the only remaining bridge (temporary).
+- Kioto modules now call `rt_*` / `pal_*` directly.
 
 ## WASM Backend
 
@@ -120,15 +111,11 @@ Select the WASM backend at build time:
 MIRE_PAL=wasm cargo run -- run hello.mire
 ```
 
-For WASM cross-compilation, pass `--target` to clang (not yet wired
-automatically):
-
-```bash
-MIRE_PAL=wasm clang --target=wasm32-unknown-wasi ...
-```
+For WASM cross-compilation, Avenys wires clang with `--target=wasm32-wasi`
+when `MIRE_PAL=wasm`.
 
 ## What's Next
 
-- Phase C: Update std/ modules to call rt_*/pal_* directly, delete kioto_exports.c
-- Phase D: Move more C logic into Mire (kioto core modules)
-- Phase E: Remove std/, promote kioto as sole library
+- Phase C: expand WASI-backed PAL behavior beyond safe stubs.
+- Phase D: Move more C logic into Mire (kioto core modules).
+- Phase E: Promote Kioto as the sole library surface.

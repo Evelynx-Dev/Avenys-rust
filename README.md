@@ -2,7 +2,7 @@
 
 Mire is a compiled, statically typed programming language with ownership-oriented memory safety checks and an LLVM-based backend.
 
-Current compiler crate version: `3.11.0`.
+Current compiler crate version: `3.11.1`.
 
 ## Status
 
@@ -10,8 +10,8 @@ Current compiler crate version: `3.11.0`.
 - Compiler pipeline: lexer, parser, type checker, semantic analysis, borrow checker, LLVM lowering
 - Incremental compilation: enabled (cache, reuse, LRU pruning)
 - Optimization profiles: `debug/release` + `-O0/-O1/-O2/-O3/-Os/-Oz`
-- Public CLI surface: `run`, `build`, `check`, `debug`, `import`
-- Standard library (`std/`): provides fs, env, strings, lists, dicts, time, cpu, mem, proc, gpu, term, math, io via `__kioto_*` externs bridged through `kioto_exports.c` (temporary shim, being phased out).
+- Public CLI surface: `run`, `build`, `check`, `debug`, `test`, `import`
+- Standard library (`std/` / Kioto): provides fs, env, strings, lists, dicts, time, cpu, mem, proc, async, gpu, term, math, and io via direct `rt_*` / `pal_*` externs.
 - LLVM codegen emits `rt_*` / `pal_*` calls directly — the old `@mire_*` symbols are gone.
 - PAL (Platform Abstraction Layer): `src/pal/` with linux backend. WASM backend in progress.
 - Runtime core: `src/runtime/` — platform-independent managed strings, lists, dicts.
@@ -32,6 +32,7 @@ mire build [file] [options]               # Compile to binary
 mire check [file] [options]               # Type-check without codegen
 mire debug [file] [options]               # Debug compilation
 mire import <module> [options]            # Add import to owl.toml
+mire test [paths...] [options]            # Compile/run .mire tests
 ```
 
 Default profile is `debug` (`-O0`). Use `--release` or `-O2` for optimized builds.
@@ -51,6 +52,7 @@ mire build my_program.mire --release
 # Add a module dependency
 mire import kioto --version 0.2
 mire import ./local-lib --path lib/local-lib
+mire import kioto --json
 ```
 
 ## Documentation

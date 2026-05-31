@@ -338,7 +338,11 @@ pub(super) fn data_type_name(data_type: &DataType) -> String {
         DataType::Map {
             key_type,
             value_type,
-        } => format!("map[{} {}]", data_type_name(key_type), data_type_name(value_type)),
+        } => format!(
+            "map[{} {}]",
+            data_type_name(key_type),
+            data_type_name(value_type)
+        ),
         DataType::Array { element_type, size } => {
             format!("arr[{} {}]", data_type_name(element_type), size)
         }

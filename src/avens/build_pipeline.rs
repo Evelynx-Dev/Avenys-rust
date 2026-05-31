@@ -47,11 +47,13 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
                 files.push(path.to_string_lossy().to_string());
             }
         }
-        for entry in std::fs::read_dir(manifest_dir.join(format!("src/pal/{pal_backend}"))).map_err(|err| {
-            MireError::new(ErrorKind::Runtime {
-                message: format!("Could not read src/pal/{pal_backend}: {}", err),
-            })
-        })? {
+        for entry in std::fs::read_dir(manifest_dir.join(format!("src/pal/{pal_backend}")))
+            .map_err(|err| {
+                MireError::new(ErrorKind::Runtime {
+                    message: format!("Could not read src/pal/{pal_backend}: {}", err),
+                })
+            })?
+        {
             let entry = entry.map_err(|err| {
                 MireError::new(ErrorKind::Runtime {
                     message: format!("Could not read entry: {}", err),
@@ -76,11 +78,8 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
     };
     let cache_settings = CacheSettings::resolve_for(source_path, options.cache)?;
     let mut cache = IncrementalCache::load_with_settings(source_path, cache_settings)?;
-    let loaded = load_program_with_metadata_with_settings(
-        source_path,
-        cache_settings,
-        options.import_mode,
-    )?;
+    let loaded =
+        load_program_with_metadata_with_settings(source_path, cache_settings, options.import_mode)?;
     if options.debug_dump
         && let Some(report) = cache.analysis_invalidation_report(source_path, &loaded.program)
     {
@@ -254,7 +253,15 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
     }
 
     if options.emit_binary {
-        compile_binary_from_ir(&final_ir, &c_source_files, &binary_path, options.opt_level, &extern_libs, &manifest_dir, &pal_backend)?;
+        compile_binary_from_ir(
+            &final_ir,
+            &c_source_files,
+            &binary_path,
+            options.opt_level,
+            &extern_libs,
+            &manifest_dir,
+            &pal_backend,
+        )?;
     }
 
     cache.store_build(

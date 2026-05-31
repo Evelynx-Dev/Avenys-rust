@@ -151,7 +151,9 @@ impl DiagnosticCode {
             DiagnosticCode::W0001 | DiagnosticCode::W0002 | DiagnosticCode::W0003 => {
                 Some(WarningCategory::Unused)
             }
-            DiagnosticCode::W0004 | DiagnosticCode::W0005 | DiagnosticCode::W0020
+            DiagnosticCode::W0004
+            | DiagnosticCode::W0005
+            | DiagnosticCode::W0020
             | DiagnosticCode::W0021 => Some(WarningCategory::Type),
             DiagnosticCode::W0007
             | DiagnosticCode::W0008
