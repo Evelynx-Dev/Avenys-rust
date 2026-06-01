@@ -23,6 +23,22 @@ char *rt_string_concat(const char *left, const char *right) {
     return out;
 }
 
+char *rt_strings_repeat(const char *input, int64_t count) {
+    if (!input || count <= 0) return rt_managed_from_slice("", 0);
+    size_t len = strlen(input);
+    if (len == 0) return rt_managed_from_slice("", 0);
+    if (count == 1) return rt_managed_from_slice(input, len);
+
+    size_t repeat_count = (size_t)count;
+    if (len > SIZE_MAX / repeat_count) return rt_managed_from_slice("", 0);
+    size_t total = len * repeat_count;
+    char *out = rt_managed_alloc(total);
+    if (!out) return rt_managed_from_slice("", 0);
+    for (size_t i = 0; i < repeat_count; i++) memcpy(out + (i * len), input, len);
+    out[total] = '\0';
+    return out;
+}
+
 char *rt_string_append_owned(char *value, const char *suffix) {
     if (value == NULL) return rt_string_copy(suffix);
     if (suffix == NULL) return value;
@@ -320,6 +336,14 @@ char *rt_cpu_elapsed_ms_str(int64_t start_ns) {
 }
 
 int64_t rt_strings_len(const char *s) { return s ? (int64_t)strlen(s) : 0; }
+
+int64_t rt_strings_index_of(const char *s, const char *sub) {
+    if (!s || !sub) return -1;
+    if (*sub == '\0') return 0;
+    const char *pos = strstr(s, sub);
+    if (!pos) return -1;
+    return (int64_t)(pos - s);
+}
 
 char *rt_strings_to_upper(const char *s) { return rt_string_to_upper(s); }
 char *rt_strings_to_lower(const char *s) { return rt_string_to_lower(s); }

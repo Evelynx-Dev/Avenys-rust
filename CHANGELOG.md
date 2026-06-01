@@ -2,6 +2,22 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.11.3] - 2026-06-02
+
+### Added
+- Kioto `strings` and `lists` now use reference-based read paths for shared
+  bindings, with runtime C helpers for `strings.index_of`, `strings.repeat`,
+  `lists.contains`, `lists.index_of`, `lists.reverse`, and `lists.unique`.
+- Regression coverage for Kioto reference APIs on `strings` and `lists`.
+
+### Changed
+- `strings.repeat` now lowers through `rt_strings_repeat` instead of an inline
+  Mire loop, avoiding reference-vs-value type drift in the wrapper layer.
+- `lists` read-only wrappers now borrow `&list` / `&vec[i64]` where appropriate
+  so repeated reads do not consume the source binding.
+- Kioto module docs now reflect the runtime-backed `strings` and `lists`
+  surface.
+
 ## [3.11.2] - 2026-05-31
 
 ### Added

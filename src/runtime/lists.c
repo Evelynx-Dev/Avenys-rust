@@ -194,3 +194,58 @@ int64_t rt_lists_last(void *list) {
     if (len <= 0) return 0;
     return rt_list_get_i64(list, len - 1);
 }
+
+int64_t rt_lists_contains_i64(void *list, int64_t needle) {
+    int64_t len = rt_list_len(list);
+    int64_t *data = (int64_t *)list + 1;
+    for (int64_t i = 0; i < len; i++) {
+        if (data[i] == needle) return 1;
+    }
+    return 0;
+}
+
+int64_t rt_lists_index_of_i64(void *list, int64_t needle) {
+    int64_t len = rt_list_len(list);
+    int64_t *data = (int64_t *)list + 1;
+    for (int64_t i = 0; i < len; i++) {
+        if (data[i] == needle) return i;
+    }
+    return -1;
+}
+
+void *rt_lists_reverse(void *list) {
+    int64_t len = rt_list_len(list);
+    void *result = rt_list_create(len > 0 ? len : 4, 8);
+    if (!result) return NULL;
+    int64_t *out = (int64_t *)result + 1;
+    int64_t *data = (int64_t *)list + 1;
+    for (int64_t i = 0; i < len; i++) {
+        out[i] = data[len - 1 - i];
+    }
+    ((int64_t *)result)[0] = len;
+    return result;
+}
+
+void *rt_lists_unique(void *list) {
+    int64_t len = rt_list_len(list);
+    void *result = rt_list_create(len > 0 ? len : 4, 8);
+    if (!result) return NULL;
+    int64_t *data = (int64_t *)list + 1;
+    int64_t *out = (int64_t *)result + 1;
+    int64_t out_len = 0;
+    for (int64_t i = 0; i < len; i++) {
+        int64_t value = data[i];
+        int seen = 0;
+        for (int64_t j = 0; j < out_len; j++) {
+            if (out[j] == value) {
+                seen = 1;
+                break;
+            }
+        }
+        if (!seen) {
+            out[out_len++] = value;
+        }
+    }
+    ((int64_t *)result)[0] = out_len;
+    return result;
+}

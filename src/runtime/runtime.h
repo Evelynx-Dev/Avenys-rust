@@ -32,6 +32,7 @@ size_t rt_string_growth_cap(size_t min_cap);
 // ── String operations ────────────────────────────────────────────────
 char *rt_string_copy(const char *value);
 char *rt_string_concat(const char *left, const char *right);
+char *rt_strings_repeat(const char *input, int64_t count);
 char *rt_string_append_owned(char *value, const char *suffix);
 
 char *rt_i64_to_string(int64_t value);
@@ -119,6 +120,7 @@ char   *rt_strings_pad_right(const char *input, int64_t width, const char *pad);
 char   *rt_strings_trim(const char *input);
 char   *rt_strings_split_list(const char *input, const char *delimiter);
 char   *rt_strings_join(char **parts, int64_t count, const char *delimiter);
+int64_t rt_strings_index_of(const char *s, const char *sub);
 
 // ── I/O helpers ──────────────────────────────────────────────────────
 char   *rt_read_line(const char *prompt);
@@ -155,6 +157,10 @@ void   *rt_lists_sort(void *list);
 char   *rt_lists_join_list(void *list, const char *sep);
 int64_t rt_lists_first(void *list);
 int64_t rt_lists_last(void *list);
+int64_t rt_lists_contains_i64(void *list, int64_t needle);
+int64_t rt_lists_index_of_i64(void *list, int64_t needle);
+void   *rt_lists_reverse(void *list);
+void   *rt_lists_unique(void *list);
 
 // ── Dicts module aliases (rt_dicts_*) ─────────────────────────────────
 int64_t rt_dicts_len(void *dict);

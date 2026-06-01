@@ -39,6 +39,11 @@ Higher-level modules stay in Mire where possible. For example, `core/async`
 currently exposes task-result helpers plus process-backed `spawn`/`join`
 without adding new language syntax.
 
+The read-heavy Kioto surfaces are now biased toward shared references:
+`core/strings` and the read paths in `core/lists` borrow `&str`, `&list`, and
+`&vec[i64]` so repeated reads avoid accidental moves while still lowering
+through the existing `rt_*` runtime ABI.
+
 ## Import Management
 
 Dependencies go in `owl.toml` under `[imports]`:

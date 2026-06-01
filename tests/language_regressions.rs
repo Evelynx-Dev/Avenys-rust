@@ -1780,6 +1780,88 @@ fn strings_split_preserves_empty_segments() {
 }
 
 #[test]
+fn kioto_strings_reference_api_reuses_the_same_binding() {
+    let root = make_temp_project_root("mire_strings_reference_api");
+    let source_path = root.join("strings_reference_api.mire");
+    fs::write(
+        root.join("owl.toml"),
+        "[project]\nname = \"strings-reference-api\"\nversion = \"0.1.0\"\nentry = \"strings_reference_api.mire\"\n",
+    )
+    .expect("write project");
+    fs::write(
+        &source_path,
+        "import std\n\npub fn main: () {\n    set text = \"ab\" :str\n    set len1 = strings.len(text)\n    set upper = strings.upper(text)\n    set repeated = strings.repeat(text 3)\n    set len2 = strings.len(text)\n    use dasu(\"{len1}-{upper}-{repeated}-{len2}\")\n}\n",
+    )
+    .expect("write source");
+
+    let build = compile_file_with_avenys(
+        &source_path,
+        &BuildOptions {
+            mode: BuildMode::Debug,
+            opt_level: OptLevel::O0,
+            debug_dump: false,
+            output: None,
+            emit_binary: true,
+            persist_ir: true,
+            import_mode: mire::ImportMode::Legacy,
+            cache: Default::default(),
+            warning_filter: mire::error::diagnostic::WarningFilter::Default,
+            deny_warnings: std::collections::HashSet::new(),
+            module_paths: vec![],
+        },
+    )
+    .expect("strings reference api should compile");
+
+    let output = Command::new(&build.binary_path)
+        .output()
+        .expect("run binary");
+    assert!(output.status.success(), "binary should run successfully");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("2-AB-ababab-2"), "{stdout}");
+}
+
+#[test]
+fn kioto_lists_reference_api_reuses_the_same_binding() {
+    let root = make_temp_project_root("mire_lists_reference_api");
+    let source_path = root.join("lists_reference_api.mire");
+    fs::write(
+        root.join("owl.toml"),
+        "[project]\nname = \"lists-reference-api\"\nversion = \"0.1.0\"\nentry = \"lists_reference_api.mire\"\n",
+    )
+    .expect("write project");
+    fs::write(
+        &source_path,
+        "import std\n\npub fn main: () {\n    set nums = [1 2 3 2] :vec[i64]\n    set len1 = lists.len(nums)\n    set has_two = lists.contains(nums 2)\n    set first = lists.first(nums)\n    set last = lists.last(nums)\n    set idx = lists.index_of(nums 2)\n    set len2 = lists.len(nums)\n    use dasu(\"{len1}-{has_two}-{first}-{last}-{idx}-{len2}\")\n}\n",
+    )
+    .expect("write source");
+
+    let build = compile_file_with_avenys(
+        &source_path,
+        &BuildOptions {
+            mode: BuildMode::Debug,
+            opt_level: OptLevel::O0,
+            debug_dump: false,
+            output: None,
+            emit_binary: true,
+            persist_ir: true,
+            import_mode: mire::ImportMode::Legacy,
+            cache: Default::default(),
+            warning_filter: mire::error::diagnostic::WarningFilter::Default,
+            deny_warnings: std::collections::HashSet::new(),
+            module_paths: vec![],
+        },
+    )
+    .expect("lists reference api should compile");
+
+    let output = Command::new(&build.binary_path)
+        .output()
+        .expect("run binary");
+    assert!(output.status.success(), "binary should run successfully");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("4-true-1-2-1-4"), "{stdout}");
+}
+
+#[test]
 fn syntax_reference_prototype_compiles_and_runs() {
     let root = make_temp_project_root("mire_syntax_prototype");
     let source_path = root.join("prototype.mire");
