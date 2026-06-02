@@ -18,27 +18,25 @@ impl TypeChecker {
                     ident.data_type = resolved.clone();
                     return Ok(resolved);
                 }
-                if self.functions.contains_key(&ident.name)
-                    || {
-                        let mut stripped = ident.name.clone();
-                        let mut found = false;
-                        loop {
-                            if let Some(next) = Self::strip_root_namespace(&stripped) {
-                                if next == stripped {
-                                    break;
-                                }
-                                if self.functions.contains_key(&next) {
-                                    found = true;
-                                    break;
-                                }
-                                stripped = next;
-                            } else {
+                if self.functions.contains_key(&ident.name) || {
+                    let mut stripped = ident.name.clone();
+                    let mut found = false;
+                    loop {
+                        if let Some(next) = Self::strip_root_namespace(&stripped) {
+                            if next == stripped {
                                 break;
                             }
+                            if self.functions.contains_key(&next) {
+                                found = true;
+                                break;
+                            }
+                            stripped = next;
+                        } else {
+                            break;
                         }
-                        found
                     }
-                {
+                    found
+                } {
                     ident.data_type = DataType::Function;
                     return Ok(DataType::Function);
                 }
@@ -130,15 +128,11 @@ impl TypeChecker {
                                 .or_else(|| {
                                     let mut stripped = callback_name.clone();
                                     loop {
-                                        if let Some(next) =
-                                            Self::strip_root_namespace(&stripped)
-                                        {
+                                        if let Some(next) = Self::strip_root_namespace(&stripped) {
                                             if next == stripped {
                                                 break None;
                                             }
-                                            if let Some(sig) =
-                                                self.functions.get(&next).cloned()
-                                            {
+                                            if let Some(sig) = self.functions.get(&next).cloned() {
                                                 break Some(sig);
                                             }
                                             stripped = next;

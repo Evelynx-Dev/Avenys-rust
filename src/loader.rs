@@ -16,7 +16,7 @@ pub fn load_program_from_file(path: &Path) -> Result<Program> {
 
 pub fn load_program_with_metadata(path: &Path) -> Result<LoadedProgram> {
     let settings = CacheSettings::resolve_for(path, Default::default())?;
-    load_program_with_metadata_with_settings(path, settings, ImportMode::Legacy)
+    load_program_with_metadata_with_settings(path, settings, ImportMode::Reachable)
 }
 
 pub fn load_program_with_metadata_with_settings(
@@ -150,7 +150,7 @@ impl ImportResolver {
                     items,
                     is_local: false,
                 } if path == "std" => {
-                    let imported_path = self.std_entry_path()?;
+                    let imported_path = self.resolve_kioto_module_path("std")?;
                     let selected = if items.is_some() {
                         items
                     } else if matches!(self.import_mode, ImportMode::Reachable) {
@@ -456,19 +456,26 @@ impl ImportResolver {
         Ok(canonical)
     }
 
-    fn std_entry_path(&self) -> Result<PathBuf> {
-        let project_candidate = self.project_root.join("src/modules/kioto/mod.mire");
-        if let Ok(path) = project_candidate.canonicalize() {
+    fn owl_home_modules(&self) -> PathBuf {
+        if let Some(home) = std::env::var_os("MIRE_OWL_HOME") {
+            return PathBuf::from(home);
+        }
+        let home = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
+        PathBuf::from(home).join(".owl").join("modules")
+    }
+
+    fn kioto_package_root(&self) -> Result<PathBuf> {
+        let owl_candidate = self.owl_home_modules().join("kioto");
+        if let Ok(path) = owl_candidate.canonicalize() {
             return Ok(path);
         }
 
-        let bundled_candidate =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/modules/kioto/mod.mire");
+        let bundled_candidate = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/modules/kioto");
         bundled_candidate.canonicalize().map_err(|err| {
             MireError::new(ErrorKind::Runtime {
                 message: format!(
-                    "Could not resolve std module entry '{}' nor bundled '{}': {}",
-                    project_candidate.display(),
+                    "Could not resolve kioto package '{}' nor bundled '{}': {}",
+                    owl_candidate.display(),
                     bundled_candidate.display(),
                     err
                 ),
@@ -476,9 +483,31 @@ impl ImportResolver {
         })
     }
 
-    fn owl_home_modules(&self) -> PathBuf {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
-        PathBuf::from(home).join(".owl").join("modules")
+    fn resolve_kioto_module_path(&self, name: &str) -> Result<PathBuf> {
+        let package_root = self.kioto_package_root()?;
+        let candidates: Vec<PathBuf> = match name {
+            "std" => vec![package_root.join("mod.mire")],
+            "strings" | "lists" | "dicts" | "time" | "fs" | "env" | "proc" | "async" | "mem"
+            | "cpu" | "gpu" | "term" | "math" => vec![
+                package_root.join("core").join(name).join("mod.mire"),
+                package_root.join("core").join(name).join("lib.mire"),
+            ],
+            "iter" | "maybe" | "result" | "tuple" | "types" => vec![
+                package_root.join("ext").join(name).join("mod.mire"),
+                package_root.join("ext").join(name).join("lib.mire"),
+            ],
+            _ => Vec::new(),
+        };
+
+        for candidate in candidates {
+            if let Ok(path) = candidate.canonicalize() {
+                return Ok(path);
+            }
+        }
+
+        Err(MireError::new(ErrorKind::Runtime {
+            message: format!("Could not resolve kioto module '{}'", name),
+        }))
     }
 
     fn resolve_import_from_manifest(&self, name: &str) -> Option<PathBuf> {
@@ -509,6 +538,9 @@ impl ImportResolver {
     }
 
     fn resolve_module_path(&self, name: &str) -> Result<PathBuf> {
+        if let Ok(path) = self.resolve_kioto_module_path(name) {
+            return Ok(path);
+        }
         // 0. Check manifest imports first
         if let Some(path) = self.resolve_import_from_manifest(name) {
             return Ok(path);
@@ -581,6 +613,11 @@ impl ImportResolver {
     }
 
     fn resolve_module_dir(&self, name: &str) -> Result<PathBuf> {
+        if let Ok(path) = self.resolve_kioto_module_path(name)
+            && let Some(dir) = path.parent()
+        {
+            return Ok(dir.to_path_buf());
+        }
         // 0. Check manifest imports first
         if let Some(path) = self.resolve_import_from_manifest(name)
             && let Some(dir) = path.parent()

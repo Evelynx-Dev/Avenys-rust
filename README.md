@@ -2,7 +2,7 @@
 
 Mire is a compiled, statically typed programming language with ownership-oriented memory safety checks and an LLVM-based backend.
 
-Current compiler crate version: `3.11.4`.
+Current compiler crate version: `3.11.6`.
 
 ## Status
 
@@ -15,7 +15,7 @@ Current compiler crate version: `3.11.4`.
 - LLVM codegen emits `rt_*` / `pal_*` calls directly — the old `@mire_*` symbols are gone.
 - PAL (Platform Abstraction Layer): `src/pal/` with linux backend. WASM backend in progress.
 - Runtime core: `src/runtime/` — platform-independent managed strings, lists, dicts.
-- TOML-based import management: `owl.toml` `[imports]` section with `mire import` CLI command.
+- TOML-based import management: `owl.toml` `[dependencies]` section with `mire import` CLI command.
 
 ## Quick Start
 

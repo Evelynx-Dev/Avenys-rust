@@ -2,6 +2,30 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.11.6] - 2026-06-02
+
+### Fixed
+- Bundled Kioto resolution no longer hijacks `import kioto: (...)`; local
+  `kioto` modules now win again while `std` keeps using the package-aware
+  bundled/Owl lookup.
+
+## [3.11.5] - 2026-06-02
+
+### Added
+- Package-aware Kioto resolution now prefers the configured Owl cache root via
+  `--owl-home` before bundled fallbacks, and `mire test` honors the same flag.
+- `owl.toml` manifests now serialize dependencies under `[dependencies]` while
+  still reading older `[imports]` manifests for backward compatibility.
+- Regression coverage for Owl-home package resolution.
+
+### Changed
+- `ImportMode::Legacy` and the `--import-mode` CLI flag were removed; the build
+  pipeline now uses the single reachable import mode everywhere.
+- Kioto module resolution now routes `std`, `strings`, `lists`, `math`, and
+  the other bundled submodules through package-aware lookup instead of the old
+  `std_entry_path()` / `resolve_module_path()` fallback chain.
+- `mire import` writes `[dependencies]` in `owl.toml` instead of `[imports]`.
+
 ## [3.11.4] - 2026-06-02
 
 ### Added
@@ -37,12 +61,16 @@ All notable changes to Mire are documented in this file.
   bindings, with runtime C helpers for `strings.index_of`, `strings.repeat`,
   `lists.contains`, `lists.index_of`, `lists.reverse`, and `lists.unique`.
 - Regression coverage for Kioto reference APIs on `strings` and `lists`.
+- Manifest dependencies now serialize as `[dependencies]` with backward
+  compatibility for existing `[imports]` manifests.
 
 ### Changed
 - `strings.repeat` now lowers through `rt_strings_repeat` instead of an inline
   Mire loop, avoiding reference-vs-value type drift in the wrapper layer.
 - `lists` read-only wrappers now borrow `&list` / `&vec[i64]` where appropriate
   so repeated reads do not consume the source binding.
+- CLI import resolution now routes Kioto through package-aware resolution with
+  `--owl-home` support and no `legacy` import mode.
 - Kioto module docs now reflect the runtime-backed `strings` and `lists`
   surface.
 

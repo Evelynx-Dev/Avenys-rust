@@ -18,9 +18,9 @@ use std::process::{Command, ExitCode};
 struct CommonOptions {
     mode: BuildMode,
     opt_level: OptLevel,
-    import_mode: ImportMode,
     output: Option<PathBuf>,
     cache: CacheOverrides,
+    owl_home: Option<PathBuf>,
     warn: WarningCliOptions,
 }
 
@@ -80,6 +80,7 @@ fn run_cli() -> Result<i32, MireError> {
 fn run_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
     let (common, file, pass_through) = parse_run_options(cwd, args)?;
     let path = resolve_source_path(cwd, file)?;
+    set_owl_home_env(common.owl_home.as_ref());
     let options = BuildOptions {
         mode: common.mode,
         opt_level: common.opt_level,
@@ -90,7 +91,7 @@ fn run_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
             .or_else(|| Some(default_binary_path(&path, common.mode))),
         emit_binary: true,
         persist_ir: false,
-        import_mode: common.import_mode,
+        import_mode: ImportMode::default(),
         cache: common.cache,
         warning_filter: common.warn.filter,
         deny_warnings: common.warn.deny,
@@ -108,6 +109,7 @@ fn run_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
 fn build_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
     let (common, file) = parse_common_with_file(cwd, args)?;
     let path = resolve_source_path(cwd, file)?;
+    set_owl_home_env(common.owl_home.as_ref());
     let options = BuildOptions {
         mode: common.mode,
         opt_level: common.opt_level,
@@ -117,7 +119,7 @@ fn build_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
             .or_else(|| Some(default_binary_path(&path, common.mode))),
         emit_binary: true,
         persist_ir: false,
-        import_mode: common.import_mode,
+        import_mode: ImportMode::default(),
         cache: common.cache,
         warning_filter: common.warn.filter,
         deny_warnings: common.warn.deny,
@@ -131,6 +133,7 @@ fn build_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
 fn check_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
     let (common, file) = parse_common_with_file(cwd, args)?;
     let path = resolve_source_path(cwd, file)?;
+    set_owl_home_env(common.owl_home.as_ref());
     let source = fs::read_to_string(&path).map_err(runtime_err)?;
     let mut program = load_program_from_file(&path)?;
     let _ = analyze_program(&mut program, &source)?;
@@ -157,6 +160,7 @@ fn check_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
 fn debug_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
     let options = parse_debug_options(cwd, args)?;
     let path = resolve_source_path(cwd, options.file.clone())?;
+    set_owl_home_env(options.common.owl_home.as_ref());
     let source = fs::read_to_string(&path).map_err(runtime_err)?;
 
     if options.show_tokens {
@@ -190,7 +194,7 @@ fn debug_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
                 .or_else(|| Some(default_binary_path(&path, options.common.mode))),
             emit_binary: !options.emit_ir_only,
             persist_ir: true,
-            import_mode: options.common.import_mode,
+            import_mode: ImportMode::default(),
             cache: options.common.cache,
             warning_filter: options.common.warn.filter,
             deny_warnings: options.common.warn.deny,
@@ -216,6 +220,7 @@ fn debug_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
 fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
     let mut run = true;
     let mut verbose = false;
+    let mut owl_home = None;
     let mut paths: Vec<String> = Vec::new();
 
     let mut i = 0;
@@ -223,10 +228,19 @@ fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
         match args[i].as_str() {
             "--no-run" => run = false,
             "--verbose" | "-v" => verbose = true,
+            "--owl-home" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| runtime_msg("Missing value for --owl-home"))?;
+                owl_home = Some(PathBuf::from(value));
+            }
             _ => paths.push(args[i].clone()),
         }
         i += 1;
     }
+
+    set_owl_home_env(owl_home.as_ref());
 
     let mut test_files: Vec<PathBuf> = Vec::new();
 
@@ -398,10 +412,10 @@ fn parse_common_with_file(
 ) -> Result<(CommonOptions, Option<String>), MireError> {
     let mut mode = BuildMode::Debug;
     let mut opt_level = OptLevel::O0;
-    let mut import_mode = ImportMode::Legacy;
     let mut output = None;
     let mut file = None;
     let mut cache = CacheOverrides::default();
+    let mut owl_home = None;
     let mut warn_all = false;
     let mut warn_codes = HashSet::new();
     let mut deny_codes = HashSet::new();
@@ -440,14 +454,12 @@ fn parse_common_with_file(
                     .ok_or_else(|| runtime_msg("Missing output path after -o/--output"))?;
                 output = Some(PathBuf::from(value));
             }
-            "--import-mode" => {
+            "--owl-home" => {
                 i += 1;
                 let value = args
                     .get(i)
-                    .ok_or_else(|| runtime_msg("Missing value for --import-mode"))?;
-                import_mode = ImportMode::parse(value).ok_or_else(|| {
-                    runtime_msg("Invalid --import-mode value, use legacy|reachable")
-                })?;
+                    .ok_or_else(|| runtime_msg("Missing value for --owl-home"))?;
+                owl_home = Some(PathBuf::from(value));
             }
             "--cache-max-units" => {
                 i += 1;
@@ -509,9 +521,9 @@ fn parse_common_with_file(
         CommonOptions {
             mode,
             opt_level,
-            import_mode,
             output,
             cache,
+            owl_home,
             warn: WarningCliOptions {
                 filter: warning_filter,
                 deny: deny_codes,
@@ -622,7 +634,7 @@ fn import_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
                 entry: "code/main.mire".to_string(),
             },
             cache: None,
-            imports: Default::default(),
+            dependencies: Default::default(),
         },
     };
 
@@ -643,7 +655,7 @@ fn import_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
         }
     };
 
-    manifest.imports.entries.insert(module.clone(), entry);
+    manifest.dependencies.entries.insert(module.clone(), entry);
     write_manifest(&manifest, &manifest_path)?;
     if json_output {
         println!(
@@ -768,7 +780,7 @@ fn print_help() {
     println!("  --debug               Build profile debug (default)");
     println!("  --release             Build profile release");
     println!("  -O, --opt-level <n>   0|1|2|3|s|z");
-    println!("  --import-mode <m>     legacy|reachable (default: legacy)");
+    println!("  --owl-home <path>     Override the Owl module cache root");
     println!("\nCommands:");
     println!("  run [file] [-- args]  Compile + execute");
     println!("  build [file]          Compile only");
@@ -779,4 +791,12 @@ fn print_help() {
     println!("  test [paths...]       Run integration tests from tests/");
     println!("    --no-run            Compile only, skip execution");
     println!("    --verbose, -v       Show per-test results");
+}
+
+fn set_owl_home_env(path: Option<&PathBuf>) {
+    if let Some(path) = path {
+        unsafe {
+            std::env::set_var("MIRE_OWL_HOME", path);
+        }
+    }
 }

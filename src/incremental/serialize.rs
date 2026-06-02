@@ -166,11 +166,7 @@ fn write_build_entry(out: &mut Vec<u8>, entry: &BuildCacheEntry) -> Result<()> {
         BuildMode::Release => 1,
     };
     write_u8(out, mode_byte);
-    let import_mode_byte: u8 = match entry.import_mode {
-        ImportMode::Legacy => 0,
-        ImportMode::Reachable => 1,
-    };
-    write_u8(out, import_mode_byte);
+    write_u8(out, 0);
     let opt_byte: u8 = match entry.opt_level {
         OptLevel::O0 => 0,
         OptLevel::O1 => 1,
@@ -324,7 +320,7 @@ impl<'a> Cursor<'a> {
             _ => return Err(cache_runtime_err("Invalid build mode in cache")),
         };
         let import_mode = match self.read_u8()? {
-            0 => ImportMode::Legacy,
+            0 => ImportMode::Reachable,
             1 => ImportMode::Reachable,
             _ => return Err(cache_runtime_err("Invalid import mode in cache")),
         };

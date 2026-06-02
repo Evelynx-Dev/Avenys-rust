@@ -32,7 +32,7 @@ fn expect_compile_error_from_source(test_name: &str, filename: &str, source: &st
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -187,7 +187,7 @@ fn compile_attributes_imported_type_error_to_imported_file() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -325,7 +325,7 @@ fn enum_variant_named_payloads_are_reordered_by_declared_field_names() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -417,7 +417,7 @@ fn if_expression_infers_branch_type_and_runs() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -484,7 +484,7 @@ fn match_expression_with_default_infers_string_branch_type_and_compiles() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -526,7 +526,7 @@ fn match_expression_can_be_returned_directly_from_function() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -567,7 +567,7 @@ fn enum_match_without_default_returns_second_variant_string() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -606,7 +606,7 @@ fn incremental_recompile_keeps_enum_match_string_result_consistent() {
                 output: None,
                 emit_binary: true,
                 persist_ir: false,
-                import_mode: mire::ImportMode::Legacy,
+                import_mode: mire::ImportMode::Reachable,
                 cache: Default::default(),
                 warning_filter: mire::error::diagnostic::WarningFilter::Default,
                 deny_warnings: std::collections::HashSet::new(),
@@ -676,7 +676,7 @@ fn instance_method_call_resolves_and_compiles() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -718,7 +718,7 @@ fn direct_template_member_access_prints_field_values() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -763,7 +763,7 @@ fn direct_struct_field_assignment_updates_mutable_binding() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -817,7 +817,7 @@ fn struct_with_array_field_declaration_and_construction_compiles() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -858,7 +858,7 @@ fn static_impl_method_call_resolves_and_runs() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -901,7 +901,7 @@ fn implicit_self_method_return_still_runs() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -1024,7 +1024,7 @@ fn runtime_division_by_zero_exits_with_error() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -1066,7 +1066,7 @@ fn signed_integer_division_and_remainder_match_runtime_expectations() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -1108,7 +1108,7 @@ fn float_arithmetic_with_typed_float_variable_executes() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -1164,7 +1164,7 @@ fn secondary_for_loop_binding_compiles_and_uses_index() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -1204,7 +1204,7 @@ fn advanced_literals_compile_and_run() {
         output: None,
         emit_binary: true,
         persist_ir: true,
-        import_mode: mire::ImportMode::Legacy,
+        import_mode: mire::ImportMode::Reachable,
         cache: Default::default(),
         warning_filter: mire::error::diagnostic::WarningFilter::Default,
         deny_warnings: std::collections::HashSet::new(),
@@ -1257,7 +1257,7 @@ fn unsafe_block_compiles_and_runs() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -1298,7 +1298,7 @@ fn extern_and_inline_asm_declarations_parse_and_compile() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -1332,7 +1332,7 @@ fn runtime_out_of_bounds_exits_with_error() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -1374,7 +1374,7 @@ fn callback_call_named_function_runs_end_to_end() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -1415,7 +1415,7 @@ fn callback_call_extern_fn_runs_end_to_end() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -1456,7 +1456,7 @@ fn callback_call_closure_with_capture_runs_end_to_end() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -1497,7 +1497,7 @@ fn callback_call_function_value_alias_runs_end_to_end() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -1538,7 +1538,7 @@ fn callback_call_extern_function_value_alias_runs_end_to_end() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -1621,7 +1621,7 @@ fn string_literals_accept_braces_without_escape_hacks() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -1674,7 +1674,7 @@ fn strings_split_returns_list_and_works_with_join() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -1716,7 +1716,7 @@ fn strings_split_supports_multi_char_delimiter() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -1761,7 +1761,7 @@ fn strings_split_preserves_empty_segments() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -1803,7 +1803,7 @@ fn kioto_strings_reference_api_reuses_the_same_binding() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -1844,7 +1844,7 @@ fn kioto_lists_reference_api_reuses_the_same_binding() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -1883,7 +1883,7 @@ fn syntax_reference_prototype_compiles_and_runs() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -1927,7 +1927,7 @@ fn array_index_assignment_mutates_elements_in_place() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -1969,7 +1969,7 @@ fn struct_array_field_index_assignment_compiles_and_runs() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -2011,7 +2011,7 @@ fn shared_reference_lowering_compiles_and_runs() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -2053,7 +2053,7 @@ fn impl_method_can_mutate_self_field_and_run() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -2219,12 +2219,6 @@ fn global_local_import_reachable_mode_loads_only_used_symbols() {
     )
     .expect("write main");
 
-    let legacy = load_program_with_metadata_with_settings(
-        &main_path,
-        CacheSettings::defaults(),
-        mire::ImportMode::Legacy,
-    )
-    .expect("legacy load");
     let reachable = load_program_with_metadata_with_settings(
         &main_path,
         CacheSettings::defaults(),
@@ -2232,15 +2226,6 @@ fn global_local_import_reachable_mode_loads_only_used_symbols() {
     )
     .expect("reachable load");
 
-    let legacy_names: Vec<String> = legacy
-        .program
-        .statements
-        .iter()
-        .filter_map(|statement| match statement {
-            Statement::Function { name, .. } => Some(name.clone()),
-            _ => None,
-        })
-        .collect();
     let reachable_names: Vec<String> = reachable
         .program
         .statements
@@ -2251,7 +2236,6 @@ fn global_local_import_reachable_mode_loads_only_used_symbols() {
         })
         .collect();
 
-    assert!(legacy_names.contains(&"ignored".to_string()));
     assert!(reachable_names.contains(&"helper".to_string()));
     assert!(reachable_names.contains(&"hidden".to_string()));
     assert!(!reachable_names.contains(&"ignored".to_string()));
@@ -2312,7 +2296,7 @@ fn enum_match_payload_statement_body_compiles() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -2346,7 +2330,7 @@ fn enum_match_multiple_payloads_compile() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -2380,7 +2364,7 @@ fn enum_declaration_with_comma_separated_payloads_compiles() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -2414,7 +2398,7 @@ fn enum_match_statement_payload_bindings_support_string_and_bool() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -2443,7 +2427,7 @@ fn pipeline_len_builtin_compiles() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -2472,7 +2456,7 @@ fn nested_output_pipeline_compiles() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -2501,7 +2485,7 @@ fn find_statement_compiles_and_lowers() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -2585,7 +2569,7 @@ fn generic_impl_method_codegen_builds_for_concrete_type() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -2640,7 +2624,7 @@ fn debug_build_persists_ir_on_disk() {
             output: None,
             emit_binary: true,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -2768,7 +2752,7 @@ fn incremental_build_reuses_artifacts_when_inputs_are_unchanged() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -2793,7 +2777,7 @@ fn incremental_build_reuses_artifacts_when_inputs_are_unchanged() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -2842,7 +2826,7 @@ fn incremental_build_invalidates_on_local_import_change() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -2871,7 +2855,7 @@ fn incremental_build_invalidates_on_local_import_change() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -2911,7 +2895,7 @@ fn incremental_analysis_error_is_cached_for_identical_inputs() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -2935,7 +2919,7 @@ fn incremental_analysis_error_is_cached_for_identical_inputs() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -2982,7 +2966,7 @@ fn list_hofs_infer_closure_params_and_execute() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -3025,7 +3009,7 @@ fn nested_map_string_render_executes_without_runtime_errors() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -3131,7 +3115,7 @@ fn match_supports_or_patterns_and_numeric_ranges() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -3172,7 +3156,7 @@ fn match_guard_when_is_supported() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -3318,7 +3302,7 @@ pub fn main: () {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -3356,7 +3340,7 @@ fn borrowck_moves_in_if_else_are_tracked_per_branch() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -3404,7 +3388,7 @@ fn borrowck_moves_in_match_arms_are_tracked_per_arm() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -3446,7 +3430,7 @@ fn borrowck_closure_captures_and_moves() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -3568,7 +3552,7 @@ fn local_import_restructured_module_dir() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -3606,7 +3590,7 @@ fn kioto_async_ready_value_compiles_and_runs() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -3647,7 +3631,7 @@ fn kioto_math_module_compiles_and_runs_real_wrappers() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -3688,7 +3672,7 @@ fn math_sum_lowers_to_runtime_math_abi() {
             output: None,
             emit_binary: false,
             persist_ir: true,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),
@@ -3702,8 +3686,6 @@ fn math_sum_lowers_to_runtime_math_abi() {
     assert!(ir.contains("@rt_math_sum_i64"), "{ir}");
     assert!(!ir.contains("math_sum_body"), "{ir}");
 }
-
-
 
 #[test]
 fn import_command_json_output_updates_manifest() {
@@ -3723,8 +3705,48 @@ fn import_command_json_output_updates_manifest() {
     assert_eq!(json["version"], "0.2.0");
 
     let manifest = fs::read_to_string(root.join("owl.toml")).expect("manifest written");
-    assert!(manifest.contains("[imports.kioto]"), "{manifest}");
+    assert!(manifest.contains("[dependencies.kioto]"), "{manifest}");
     assert!(manifest.contains("version = \"0.2.0\""), "{manifest}");
+}
+
+#[test]
+fn owl_home_overrides_kioto_package_resolution() {
+    let root = make_temp_project_root("mire_owl_home_resolution");
+    let source_path = root.join("owl_home_resolution.mire");
+    let owl_home = root.join("owl-home");
+    let kioto_strings = owl_home.join("kioto").join("core").join("strings");
+
+    fs::create_dir_all(&kioto_strings).expect("create owl home package");
+    fs::write(
+        kioto_strings.join("mod.mire"),
+        "pub fn marker: () :str { return \"owl-home\" }\n",
+    )
+    .expect("write kioto strings module");
+    fs::write(
+        root.join("owl.toml"),
+        "[project]\nname = \"owl-home-resolution\"\nversion = \"0.1.0\"\nentry = \"owl_home_resolution.mire\"\n",
+    )
+    .expect("write project");
+    fs::write(
+        &source_path,
+        "import strings\n\npub fn main: () {\n    use dasu(strings.marker())\n}\n",
+    )
+    .expect("write source");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_mire"))
+        .current_dir(&root)
+        .args([
+            "run",
+            "--owl-home",
+            owl_home.to_str().expect("owl home path"),
+            source_path.to_str().expect("source path"),
+        ])
+        .output()
+        .expect("run mire");
+
+    assert!(output.status.success(), "{output:?}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("owl-home"), "{stdout}");
 }
 
 #[test]
@@ -3751,7 +3773,7 @@ fn kioto_async_spawn_wait_compiles_and_runs() {
             output: None,
             emit_binary: true,
             persist_ir: false,
-            import_mode: mire::ImportMode::Legacy,
+            import_mode: mire::ImportMode::Reachable,
             cache: Default::default(),
             warning_filter: mire::error::diagnostic::WarningFilter::Default,
             deny_warnings: std::collections::HashSet::new(),

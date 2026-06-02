@@ -48,18 +48,7 @@ impl OptLevel {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum ImportMode {
     #[default]
-    Legacy,
     Reachable,
-}
-
-impl ImportMode {
-    pub fn parse(value: &str) -> Option<Self> {
-        match value {
-            "legacy" => Some(Self::Legacy),
-            "reachable" => Some(Self::Reachable),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -92,7 +81,8 @@ pub struct MireManifest {
     #[serde(default)]
     pub cache: Option<MireCacheConfig>,
     #[serde(default)]
-    pub imports: MireImports,
+    #[serde(alias = "imports")]
+    pub dependencies: MireImports,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

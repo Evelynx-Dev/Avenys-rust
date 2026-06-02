@@ -46,7 +46,7 @@ through the existing `rt_*` runtime ABI.
 
 ## Import Management
 
-Dependencies go in `owl.toml` under `[imports]`:
+Dependencies go in `owl.toml` under `[dependencies]`:
 
 ```toml
 [project]
@@ -54,7 +54,7 @@ name = "my_project"
 version = "0.1.0"
 entry = "code/main.mire"
 
-[imports]
+[dependencies]
 kioto = { version = "0.2" }
 my-lib = { path = "./lib/my-lib" }
 ```
