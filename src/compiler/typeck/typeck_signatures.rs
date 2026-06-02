@@ -202,8 +202,20 @@ impl TypeChecker {
         body.iter().find_map(|statement| match statement {
             Statement::Return(Some(Expression::Identifier(ident))) => {
                 self.functions.get(&ident.name).cloned().or_else(|| {
-                    Self::strip_root_namespace(&ident.name)
-                        .and_then(|alias| self.functions.get(&alias).cloned())
+                    let mut stripped = ident.name.clone();
+                    loop {
+                        if let Some(next) = Self::strip_root_namespace(&stripped) {
+                            if next == stripped {
+                                break None;
+                            }
+                            if let Some(sig) = self.functions.get(&next).cloned() {
+                                break Some(sig);
+                            }
+                            stripped = next;
+                        } else {
+                            break None;
+                        }
+                    }
                 })
             }
             _ => None,

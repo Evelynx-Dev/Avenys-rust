@@ -3703,6 +3703,8 @@ fn math_sum_lowers_to_runtime_math_abi() {
     assert!(!ir.contains("math_sum_body"), "{ir}");
 }
 
+
+
 #[test]
 fn import_command_json_output_updates_manifest() {
     let root = make_temp_project_root("mire_import_json");

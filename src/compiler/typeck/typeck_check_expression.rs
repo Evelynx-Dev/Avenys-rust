@@ -19,8 +19,25 @@ impl TypeChecker {
                     return Ok(resolved);
                 }
                 if self.functions.contains_key(&ident.name)
-                    || Self::strip_root_namespace(&ident.name)
-                        .is_some_and(|alias| self.functions.contains_key(&alias))
+                    || {
+                        let mut stripped = ident.name.clone();
+                        let mut found = false;
+                        loop {
+                            if let Some(next) = Self::strip_root_namespace(&stripped) {
+                                if next == stripped {
+                                    break;
+                                }
+                                if self.functions.contains_key(&next) {
+                                    found = true;
+                                    break;
+                                }
+                                stripped = next;
+                            } else {
+                                break;
+                            }
+                        }
+                        found
+                    }
                 {
                     ident.data_type = DataType::Function;
                     return Ok(DataType::Function);
@@ -111,8 +128,24 @@ impl TypeChecker {
                                 .get(&callback_name)
                                 .cloned()
                                 .or_else(|| {
-                                    Self::strip_root_namespace(&callback_name)
-                                        .and_then(|alias| self.functions.get(&alias).cloned())
+                                    let mut stripped = callback_name.clone();
+                                    loop {
+                                        if let Some(next) =
+                                            Self::strip_root_namespace(&stripped)
+                                        {
+                                            if next == stripped {
+                                                break None;
+                                            }
+                                            if let Some(sig) =
+                                                self.functions.get(&next).cloned()
+                                            {
+                                                break Some(sig);
+                                            }
+                                            stripped = next;
+                                        } else {
+                                            break None;
+                                        }
+                                    }
                                 })
                                 .or_else(|| self.lookup_function_value_signature(&ident.name));
                             if callback_sig.is_none() {

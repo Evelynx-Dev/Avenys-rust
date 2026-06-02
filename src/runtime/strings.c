@@ -292,6 +292,11 @@ char *rt_strings_join(char **parts, int64_t count, const char *delimiter) {
     return out;
 }
 
+int64_t rt_string_to_i64(const char *value) {
+    if (!value) return 0;
+    return (int64_t)atoll(value);
+}
+
 char *rt_read_line(const char *prompt) {
     if (prompt && *prompt) {
         printf("%s", prompt);

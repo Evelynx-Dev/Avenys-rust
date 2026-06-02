@@ -7,6 +7,10 @@
 /bin/release/
 /bin/.cache/
 
+# Test build artifacts
+tests/*/debug/
+tests/*/.cache/
+
 # Editor/OS
 .DS_Store
 .idea/

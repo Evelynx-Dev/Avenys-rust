@@ -120,6 +120,7 @@ char   *rt_strings_pad_right(const char *input, int64_t width, const char *pad);
 char   *rt_strings_trim(const char *input);
 char   *rt_strings_split_list(const char *input, const char *delimiter);
 char   *rt_strings_join(char **parts, int64_t count, const char *delimiter);
+int64_t rt_string_to_i64(const char *value);
 int64_t rt_strings_index_of(const char *s, const char *sub);
 
 // ── I/O helpers ──────────────────────────────────────────────────────

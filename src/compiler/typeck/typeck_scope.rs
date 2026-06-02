@@ -69,14 +69,23 @@ impl TypeChecker {
         match expr {
             Expression::Identifier(ident) => {
                 if self.functions.contains_key(&ident.name) {
-                    Some(ident.name.clone())
-                } else if let Some(alias) = Self::strip_root_namespace(&ident.name)
-                    && self.functions.contains_key(&alias)
-                {
-                    Some(alias)
-                } else {
-                    self.lookup_function_alias(&ident.name)
+                    return Some(ident.name.clone());
                 }
+                let mut stripped = ident.name.clone();
+                loop {
+                    if let Some(next) = Self::strip_root_namespace(&stripped) {
+                        if next == stripped {
+                            break;
+                        }
+                        if self.functions.contains_key(&next) {
+                            return Some(next);
+                        }
+                        stripped = next;
+                    } else {
+                        break;
+                    }
+                }
+                self.lookup_function_alias(&ident.name)
             }
             _ => None,
         }
@@ -113,15 +122,26 @@ impl TypeChecker {
 
     pub(super) fn function_signature_for_expr(&self, expr: &Expression) -> Option<FunctionSig> {
         match expr {
-            Expression::Identifier(ident) => self
-                .functions
-                .get(&ident.name)
-                .cloned()
-                .or_else(|| {
-                    Self::strip_root_namespace(&ident.name)
-                        .and_then(|alias| self.functions.get(&alias).cloned())
-                })
-                .or_else(|| self.lookup_function_value_signature(&ident.name)),
+            Expression::Identifier(ident) => {
+                if let Some(sig) = self.functions.get(&ident.name).cloned() {
+                    return Some(sig);
+                }
+                let mut stripped = ident.name.clone();
+                loop {
+                    if let Some(next) = Self::strip_root_namespace(&stripped) {
+                        if next == stripped {
+                            break;
+                        }
+                        if let Some(sig) = self.functions.get(&next).cloned() {
+                            return Some(sig);
+                        }
+                        stripped = next;
+                    } else {
+                        break;
+                    }
+                }
+                self.lookup_function_value_signature(&ident.name)
+            }
             Expression::Call { name, .. } => self.function_return_signatures.get(name).cloned(),
             _ => None,
         }

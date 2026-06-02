@@ -174,12 +174,24 @@ impl TypeChecker {
             return Ok(Some(resolved));
         }
 
-        if let Some(alias_name) = Self::strip_root_namespace(name)
-            && let Some(sig) = self.functions.get(&alias_name).cloned()
         {
-            let resolved = self.resolve_function_call(&alias_name, &sig, arg_types, type_args)?;
-            *data_type = resolved.clone();
-            return Ok(Some(resolved));
+            let mut stripped = name.to_string();
+            loop {
+                if let Some(next) = Self::strip_root_namespace(&stripped) {
+                    if next == stripped {
+                        break;
+                    }
+                    if let Some(sig) = self.functions.get(&next).cloned() {
+                        let resolved =
+                            self.resolve_function_call(&next, &sig, arg_types, type_args)?;
+                        *data_type = resolved.clone();
+                        return Ok(Some(resolved));
+                    }
+                    stripped = next;
+                } else {
+                    break;
+                }
+            }
         }
 
         if let Some(ret) = self.builtin_returns.get(name).cloned() {

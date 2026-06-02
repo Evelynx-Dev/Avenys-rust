@@ -2,6 +2,34 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.11.4] - 2026-06-02
+
+### Added
+- Kioto `math` core module now split into submodules (`basic`, `stats`, `random`)
+  with a shared `_externs.mire` for runtime extern declarations.
+- Runtime C helpers for `rt_math_random`, `rt_math_random_range`.
+- Multi-level namespace resolution in the type checker: names like
+  `math.complex.new` are now resolved by iteratively stripping namespace
+  prefixes (`math.complex.new` → `complex.new` → `new`) until a match is
+  found in the flat function table.
+
+### Changed
+- `src/modules/kioto/ext/iter/mod.mire` rewritten to lower through `rt_lists_*`
+  externs directly instead of calling `lists.len`, avoiding a name-resolution
+  collision between the `lists` and `strings` modules in certain import
+  configurations.
+- `decimal.mire` now uses `rt_strings_*` externs directly for string
+  manipulation (strip, substr, index_of, pad_left), removing its dependency
+  on `import ./../strings` and the associated name-resolution instability.
+
+### Fixed
+- `rt_string_to_i64` implemented in `strings.c` and declared in `runtime.h`,
+  fixing a linker error when `decimal.mire` is loaded.
+- `strip_root_namespace` in the type checker now iterates across multiple
+  dot-separated prefixes instead of stopping at the first level, so
+  e.g. `kioto::fs::read` resolves correctly even after intermediate
+  namespace components are stripped.
+
 ## [3.11.3] - 2026-06-02
 
 ### Added

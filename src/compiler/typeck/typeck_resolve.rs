@@ -140,17 +140,29 @@ impl TypeChecker {
                     *data_type = ret.clone();
                     return Ok(Some(ret));
                 }
-                if let Some(alias_name) = Self::strip_root_namespace(name)
-                    && let Some(sig) = self.functions.get(&alias_name).cloned()
-                    && sig.params.len() == arg_types.len()
-                    && sig
-                        .params
-                        .iter()
-                        .zip(arg_types.iter())
-                        .all(|(expected, actual)| self.is_assignable(expected, actual))
                 {
-                    *data_type = sig.return_type.clone();
-                    return Ok(Some(sig.return_type));
+                    let mut stripped = name.to_string();
+                    loop {
+                        if let Some(next) = Self::strip_root_namespace(&stripped) {
+                            if next == stripped {
+                                break;
+                            }
+                            if let Some(sig) = self.functions.get(&next).cloned()
+                                && sig.params.len() == arg_types.len()
+                                && sig
+                                    .params
+                                    .iter()
+                                    .zip(arg_types.iter())
+                                    .all(|(expected, actual)| self.is_assignable(expected, actual))
+                            {
+                                *data_type = sig.return_type.clone();
+                                return Ok(Some(sig.return_type));
+                            }
+                            stripped = next;
+                        } else {
+                            break;
+                        }
+                    }
                 }
                 Ok(None)
             }
