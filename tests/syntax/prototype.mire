@@ -1,4 +1,4 @@
-import std
+load std
 
 struct Counter {
     value :i64 mut

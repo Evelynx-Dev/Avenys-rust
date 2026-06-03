@@ -19,19 +19,21 @@ Complete language syntax derived from test files and working examples.
 11. [Pipeline Operator](#11-pipeline-operator)
 12. [I/O: dasu and ireru](#12-io-dasu-and-ireru)
 13. [String Interpolation](#13-string-interpolation)
-14. [Imports](#14-imports)
-14. [Traits/Skills](#14-traitsskills)
-15. [Operators](#15-operators)
-16. [Ownership and References](#16-ownership-and-references)
-17. [Types](#17-types)
-18. [Stability](#18-stability)
+14. [Module Loading (load)](#14-module-loading-load)
+15. [Kioto Standard Library](#15-kioto-standard-library)
+16. [Traits/Skills](#16-traitsskills)
+17. [Operators](#17-operators)
+18. [Ownership and References](#18-ownership-and-references)
+19. [Types](#19-types)
+20. [Stability](#20-stability)
+21. [Tests](#21-tests)
 
 ---
 
 ## 1. Minimal Program
 
 ```mire
-import std
+load std
 
 pub fn main: () {
     use dasu("Hello Mire")
@@ -549,42 +551,148 @@ The prompt (if provided) is printed to stdout without a newline before reading. 
 
 ---
 
-## 14. Imports
+## 13. String Interpolation
 
-Modules are imported with the `import` keyword:
-
-```mire
-import std
-import math
-import strings
-import fs as fs
-import ./utils
-import strings: (split replace trim)
-```
-
-Specific imports select only named items from a module:
+String literals support interpolation with curly braces:
 
 ```mire
-import strings: (split replace trim)
+set name = "Mire"
+use dasu("Hello {name}")              # variable interpolation
+use dasu("Count: {add(5 3)}")         # expression interpolation
+use dasu("Result: {if true {1}}")     # block interpolation
 ```
 
-Module dependencies can also be declared in `owl.toml` under the `[imports]` section:
-
-```toml
-[imports]
-kioto = { version = "0.2" }
-my-lib = { path = "./lib/my-lib" }
-```
-
-Use the CLI to manage imports:
-```
-mire import kioto --version 0.2
-mire import ./local-lib --path lib/local-lib
-```
+Interpolation calls `str()` on the inner expression and concatenates at compile time. Any expression or block is valid inside `{}`.
 
 ---
 
-## 15. Traits/Skills
+## 14. Module Loading (load)
+
+Modules are loaded with the `load` keyword:
+
+```mire
+load std                              # load the Kioto standard library
+load strings                           # load a bundled module by name
+load ./utils                           # load a local module (relative path)
+load fs as fs                          # alias a module
+load strings: (split replace trim)     # selective item loading
+```
+
+The `import` keyword was the legacy syntax and is still accepted with
+`--allow-legacy-imports`, but `load` is the canonical keyword going forward.
+
+### Module Resolution
+
+The compiler resolves module names in this order:
+
+1. **Bundled modules** — `src/modules/kioto/` (the Kioto standard library)
+2. **OWL_HOME modules** — `$OWL_HOME/modules/` (user-installed packages)
+3. **Project-local modules** — relative paths starting with `./`
+
+Local loads require a project root with `owl.toml`:
+
+```toml
+[project]
+name = "my-app"
+version = "0.1.0"
+entry = "src/main.mire"
+```
+
+### Module Manifest (owl.toml)
+
+Third-party dependencies are declared in `owl.toml` under `[dependencies]`:
+
+```toml
+[dependencies]
+kioto = "3.11.10"
+my-lib = { path = "./lib/my-lib" }
+```
+
+Manage them through the CLI:
+
+```
+mire import kioto
+mire import ./local-lib --path lib/local-lib
+```
+
+### Selective Loading
+
+Load only specific items from a module:
+
+```mire
+load strings: (split replace trim)
+
+# then use without the module prefix:
+use dasu(split("a,b,c" ","))
+```
+
+### Legacy Import
+
+The old `import` keyword is a deprecated alias for `load`. It may be removed in a future version. Use `--allow-legacy-imports` to suppress deprecation warnings.
+
+---
+
+## 15. Kioto Standard Library
+
+Kioto is the standard library for Mire. It lives at `src/modules/kioto/` and is bundled with the compiler. Use `load std` or `load kioto` to pull in the full library.
+
+### Module Tree
+
+```
+kioto/
+  mod.mire          # entry point — loads all submodules
+  core/
+    strings/        # split, join, replace, trim, contains, starts_with, ends_with, pad, substr
+    lists/          # push, pop, get, slice, map, filter, fold, concat
+    dicts/          # get, set, keys, values
+    time/           # now, sleep, format
+    fs/             # read, write, exists, copy, move, delete, mkdir, list
+    env/            # get, set, all, cwd, chdir
+    proc/           # run, exec, shell, spawn, wait, kill, exit
+    async/          # concurrency primitives
+    mem/            # memory introspection
+    cpu/            # CPU info, load, frequency
+    gpu/            # GPU snapshot
+    term/           # terminal styling, clear
+    math/           # basic, stats, random, complex, decimal
+  ext/
+    types/          # type utilities
+    maybe/          # Maybe[T] type
+    result/         # Result[T] type
+    tuple/          # Tuple type
+    iter/           # Iterator utilities
+```
+
+### Usage
+
+```mire
+load std
+
+pub fn main: () {
+    use dasu(strings.join(strings.split("a,b,c" ",") "|"))
+}
+```
+
+Or load individual modules without pulling in everything:
+
+```mire
+load strings
+load lists
+
+pub fn main: () {
+    set items = [] :vec[i64] mut
+    set items = lists.push(items 42)
+    use dasu(lists.get(items 0))
+}
+```
+
+### Implementation
+
+Kioto modules are written in Mire and call `rt_*` / `pal_*` extern functions directly. The Platform Abstraction Layer (PAL, see [PAL.md](./PAL.md)) provides OS-level operations (filesystem, process, time, environment) while the runtime core (strings, lists, dicts) is implemented in C under `src/runtime/`.
+
+---
+
+## 16. Traits/Skills
 
 ```mire
 pub skill Show {
@@ -604,7 +712,7 @@ impl Show for Box {
 
 ---
 
-## 16. Operators
+## 17. Operators
 
 ### Arithmetic
 
@@ -654,7 +762,7 @@ set arr at 1 = 99
 
 ---
 
-## 17. Ownership and References
+## 18. Ownership and References
 
 ### References
 
@@ -696,7 +804,7 @@ set owned = box[i64]
 
 ---
 
-## 18. Types
+## 19. Types
 
 ### Primitive Types
 
@@ -761,9 +869,9 @@ set p = (Point x: 1, y: 2) :Point
 
 ---
 
-## 19. Stability
+## 20. Stability
 
-Compatibility note (v2.7.0): no syntax changes were introduced in this release.
+Compiler version: `3.11.10`.
 
 **Stable:**
 - `struct`, field access, construction
@@ -785,15 +893,59 @@ Compatibility note (v2.7.0): no syntax changes were introduced in this release.
 - Character literals (`char`)
 - Prefixed integer literals (`0b`, `0o`, `0x`)
 - Raw strings (`r"..."`, `r#"..."#`)
+- Module loading (`load`) — `import` is deprecated
+- Selective imports
+- Generic functions, structs, enums
+- Incremental compilation
+- Pipeline `|>` and safe pipeline `|?>`
 
 **Still improving:**
 - Advanced skill conformance
 - FFI ABI stability
 - Field-level constructor validation
+- WASM backend (PAL stubs)
 
-## Prototype Validation
+## 21. Tests
 
-La sintaxis de este documento se valida con un prototipo ejecutable:
+The test suite lives in `tests/` and covers the full compiler pipeline.
 
-- `tests/syntax/prototype.mire`
-- Regresión: `syntax_reference_prototype_compiles_and_runs` en `tests/language_regressions.rs`
+### Running Tests
+
+```bash
+# Run all Rust integration tests
+cargo test
+
+# Run a specific regression test
+cargo test syntax_reference_prototype_compiles_and_runs
+
+# Run Mire source tests through the CLI
+cargo run -- test
+
+# Run error-case tests individually
+cargo run -- run tests/error/01_lexer_unexpected_char.mire
+```
+
+### Test Categories
+
+| Directory | Description |
+|-----------|-------------|
+| `tests/language_regressions.rs` | ~60+ Rust integration tests — the main test suite covering parsing, type checking, ownership, codegen, and runtime |
+| `tests/syntax/prototype.mire` | Validates all documented syntax compiles and runs (checked by `syntax_reference_prototype_compiles_and_runs`) |
+| `tests/error/` | Error-case tests: lexer, parser, type, runtime, and ownership errors |
+| `tests/loads/` | Module loading tests with inline `owl.toml` projects |
+| `tests/behavior/` | Behavioral correctness tests |
+| `tests/level/` | Beginner-to-advanced progression tests |
+| `tests/complex/` | Complex multi-file scenarios |
+| `tests/type/` | Type system edge cases |
+| `tests/warnings/` | Compiler warning tests |
+| `tests/security/` | Security-related tests |
+| `tests/modules/` | Module resolution tests |
+| `tests/edge/` | Edge case testing |
+| `tests/stress/` | Stress and performance tests |
+| `tests/performance/` | Performance benchmarks |
+
+### Smoke Test
+
+```bash
+cargo run -- run tests/smoke.mire
+```
