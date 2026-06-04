@@ -6,7 +6,7 @@ pub fn main: () {
     
     if x > 3 {
         if y < 20 {
-            use dasu(nested)
+            use dasu("nested")
         }
     }
     

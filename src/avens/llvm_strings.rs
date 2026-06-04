@@ -52,7 +52,7 @@ impl LlvmIrGen {
         let to = self.compile_expr(&args[2])?;
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call ptr @mire_strings_replace(ptr {}, ptr {}, ptr {})",
+            "  {result} = call ptr @rt_strings_replace(ptr {}, ptr {}, ptr {})",
             input.repr, from.repr, to.repr
         ));
         Ok(LlValue {
@@ -72,7 +72,7 @@ impl LlvmIrGen {
         let delimiter = self.compile_expr(&args[1])?;
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call ptr @mire_strings_split_list(ptr {}, ptr {})",
+            "  {result} = call ptr @rt_strings_split_list(ptr {}, ptr {})",
             input.repr, delimiter.repr
         ));
         Ok(LlValue {
@@ -98,7 +98,7 @@ impl LlvmIrGen {
         ));
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call ptr @mire_strings_join(ptr {data_ptr}, i64 {}, ptr {})",
+            "  {result} = call ptr @rt_strings_join(ptr {data_ptr}, i64 {}, ptr {})",
             count.repr, delimiter.repr
         ));
         Ok(LlValue {
@@ -120,7 +120,7 @@ impl LlvmIrGen {
         let input = self.compile_expr(&args[0])?;
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call ptr @mire_strings_trim(ptr {})",
+            "  {result} = call ptr @rt_strings_trim(ptr {})",
             input.repr
         ));
         Ok(LlValue {
@@ -142,7 +142,7 @@ impl LlvmIrGen {
         let input = self.compile_expr(&args[0])?;
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call ptr @mire_string_to_upper(ptr {})",
+            "  {result} = call ptr @rt_string_to_upper(ptr {})",
             input.repr
         ));
         Ok(LlValue {
@@ -164,7 +164,7 @@ impl LlvmIrGen {
         let input = self.compile_expr(&args[0])?;
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call ptr @mire_string_to_lower(ptr {})",
+            "  {result} = call ptr @rt_string_to_lower(ptr {})",
             input.repr
         ));
         Ok(LlValue {
@@ -180,10 +180,11 @@ impl LlvmIrGen {
                 message: "strings.to_string(...) expects 1 argument".to_string(),
             }));
         }
-        let input = self.compile_expr(&args[0])?;
+        let input_val = self.compile_expr(&args[0])?;
+        let input = self.ensure_ptr(input_val);
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call ptr @mire_dict_to_string(ptr {})",
+            "  {result} = call ptr @rt_dict_to_string(ptr {})",
             input.repr
         ));
         Ok(LlValue {
@@ -220,7 +221,7 @@ impl LlvmIrGen {
         let to = self.compile_expr(&args[2])?;
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call ptr @mire_strings_replace_first(ptr {}, ptr {}, ptr {})",
+            "  {result} = call ptr @rt_strings_replace_first(ptr {}, ptr {}, ptr {})",
             input.repr, from.repr, to.repr
         ));
         Ok(LlValue {
@@ -245,7 +246,11 @@ impl LlvmIrGen {
             let result = input.starts_with(prefix.as_str());
             return Ok(LlValue {
                 ty: LlType::I64,
-                repr: if result { "1".to_string() } else { "0".to_string() },
+                repr: if result {
+                    "1".to_string()
+                } else {
+                    "0".to_string()
+                },
                 owned: false,
             });
         }
@@ -254,7 +259,7 @@ impl LlvmIrGen {
         let prefix = self.compile_expr(&args[1])?;
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call i64 @mire_strings_starts_with(ptr {}, ptr {})",
+            "  {result} = call i64 @rt_strings_starts_with(ptr {}, ptr {})",
             input.repr, prefix.repr
         ));
         Ok(LlValue {
@@ -279,7 +284,11 @@ impl LlvmIrGen {
             let result = input.ends_with(suffix.as_str());
             return Ok(LlValue {
                 ty: LlType::I64,
-                repr: if result { "1".to_string() } else { "0".to_string() },
+                repr: if result {
+                    "1".to_string()
+                } else {
+                    "0".to_string()
+                },
                 owned: false,
             });
         }
@@ -288,7 +297,7 @@ impl LlvmIrGen {
         let suffix = self.compile_expr(&args[1])?;
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call i64 @mire_strings_ends_with(ptr {}, ptr {})",
+            "  {result} = call i64 @rt_strings_ends_with(ptr {}, ptr {})",
             input.repr, suffix.repr
         ));
         Ok(LlValue {
@@ -311,10 +320,14 @@ impl LlvmIrGen {
         let len = self.cast_to_i64(len_expr)?;
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call ptr @mire_strings_substr(ptr {}, i64 {}, i64 {})",
+            "  {result} = call ptr @rt_strings_substr(ptr {}, i64 {}, i64 {})",
             input.repr, start.repr, len.repr
         ));
-        Ok(LlValue { ty: LlType::Ptr, repr: result, owned: true })
+        Ok(LlValue {
+            ty: LlType::Ptr,
+            repr: result,
+            owned: true,
+        })
     }
 
     pub(super) fn compile_pad_left(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -333,10 +346,14 @@ impl LlvmIrGen {
         };
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call ptr @mire_strings_pad_left(ptr {}, i64 {}, ptr {})",
+            "  {result} = call ptr @rt_strings_pad_left(ptr {}, i64 {}, ptr {})",
             input.repr, width.repr, pad.repr
         ));
-        Ok(LlValue { ty: LlType::Ptr, repr: result, owned: true })
+        Ok(LlValue {
+            ty: LlType::Ptr,
+            repr: result,
+            owned: true,
+        })
     }
 
     pub(super) fn compile_pad_right(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -355,27 +372,14 @@ impl LlvmIrGen {
         };
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call ptr @mire_strings_pad_right(ptr {}, i64 {}, ptr {})",
+            "  {result} = call ptr @rt_strings_pad_right(ptr {}, i64 {}, ptr {})",
             input.repr, width.repr, pad.repr
         ));
-        Ok(LlValue { ty: LlType::Ptr, repr: result, owned: true })
-    }
-
-    pub(super) fn compile_repeat(&mut self, args: &[Expression]) -> Result<LlValue> {
-        if args.len() != 2 {
-            return Err(MireError::new(ErrorKind::Runtime {
-                message: "strings.repeat(...) expects 2 arguments".to_string(),
-            }));
-        }
-        let input = self.compile_expr(&args[0])?;
-        let times_expr = self.compile_expr(&args[1])?;
-        let times = self.cast_to_i64(times_expr)?;
-        let result = self.tmp();
-        self.body.push(format!(
-            "  {result} = call ptr @mire_strings_repeat(ptr {}, i64 {})",
-            input.repr, times.repr
-        ));
-        Ok(LlValue { ty: LlType::Ptr, repr: result, owned: true })
+        Ok(LlValue {
+            ty: LlType::Ptr,
+            repr: result,
+            owned: true,
+        })
     }
 
     pub(super) fn emit_print(&mut self, value: &LlValue) -> Result<()> {
@@ -433,7 +437,7 @@ impl LlvmIrGen {
             DataType::Dict | DataType::Map { .. } => {
                 let rendered = self.tmp();
                 self.body.push(format!(
-                    "  {rendered} = call ptr @mire_dict_to_string(ptr {})",
+                    "  {rendered} = call ptr @rt_dict_to_string(ptr {})",
                     value.repr
                 ));
                 self.emit_print(&LlValue {

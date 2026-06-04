@@ -6,7 +6,7 @@ struct Counter {
 }
 
 pub fn main: () {
-    set c = (Counter value: 0, step: 5)
+    set c = (Counter value: 0, step: 5) mut
     set c.value = c.value + c.step
     set v1 = c.value
     set c.value = c.value + c.step

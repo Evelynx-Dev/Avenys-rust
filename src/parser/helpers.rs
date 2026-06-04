@@ -7,26 +7,18 @@ use super::Parser;
 
 impl Parser {
     pub(super) fn expect_ident(&mut self) -> Result<String> {
-        match self.peek().ttype {
-            TokenType::Ident => Ok(self.advance().value.unwrap_or_default()),
-            TokenType::NewKw => {
-                self.advance();
-                Ok("new".to_string())
-            }
-            TokenType::DropKw => {
-                self.advance();
-                Ok("drop".to_string())
-            }
-            TokenType::MoveKw => {
-                self.advance();
-                Ok("move".to_string())
-            }
-            TokenType::OwnKw => {
-                self.advance();
-                Ok("own".to_string())
-            }
-            _ => Err(self.error("Expected identifier")),
-        }
+        let surface = match self.peek().ttype {
+            TokenType::Ident => return Ok(self.advance().value.unwrap_or_default()),
+            TokenType::NewKw => "new",
+            TokenType::DropKw => "drop",
+            TokenType::MoveKw => "move",
+            TokenType::OwnKw => "own",
+            TokenType::Set => "set",
+            TokenType::To => "to",
+            _ => return Err(self.error("Expected identifier")),
+        };
+        self.advance();
+        Ok(surface.to_string())
     }
 
     pub(super) fn expect_member_name(&mut self) -> Result<String> {
@@ -346,7 +338,11 @@ pub(super) fn data_type_name(data_type: &DataType) -> String {
         DataType::Map {
             key_type,
             value_type,
-        } => format!("map[{} {}]", data_type_name(key_type), data_type_name(value_type)),
+        } => format!(
+            "map[{} {}]",
+            data_type_name(key_type),
+            data_type_name(value_type)
+        ),
         DataType::Array { element_type, size } => {
             format!("arr[{} {}]", data_type_name(element_type), size)
         }

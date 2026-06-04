@@ -1,7 +1,6 @@
 use super::*;
 
 impl LlvmIrGen {
-
     pub(super) fn compile_float(&mut self, args: &[Expression]) -> Result<LlValue> {
         if args.len() != 1 {
             return Err(MireError::new(ErrorKind::Runtime {
@@ -9,7 +8,7 @@ impl LlvmIrGen {
             }));
         }
         let value = self.compile_expr(&args[0])?;
-        self.cast_to_i64(value)
+        self.cast_to_f64(value)
     }
 
     pub(super) fn compile_int(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -31,7 +30,6 @@ impl LlvmIrGen {
         let value = self.compile_expr(&args[0])?;
         self.cast_to_i1(value)
     }
-
 
     pub(super) fn compile_abs(&mut self, args: &[Expression]) -> Result<LlValue> {
         if args.len() != 1 {
@@ -59,8 +57,10 @@ impl LlvmIrGen {
         let value = self.compile_expr(&args[0])?;
         let input = self.cast_to_f64(value)?;
         let result = self.tmp();
-        self.body
-            .push(format!("  {result} = call double @sqrt(double {})", input.repr));
+        self.body.push(format!(
+            "  {result} = call double @rt_math_sqrt(double {})",
+            input.repr
+        ));
         Ok(LlValue {
             ty: LlType::F64,
             repr: result,
@@ -76,13 +76,15 @@ impl LlvmIrGen {
         }
         let base = self.compile_expr(&args[0])?;
         let exp = self.compile_expr(&args[1])?;
+        let base = self.cast_to_f64(base)?;
+        let exp = self.cast_to_f64(exp)?;
         let tmp = self.tmp();
         self.body.push(format!(
-            "  {tmp} = call i64 @pow(i64 {}, i64 {})",
+            "  {tmp} = call double @rt_math_pow(double {}, double {})",
             base.repr, exp.repr
         ));
         Ok(LlValue {
-            ty: LlType::I64,
+            ty: LlType::F64,
             repr: tmp,
             owned: false,
         })
@@ -94,7 +96,18 @@ impl LlvmIrGen {
                 message: "Avenys floor(...) expects 1 argument".to_string(),
             }));
         }
-        self.compile_expr(&args[0])
+        let value = self.compile_expr(&args[0])?;
+        let input = self.cast_to_f64(value)?;
+        let result = self.tmp();
+        self.body.push(format!(
+            "  {result} = call i64 @rt_math_floor(double {})",
+            input.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: result,
+            owned: false,
+        })
     }
 
     pub(super) fn compile_ceil(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -103,7 +116,18 @@ impl LlvmIrGen {
                 message: "Avenys ceil(...) expects 1 argument".to_string(),
             }));
         }
-        self.compile_expr(&args[0])
+        let value = self.compile_expr(&args[0])?;
+        let input = self.cast_to_f64(value)?;
+        let result = self.tmp();
+        self.body.push(format!(
+            "  {result} = call i64 @rt_math_ceil(double {})",
+            input.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: result,
+            owned: false,
+        })
     }
 
     pub(super) fn compile_round(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -112,7 +136,18 @@ impl LlvmIrGen {
                 message: "Avenys round(...) expects 1 argument".to_string(),
             }));
         }
-        self.compile_expr(&args[0])
+        let value = self.compile_expr(&args[0])?;
+        let input = self.cast_to_f64(value)?;
+        let result = self.tmp();
+        self.body.push(format!(
+            "  {result} = call i64 @rt_math_round(double {})",
+            input.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: result,
+            owned: false,
+        })
     }
 
     pub(super) fn compile_min(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -159,7 +194,6 @@ impl LlvmIrGen {
         Ok(self.string_value("<range>"))
     }
 
-
     pub(super) fn compile_sleep(&mut self, args: &[Expression]) -> Result<LlValue> {
         if args.len() != 1 {
             return Err(MireError::new(ErrorKind::Runtime {
@@ -195,10 +229,12 @@ impl LlvmIrGen {
         let tmp = self.tmp();
         let argc_val = self.tmp();
         let argv_val = self.tmp();
-        self.body.push(format!("  {argc_val} = load i32, ptr @.argc"));
-        self.body.push(format!("  {argv_val} = load ptr, ptr @.argv"));
+        self.body
+            .push(format!("  {argc_val} = load i32, ptr @.argc"));
+        self.body
+            .push(format!("  {argv_val} = load ptr, ptr @.argv"));
         self.body.push(format!(
-            "  {tmp} = call ptr @mire_get_args(i32 {argc_val}, ptr {argv_val})"
+            "  {tmp} = call ptr @rt_get_args(i32 {argc_val}, ptr {argv_val})"
         ));
         Ok(LlValue {
             ty: LlType::Ptr,
@@ -215,8 +251,15 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let content = self.compile_expr(&args[1])?;
-        self.body.push(format!("  call i32 @mire_fs_write(ptr {}, ptr {})", path.repr, content.repr));
-        Ok(LlValue { ty: LlType::I64, repr: "0".to_string(), owned: false })
+        self.body.push(format!(
+            "  call i32 @pal_fs_write(ptr {}, ptr {})",
+            path.repr, content.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: "0".to_string(),
+            owned: false,
+        })
     }
 
     pub(super) fn compile_fs_append(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -227,8 +270,15 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let content = self.compile_expr(&args[1])?;
-        self.body.push(format!("  call i32 @mire_fs_append(ptr {}, ptr {})", path.repr, content.repr));
-        Ok(LlValue { ty: LlType::I64, repr: "0".to_string(), owned: false })
+        self.body.push(format!(
+            "  call i32 @pal_fs_append(ptr {}, ptr {})",
+            path.repr, content.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: "0".to_string(),
+            owned: false,
+        })
     }
 
     pub(super) fn compile_fs_read(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -239,8 +289,15 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_fs_read(ptr {})", path.repr));
-        Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: true })
+        self.body.push(format!(
+            "  {tmp} = call ptr @pal_fs_read(ptr {})",
+            path.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::Ptr,
+            repr: tmp,
+            owned: true,
+        })
     }
 
     pub(super) fn compile_fs_copy(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -252,8 +309,15 @@ impl LlvmIrGen {
         let src = self.compile_expr(&args[0])?;
         let dst = self.compile_expr(&args[1])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call i32 @mire_fs_copy(ptr {}, ptr {})", src.repr, dst.repr));
-        Ok(LlValue { ty: LlType::I64, repr: tmp, owned: false })
+        self.body.push(format!(
+            "  {tmp} = call i32 @pal_fs_copy(ptr {}, ptr {})",
+            src.repr, dst.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: tmp,
+            owned: false,
+        })
     }
 
     pub(super) fn compile_fs_move(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -265,8 +329,15 @@ impl LlvmIrGen {
         let src = self.compile_expr(&args[0])?;
         let dst = self.compile_expr(&args[1])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call i32 @mire_fs_move(ptr {}, ptr {})", src.repr, dst.repr));
-        Ok(LlValue { ty: LlType::I64, repr: tmp, owned: false })
+        self.body.push(format!(
+            "  {tmp} = call i32 @pal_fs_move(ptr {}, ptr {})",
+            src.repr, dst.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: tmp,
+            owned: false,
+        })
     }
 
     pub(super) fn compile_fs_drop(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -277,8 +348,15 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call i32 @mire_fs_drop(ptr {})", path.repr));
-        Ok(LlValue { ty: LlType::I64, repr: tmp, owned: false })
+        self.body.push(format!(
+            "  {tmp} = call i32 @pal_fs_delete(ptr {})",
+            path.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: tmp,
+            owned: false,
+        })
     }
 
     pub(super) fn compile_fs_mkdir(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -289,8 +367,15 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call i32 @mire_fs_mkdir(ptr {})", path.repr));
-        Ok(LlValue { ty: LlType::I64, repr: tmp, owned: false })
+        self.body.push(format!(
+            "  {tmp} = call i32 @pal_fs_mkdir(ptr {})",
+            path.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: tmp,
+            owned: false,
+        })
     }
 
     pub(super) fn compile_fs_rmdir(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -301,8 +386,15 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call i32 @mire_fs_rmdir(ptr {})", path.repr));
-        Ok(LlValue { ty: LlType::I64, repr: tmp, owned: false })
+        self.body.push(format!(
+            "  {tmp} = call i32 @pal_fs_rmdir(ptr {})",
+            path.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: tmp,
+            owned: false,
+        })
     }
 
     pub(super) fn compile_fs_exists(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -313,8 +405,15 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call i64 @mire_fs_exists(ptr {})", path.repr));
-        Ok(LlValue { ty: LlType::I64, repr: tmp, owned: false })
+        self.body.push(format!(
+            "  {tmp} = call i64 @pal_fs_exists(ptr {})",
+            path.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: tmp,
+            owned: false,
+        })
     }
 
     pub(super) fn compile_fs_is_dir(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -325,8 +424,15 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call i64 @mire_fs_is_dir(ptr {})", path.repr));
-        Ok(LlValue { ty: LlType::I64, repr: tmp, owned: false })
+        self.body.push(format!(
+            "  {tmp} = call i64 @pal_fs_is_dir(ptr {})",
+            path.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: tmp,
+            owned: false,
+        })
     }
 
     pub(super) fn compile_fs_size(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -337,8 +443,15 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call i64 @mire_fs_size(ptr {})", path.repr));
-        Ok(LlValue { ty: LlType::I64, repr: tmp, owned: false })
+        self.body.push(format!(
+            "  {tmp} = call i64 @pal_fs_size(ptr {})",
+            path.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: tmp,
+            owned: false,
+        })
     }
 
     pub(super) fn compile_fs_list(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -349,8 +462,15 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_fs_list(ptr {})", path.repr));
-        Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: false })
+        self.body.push(format!(
+            "  {tmp} = call ptr @pal_fs_list(ptr {})",
+            path.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::Ptr,
+            repr: tmp,
+            owned: false,
+        })
     }
 
     pub(super) fn compile_fs_join(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -362,8 +482,15 @@ impl LlvmIrGen {
         let a = self.compile_expr(&args[0])?;
         let b = self.compile_expr(&args[1])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_fs_join(ptr {}, ptr {})", a.repr, b.repr));
-        Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: true })
+        self.body.push(format!(
+            "  {tmp} = call ptr @pal_fs_join(ptr {}, ptr {})",
+            a.repr, b.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::Ptr,
+            repr: tmp,
+            owned: true,
+        })
     }
 
     pub(super) fn compile_fs_dir(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -374,8 +501,13 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_fs_dir(ptr {})", path.repr));
-        Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: true })
+        self.body
+            .push(format!("  {tmp} = call ptr @pal_fs_dir(ptr {})", path.repr));
+        Ok(LlValue {
+            ty: LlType::Ptr,
+            repr: tmp,
+            owned: true,
+        })
     }
 
     pub(super) fn compile_fs_name(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -386,8 +518,15 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_fs_name(ptr {})", path.repr));
-        Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: true })
+        self.body.push(format!(
+            "  {tmp} = call ptr @pal_fs_name(ptr {})",
+            path.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::Ptr,
+            repr: tmp,
+            owned: true,
+        })
     }
 
     pub(super) fn compile_fs_ext(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -398,8 +537,13 @@ impl LlvmIrGen {
         }
         let path = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_fs_ext(ptr {})", path.repr));
-        Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: true })
+        self.body
+            .push(format!("  {tmp} = call ptr @pal_fs_ext(ptr {})", path.repr));
+        Ok(LlValue {
+            ty: LlType::Ptr,
+            repr: tmp,
+            owned: true,
+        })
     }
 
     // ==================== PROC Functions ====================
@@ -412,8 +556,15 @@ impl LlvmIrGen {
         }
         let cmd = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_proc_run(ptr {})", cmd.repr));
-        Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: true })
+        self.body.push(format!(
+            "  {tmp} = call ptr @pal_proc_run(ptr {})",
+            cmd.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::Ptr,
+            repr: tmp,
+            owned: true,
+        })
     }
 
     pub(super) fn compile_proc_exec(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -424,8 +575,34 @@ impl LlvmIrGen {
         }
         let cmd = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_proc_exec(ptr {})", cmd.repr));
-        Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: false })
+        self.body.push(format!(
+            "  {tmp} = call ptr @pal_proc_exec(ptr {})",
+            cmd.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::Ptr,
+            repr: tmp,
+            owned: false,
+        })
+    }
+
+    pub(super) fn compile_proc_spawn(&mut self, args: &[Expression]) -> Result<LlValue> {
+        if args.len() != 1 {
+            return Err(MireError::new(ErrorKind::Runtime {
+                message: "proc_spawn expects 1 argument".to_string(),
+            }));
+        }
+        let cmd = self.compile_expr(&args[0])?;
+        let tmp = self.tmp();
+        self.body.push(format!(
+            "  {tmp} = call i64 @pal_proc_spawn(ptr {})",
+            cmd.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: tmp,
+            owned: false,
+        })
     }
 
     pub(super) fn compile_proc_wait(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -435,11 +612,17 @@ impl LlvmIrGen {
             }));
         }
         let pid = self.compile_expr(&args[0])?;
-        let pid_i32 = self.tmp();
-        self.body.push(format!("  {pid_i32} = trunc i64 {} to i32", pid.repr));
+        let pid = self.cast_to_i64(pid)?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call i64 @mire_proc_wait(i32 {pid_i32})"));
-        Ok(LlValue { ty: LlType::I64, repr: tmp, owned: false })
+        self.body.push(format!(
+            "  {tmp} = call i64 @pal_proc_wait(i64 {})",
+            pid.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: tmp,
+            owned: false,
+        })
     }
 
     pub(super) fn compile_proc_kill(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -449,10 +632,14 @@ impl LlvmIrGen {
             }));
         }
         let pid = self.compile_expr(&args[0])?;
-        let pid_i32 = self.tmp();
-        self.body.push(format!("  {pid_i32} = trunc i64 {} to i32", pid.repr));
-        self.body.push(format!("  call i32 @mire_proc_kill(i32 {pid_i32})"));
-        Ok(LlValue { ty: LlType::I64, repr: "0".to_string(), owned: false })
+        let pid = self.cast_to_i64(pid)?;
+        self.body
+            .push(format!("  call i32 @pal_proc_kill(i64 {})", pid.repr));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: "0".to_string(),
+            owned: false,
+        })
     }
 
     pub(super) fn compile_proc_exit(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -462,10 +649,14 @@ impl LlvmIrGen {
             }));
         }
         let code = self.compile_expr(&args[0])?;
-        let code_i32 = self.tmp();
-        self.body.push(format!("  {code_i32} = trunc i64 {} to i32", code.repr));
-        self.body.push(format!("  call void @mire_proc_exit(i32 {code_i32})"));
-        Ok(LlValue { ty: LlType::I64, repr: "0".to_string(), owned: false })
+        let code = self.cast_to_i64(code)?;
+        self.body
+            .push(format!("  call void @pal_proc_exit(i64 {})", code.repr));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: "0".to_string(),
+            owned: false,
+        })
     }
 
     pub(super) fn compile_proc_shell(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -476,8 +667,15 @@ impl LlvmIrGen {
         }
         let cmd = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_proc_shell(ptr {})", cmd.repr));
-        Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: true })
+        self.body.push(format!(
+            "  {tmp} = call ptr @pal_proc_shell(ptr {})",
+            cmd.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::Ptr,
+            repr: tmp,
+            owned: true,
+        })
     }
 
     pub(super) fn compile_proc_exists(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -487,11 +685,17 @@ impl LlvmIrGen {
             }));
         }
         let pid = self.compile_expr(&args[0])?;
-        let pid_i32 = self.tmp();
-        self.body.push(format!("  {pid_i32} = trunc i64 {} to i32", pid.repr));
+        let pid = self.cast_to_i64(pid)?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call i32 @mire_proc_exists(i32 {pid_i32})"));
-        Ok(LlValue { ty: LlType::I64, repr: tmp, owned: false })
+        self.body.push(format!(
+            "  {tmp} = call i64 @pal_proc_exists(i64 {})",
+            pid.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: tmp,
+            owned: false,
+        })
     }
 
     // ==================== ENV Functions ====================
@@ -504,8 +708,15 @@ impl LlvmIrGen {
         }
         let name = self.compile_expr(&args[0])?;
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_env_get(ptr {})", name.repr));
-        Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: true })
+        self.body.push(format!(
+            "  {tmp} = call ptr @pal_env_get(ptr {})",
+            name.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::Ptr,
+            repr: tmp,
+            owned: true,
+        })
     }
 
     pub(super) fn compile_env_set(&mut self, args: &[Expression]) -> Result<LlValue> {
@@ -516,26 +727,41 @@ impl LlvmIrGen {
         }
         let name = self.compile_expr(&args[0])?;
         let value = self.compile_expr(&args[1])?;
-        self.body.push(format!("  call i32 @mire_env_set(ptr {}, ptr {})", name.repr, value.repr));
-        Ok(LlValue { ty: LlType::I64, repr: "0".to_string(), owned: false })
+        self.body.push(format!(
+            "  call i32 @pal_env_set(ptr {}, ptr {})",
+            name.repr, value.repr
+        ));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: "0".to_string(),
+            owned: false,
+        })
     }
 
     pub(super) fn compile_env_cwd(&mut self) -> Result<LlValue> {
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_env_cwd()"));
-        Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: true })
+        self.body.push(format!("  {tmp} = call ptr @pal_env_cwd()"));
+        Ok(LlValue {
+            ty: LlType::Ptr,
+            repr: tmp,
+            owned: true,
+        })
     }
 
     pub(super) fn compile_env_all(&mut self) -> Result<LlValue> {
         let tmp = self.tmp();
-        self.body.push(format!("  {tmp} = call ptr @mire_env_all()"));
-        Ok(LlValue { ty: LlType::Ptr, repr: tmp, owned: false })
+        self.body.push(format!("  {tmp} = call ptr @pal_env_all()"));
+        Ok(LlValue {
+            ty: LlType::Ptr,
+            repr: tmp,
+            owned: false,
+        })
     }
 
     pub(super) fn compile_time_mark(&mut self, _args: &[Expression]) -> Result<LlValue> {
         let tmp = self.tmp();
         self.body
-            .push(format!("  {tmp} = call i64 @mire_wall_mark_ns()"));
+            .push(format!("  {tmp} = call i64 @pal_time_mark()"));
         Ok(LlValue {
             ty: LlType::I64,
             repr: tmp,
@@ -552,7 +778,7 @@ impl LlvmIrGen {
         let start = self.compile_expr(&args[0])?;
         let diff = self.tmp();
         self.body.push(format!(
-            "  {diff} = call ptr @mire_wall_elapsed_ms_str(i64 {})",
+            "  {diff} = call ptr @rt_time_elapsed_ms_str(i64 {})",
             start.repr
         ));
         Ok(LlValue {
@@ -571,7 +797,7 @@ impl LlvmIrGen {
         let mark = self.compile_expr(&args[0])?;
         let diff = self.tmp();
         self.body.push(format!(
-            "  {diff} = call i64 @mire_wall_elapsed_ms(i64 {})",
+            "  {diff} = call i64 @pal_time_elapsed_ms(i64 {})",
             mark.repr
         ));
         Ok(LlValue {
@@ -584,7 +810,7 @@ impl LlvmIrGen {
     pub(super) fn compile_cpu_mark(&mut self, _args: &[Expression]) -> Result<LlValue> {
         let result = self.tmp();
         self.body
-            .push(format!("  {result} = call i64 @mire_cpu_mark_ns()"));
+            .push(format!("  {result} = call i64 @pal_cpu_mark()"));
         Ok(LlValue {
             ty: LlType::I64,
             repr: result,
@@ -601,7 +827,7 @@ impl LlvmIrGen {
         let start = self.compile_expr(&args[0])?;
         let diff = self.tmp();
         self.body.push(format!(
-            "  {diff} = call ptr @mire_cpu_elapsed_ms_str(i64 {})",
+            "  {diff} = call ptr @rt_cpu_elapsed_ms_str(i64 {})",
             start.repr
         ));
         Ok(LlValue {
@@ -620,7 +846,7 @@ impl LlvmIrGen {
         let mark = self.compile_expr(&args[0])?;
         let diff = self.tmp();
         self.body.push(format!(
-            "  {diff} = call i64 @mire_cpu_elapsed_ms(i64 {})",
+            "  {diff} = call i64 @pal_cpu_elapsed_ms(i64 {})",
             mark.repr
         ));
         Ok(LlValue {
@@ -639,7 +865,7 @@ impl LlvmIrGen {
         let start = self.compile_expr(&args[0])?;
         let diff = self.tmp();
         self.body.push(format!(
-            "  {diff} = call i64 @mire_cpu_cycles_est(i64 {})",
+            "  {diff} = call i64 @pal_cpu_cycles_est(i64 {})",
             start.repr
         ));
         Ok(LlValue {
@@ -652,7 +878,7 @@ impl LlvmIrGen {
     pub(super) fn compile_gpu_snapshot(&mut self, _args: &[Expression]) -> Result<LlValue> {
         let result = self.tmp();
         self.body
-            .push(format!("  {result} = call ptr @mire_gpu_snapshot()"));
+            .push(format!("  {result} = call ptr @pal_gpu_snapshot()"));
         Ok(LlValue {
             ty: LlType::Ptr,
             repr: result,
@@ -670,7 +896,7 @@ impl LlvmIrGen {
         let value = self.cast_to_i64(value_expr)?;
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call ptr @mire_mem_format(i64 {})",
+            "  {result} = call ptr @pal_mem_format(i64 {})",
             value.repr
         ));
         Ok(LlValue {
@@ -683,7 +909,7 @@ impl LlvmIrGen {
     pub(super) fn compile_mem_process(&mut self, _args: &[Expression]) -> Result<LlValue> {
         let result = self.tmp();
         self.body
-            .push(format!("  {result} = call i64 @mire_mem_process_bytes()"));
+            .push(format!("  {result} = call i64 @pal_mem_process_bytes()"));
         Ok(LlValue {
             ty: LlType::I64,
             repr: result,
@@ -751,7 +977,11 @@ impl LlvmIrGen {
         }
     }
 
-    pub(super) fn closure_statements<'a>(&self, expr: &'a Expression, ctx: &str) -> Result<&'a [Statement]> {
+    pub(super) fn closure_statements<'a>(
+        &self,
+        expr: &'a Expression,
+        ctx: &str,
+    ) -> Result<&'a [Statement]> {
         match expr {
             Expression::Closure { params, body, .. } if params.is_empty() => Ok(body),
             _ => Err(MireError::new(ErrorKind::Runtime {
@@ -760,7 +990,11 @@ impl LlvmIrGen {
         }
     }
 
-    pub(super) fn closure_return_expr<'a>(&self, expr: &'a Expression, ctx: &str) -> Result<&'a Expression> {
+    pub(super) fn closure_return_expr<'a>(
+        &self,
+        expr: &'a Expression,
+        ctx: &str,
+    ) -> Result<&'a Expression> {
         match expr {
             Expression::Closure { params, body, .. } if params.is_empty() => {
                 if let [Statement::Return(Some(value))] = body.as_slice() {

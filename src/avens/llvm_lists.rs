@@ -1,7 +1,6 @@
 use super::*;
 
 impl LlvmIrGen {
-
     pub(super) fn compile_list_len(&mut self, args: &[Expression]) -> Result<LlValue> {
         if args.len() != 1 {
             return Err(MireError::new(ErrorKind::Runtime {
@@ -13,6 +12,7 @@ impl LlvmIrGen {
     }
 
     pub(super) fn compile_list_len_value(&mut self, list: LlValue) -> Result<LlValue> {
+        let list = self.ensure_ptr(list);
         let is_null = self.tmp();
         let loaded_len = self.tmp();
         let len = self.tmp();
@@ -74,10 +74,11 @@ impl LlvmIrGen {
                 message: "Avenys list.pop(...) expects 1 argument".to_string(),
             }));
         }
-        let list = self.compile_expr(&args[0])?;
+        let list_val = self.compile_expr(&args[0])?;
+        let list = self.ensure_ptr(list_val);
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call i64 @mire_list_pop_i64(ptr {})",
+            "  {result} = call i64 @rt_list_pop_i64(ptr {})",
             list.repr
         ));
         Ok(LlValue {
@@ -94,7 +95,8 @@ impl LlvmIrGen {
             }));
         }
 
-        let list = self.compile_expr(&args[0])?;
+        let list_val = self.compile_expr(&args[0])?;
+        let list = self.ensure_ptr(list_val);
         let value = self.compile_expr(&args[1])?;
         let list_type = self.expression_data_type(&args[0]);
         let elem_type = match &list_type {
@@ -106,7 +108,7 @@ impl LlvmIrGen {
         let result = self.tmp();
         if value.ty == LlType::Ptr {
             self.body.push(format!(
-                "  {result} = call ptr @mire_list_push_ptr(ptr {}, ptr {})",
+                "  {result} = call ptr @rt_list_push_ptr(ptr {}, ptr {})",
                 list.repr, value.repr
             ));
         } else {
@@ -114,12 +116,12 @@ impl LlvmIrGen {
             let elem_size = self.element_size(&elem_type);
             if elem_size == 8 {
                 self.body.push(format!(
-                    "  {result} = call ptr @mire_list_push_i64(ptr {}, i64 {})",
+                    "  {result} = call ptr @rt_list_push_i64(ptr {}, i64 {})",
                     list.repr, value.repr
                 ));
             } else {
                 self.body.push(format!(
-                    "  {result} = call ptr @mire_list_push_scalar(ptr {}, i64 {}, i64 {})",
+                    "  {result} = call ptr @rt_list_push_scalar(ptr {}, i64 {}, i64 {})",
                     list.repr, value.repr, elem_size
                 ));
             }
@@ -140,7 +142,7 @@ impl LlvmIrGen {
         }
 
         let initial = self.compile_expr(&args[0])?;
-        let list = self.compile_expr(&args[2])?;
+        let mut list = self.compile_expr(&args[2])?;
         let acc_type = self.expression_data_type(&args[0]);
         let list_type = self.expression_data_type(&args[2]);
 
@@ -186,6 +188,7 @@ impl LlvmIrGen {
         self.store_casted(&result_ptr, acc_ty, initial)?;
         self.body.push(format!("  store i64 0, ptr {index_ptr}"));
 
+        list = self.ensure_ptr(list);
         let is_null = self.tmp();
         let null_label = self.label("fold_null");
         let loop_cond_label = self.label("fold_cond");
@@ -238,7 +241,7 @@ impl LlvmIrGen {
             }));
         }
 
-        let list = self.compile_expr(&args[1])?;
+        let mut list = self.compile_expr(&args[1])?;
         let list_type = self.expression_data_type(&args[1]);
 
         let elem_type = match &list_type {
@@ -281,7 +284,7 @@ impl LlvmIrGen {
             .push(format!("  {result_ptr} = alloca ptr"));
         let initial_result = self.tmp();
         self.body.push(format!(
-            "  {initial_result} = call ptr @mire_list_create(i64 4, i64 {})",
+            "  {initial_result} = call ptr @rt_list_create(i64 4, i64 {})",
             self.element_size(&mapped_type)
         ));
         self.body
@@ -294,6 +297,7 @@ impl LlvmIrGen {
             .push(format!("  {index_ptr} = alloca i64"));
         self.body.push(format!("  store i64 0, ptr {index_ptr}"));
 
+        list = self.ensure_ptr(list);
         self.body
             .push(format!("  {is_null} = icmp eq ptr {}, null", list.repr));
         let null_label = self.label("map_null");
@@ -364,7 +368,7 @@ impl LlvmIrGen {
             }));
         }
 
-        let list = self.compile_expr(&args[1])?;
+        let mut list = self.compile_expr(&args[1])?;
         let list_type = self.expression_data_type(&args[1]);
 
         let elem_type = match &list_type {
@@ -402,7 +406,7 @@ impl LlvmIrGen {
             .push(format!("  {result_ptr} = alloca ptr"));
         let initial_result = self.tmp();
         self.body.push(format!(
-            "  {initial_result} = call ptr @mire_list_create(i64 4, i64 {})",
+            "  {initial_result} = call ptr @rt_list_create(i64 4, i64 {})",
             self.element_size(&elem_type)
         ));
         self.body
@@ -415,6 +419,7 @@ impl LlvmIrGen {
             .push(format!("  {index_ptr} = alloca i64"));
         self.body.push(format!("  store i64 0, ptr {index_ptr}"));
 
+        list = self.ensure_ptr(list);
         self.body
             .push(format!("  {is_null} = icmp eq ptr {}, null", list.repr));
         let null_label = self.label("filter_null");
@@ -503,7 +508,8 @@ impl LlvmIrGen {
             }));
         }
 
-        let list = self.compile_expr(&args[0])?;
+        let list_val = self.compile_expr(&args[0])?;
+        let list = self.ensure_ptr(list_val);
         let start = self.compile_expr(&args[1])?;
         let end = self.compile_expr(&args[2])?;
 
@@ -512,7 +518,7 @@ impl LlvmIrGen {
 
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call ptr @mire_list_slice(ptr {}, i64 {}, i64 {})",
+            "  {result} = call ptr @rt_list_slice(ptr {}, i64 {}, i64 {})",
             list.repr, start_i64.repr, end_i64.repr
         ));
 
@@ -579,5 +585,4 @@ impl LlvmIrGen {
             owned: false,
         })
     }
-
 }

@@ -1,6 +1,0 @@
-pub fn get: (key :str) :str
-pub fn set: (key :str, value :str)
-pub fn all: () :map[str str]
-pub fn args: () :vec[str]
-pub fn cwd: () :str
-pub fn chdir: (path :str)

@@ -1,7 +1,10 @@
 use super::*;
 
 impl TypeChecker {
-    pub(super) fn validate_explicit_nested_literal(expected: &DataType, expr: &Expression) -> Result<()> {
+    pub(super) fn validate_explicit_nested_literal(
+        expected: &DataType,
+        expr: &Expression,
+    ) -> Result<()> {
         match (expected, expr) {
             (
                 DataType::Vector { element_type, .. } | DataType::Array { element_type, .. },
@@ -46,7 +49,6 @@ impl TypeChecker {
             _ => Ok(()),
         }
     }
-
 
     pub(super) fn validate_trait_impl(
         &self,
@@ -165,7 +167,10 @@ impl TypeChecker {
             .collect()
     }
 
-    pub(super) fn validate_self_param_position(params: &[(String, DataType)], context: String) -> Result<()> {
+    pub(super) fn validate_self_param_position(
+        params: &[(String, DataType)],
+        context: String,
+    ) -> Result<()> {
         if params.iter().skip(1).any(|(name, _)| name == "self") {
             return Err(type_error(format!(
                 "{} must declare 'self' as the first parameter",
@@ -189,5 +194,4 @@ impl TypeChecker {
             MethodKind::Associated => "an associated method",
         }
     }
-
 }

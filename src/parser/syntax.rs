@@ -1,9 +1,8 @@
 use crate::error::Result;
 use crate::lexer::TokenType;
+use crate::parser::Parser;
 use crate::parser::ast::{DataType, Expression, Identifier, Literal, Statement};
 use crate::parser::helpers::identifier_expr_with_pos;
-use crate::parser::Parser;
-
 
 pub(super) fn contains_self_placeholder(expr: &Expression) -> bool {
     match expr {
@@ -299,7 +298,6 @@ pub(super) fn replace_self_placeholder(expr: Expression, replacement: &Expressio
     }
 }
 
-
 impl Parser {
     pub(super) fn parse_lifecycle_call_args(&mut self) -> Result<Vec<Expression>> {
         self.expect(TokenType::Colon)?;
@@ -390,7 +388,6 @@ impl Parser {
     }
 }
 
-
 impl Parser {
     pub(super) fn parse_match_statement(&mut self) -> Result<Statement> {
         self.expect(TokenType::Match)?;
@@ -439,13 +436,17 @@ impl Parser {
             );
             if is_default {
                 if seen_default {
-                    return Err(self.error("match statement cannot contain multiple default '_' arms"));
+                    return Err(
+                        self.error("match statement cannot contain multiple default '_' arms")
+                    );
                 }
                 seen_default = true;
                 default = body;
             } else {
                 if seen_default {
-                    return Err(self.error("match statement cases cannot appear after default '_' arm"));
+                    return Err(
+                        self.error("match statement cases cannot appear after default '_' arm")
+                    );
                 }
                 cases.push((pattern, body));
             }
@@ -510,7 +511,9 @@ impl Parser {
             );
             if is_default {
                 if seen_default {
-                    return Err(self.error("match expression cannot contain multiple default '_' arms"));
+                    return Err(
+                        self.error("match expression cannot contain multiple default '_' arms")
+                    );
                 }
                 seen_default = true;
                 default = Some(body_expr);

@@ -1,7 +1,6 @@
 use super::*;
 
 impl LlvmIrGen {
-
     pub(super) fn compile_dict_get(&mut self, args: &[Expression]) -> Result<LlValue> {
         if args.len() != 2 && args.len() != 3 {
             return Err(MireError::new(ErrorKind::Runtime {
@@ -16,7 +15,8 @@ impl LlvmIrGen {
             } => (*key_type, *value_type),
             _ => (DataType::Unknown, DataType::I64),
         };
-        let dict = self.compile_expr(&args[0])?;
+        let dict_val = self.compile_expr(&args[0])?;
+        let dict = self.ensure_ptr(dict_val);
         let key = self.compile_expr(&args[1])?;
         let key_kind = self.runtime_kind_code(&dict_key_type);
         let key_i64 = if key.ty == LlType::Ptr {
@@ -44,6 +44,7 @@ impl LlvmIrGen {
                 | DataType::Vector { .. }
                 | DataType::Array { .. }
                 | DataType::Slice { .. }
+                | DataType::Anything
                 | DataType::Str
         ) {
             let default_value = if args.len() == 3 {
@@ -58,7 +59,7 @@ impl LlvmIrGen {
             };
             let result = self.tmp();
             self.body.push(format!(
-                "  {result} = call ptr @mire_dict_get_ptr(ptr {}, i64 {}, i64 {}, ptr {}, ptr {})",
+                "  {result} = call ptr @rt_dict_get_ptr(ptr {}, i64 {}, i64 {}, ptr {}, ptr {})",
                 dict.repr, key_kind, key_i64.repr, key_ptr.repr, default_value.repr
             ));
             return Ok(LlValue {
@@ -80,7 +81,7 @@ impl LlvmIrGen {
         };
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call i64 @mire_dict_get_i64(ptr {}, i64 {}, i64 {}, ptr {}, i64 {})",
+            "  {result} = call i64 @rt_dict_get_i64(ptr {}, i64 {}, i64 {}, ptr {}, i64 {})",
             dict.repr, key_kind, key_i64.repr, key_ptr.repr, default_value.repr
         ));
         Ok(LlValue {
@@ -107,7 +108,8 @@ impl LlvmIrGen {
                 self.expression_data_type(&args[2]),
             ),
         };
-        let dict = self.compile_expr(&args[0])?;
+        let dict_val = self.compile_expr(&args[0])?;
+        let dict = self.ensure_ptr(dict_val);
         let key = self.compile_expr(&args[1])?;
         let value_expr = self.compile_expr(&args[2])?;
         let key_kind = self.runtime_kind_code(&key_data_type);
@@ -135,13 +137,13 @@ impl LlvmIrGen {
         if value_expr.ty == LlType::Ptr {
             let value = self.cast_to_type(value_expr, LlType::Ptr)?;
             self.body.push(format!(
-                "  {result} = call ptr @mire_dict_set_ptr(ptr {}, i64 {}, i64 {}, i64 {}, ptr {}, ptr {})",
+                "  {result} = call ptr @rt_dict_set_ptr(ptr {}, i64 {}, i64 {}, i64 {}, ptr {}, ptr {})",
                 dict.repr, key_kind, value_kind, key_i64.repr, key_ptr.repr, value.repr
             ));
         } else {
             let value = self.cast_to_i64(value_expr)?;
             self.body.push(format!(
-                "  {result} = call ptr @mire_dict_set_i64(ptr {}, i64 {}, i64 {}, i64 {}, ptr {}, i64 {})",
+                "  {result} = call ptr @rt_dict_set_i64(ptr {}, i64 {}, i64 {}, i64 {}, ptr {}, i64 {})",
                 dict.repr, key_kind, value_kind, key_i64.repr, key_ptr.repr, value.repr
             ));
         }
@@ -158,10 +160,11 @@ impl LlvmIrGen {
                 message: "dicts.keys(...) expects 1 argument".to_string(),
             }));
         }
-        let dict = self.compile_expr(&args[0])?;
+        let dict_val = self.compile_expr(&args[0])?;
+        let dict = self.ensure_ptr(dict_val);
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call ptr @mire_dict_keys(ptr {})",
+            "  {result} = call ptr @rt_dict_keys(ptr {})",
             dict.repr
         ));
         Ok(LlValue {
@@ -177,10 +180,11 @@ impl LlvmIrGen {
                 message: "dicts.values(...) expects 1 argument".to_string(),
             }));
         }
-        let dict = self.compile_expr(&args[0])?;
+        let dict_val = self.compile_expr(&args[0])?;
+        let dict = self.ensure_ptr(dict_val);
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call ptr @mire_dict_values(ptr {})",
+            "  {result} = call ptr @rt_dict_values(ptr {})",
             dict.repr
         ));
         Ok(LlValue {
@@ -190,7 +194,10 @@ impl LlvmIrGen {
         })
     }
 
-    pub(super) fn compile_dict_literal(&mut self, entries: &[(Expression, Expression)]) -> Result<LlValue> {
+    pub(super) fn compile_dict_literal(
+        &mut self,
+        entries: &[(Expression, Expression)],
+    ) -> Result<LlValue> {
         let mut current = LlValue {
             ty: LlType::Ptr,
             repr: "null".to_string(),
@@ -227,13 +234,13 @@ impl LlvmIrGen {
             if value.ty == LlType::Ptr {
                 let casted = self.cast_to_type(value, LlType::Ptr)?;
                 self.body.push(format!(
-                    "  {result} = call ptr @mire_dict_set_ptr(ptr {}, i64 {}, i64 {}, i64 {}, ptr {}, ptr {})",
+                    "  {result} = call ptr @rt_dict_set_ptr(ptr {}, i64 {}, i64 {}, i64 {}, ptr {}, ptr {})",
                     current.repr, key_kind, value_kind, key_i64.repr, key_ptr.repr, casted.repr
                 ));
             } else {
                 let casted = self.cast_to_i64(value)?;
                 self.body.push(format!(
-                    "  {result} = call ptr @mire_dict_set_i64(ptr {}, i64 {}, i64 {}, i64 {}, ptr {}, i64 {})",
+                    "  {result} = call ptr @rt_dict_set_i64(ptr {}, i64 {}, i64 {}, i64 {}, ptr {}, i64 {})",
                     current.repr, key_kind, value_kind, key_i64.repr, key_ptr.repr, casted.repr
                 ));
             }

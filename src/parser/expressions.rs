@@ -1,14 +1,11 @@
 use crate::error::Result;
 use crate::lexer::{Token, TokenType};
-use crate::parser::ast::{
-    AssignmentTarget, DataType, Expression, Identifier, Literal, Statement,
-};
+use crate::parser::ast::{AssignmentTarget, DataType, Expression, Identifier, Literal, Statement};
 
-
+use super::Parser;
 use super::helpers::{data_type_name, identifier_expr_with_pos, string_expr};
 use super::syntax::contains_self_placeholder;
 use super::syntax::replace_self_placeholder;
-use super::Parser;
 
 impl Parser {
     pub(super) fn parse_expression(&mut self) -> Result<Expression> {
@@ -674,6 +671,11 @@ impl Parser {
         if self.check_lifecycle_expression_prefix() {
             return self.parse_lifecycle_expression();
         }
+
+        if self.check_keyword_ident() {
+            return Ok(self.parse_keyword_identifier());
+        }
+
         match self.peek().ttype {
             TokenType::Use => self.parse_use_expr(),
             TokenType::If => self.parse_if_expression(),
@@ -772,7 +774,10 @@ impl Parser {
                 }
 
                 if self.check(TokenType::Dot) && self.peek_n(1).ttype == TokenType::Ident {
-                    if self.enum_names.contains(name.split('[').next().unwrap_or(&name)) {
+                    if self
+                        .enum_names
+                        .contains(name.split('[').next().unwrap_or(&name))
+                    {
                         self.advance();
                         let variant_name = self.advance().value.unwrap_or_default();
                         if self.check(TokenType::Lparen) {
@@ -814,8 +819,8 @@ impl Parser {
                     if type_name.is_empty() {
                         type_name = "".to_string();
                     }
-                    let has_type_args =
-                        self.peek_n(1).ttype == TokenType::Lbracket && self.bracket_followed_by_dot();
+                    let has_type_args = self.peek_n(1).ttype == TokenType::Lbracket
+                        && self.bracket_followed_by_dot();
                     let dot_offset = if has_type_args { 0 } else { 1 };
                     if !type_name.is_empty()
                         && ((has_type_args && self.peek_n(0).ttype == TokenType::Ident)
@@ -828,7 +833,11 @@ impl Parser {
                             type_name = format!(
                                 "{}[{}]",
                                 type_name,
-                                targs.iter().map(data_type_name).collect::<Vec<_>>().join(" ")
+                                targs
+                                    .iter()
+                                    .map(data_type_name)
+                                    .collect::<Vec<_>>()
+                                    .join(" ")
                             );
                         }
                         self.advance();
@@ -862,7 +871,11 @@ impl Parser {
                                 type_name = format!(
                                     "{}[{}]",
                                     type_name,
-                                    targs.iter().map(data_type_name).collect::<Vec<_>>().join(" ")
+                                    targs
+                                        .iter()
+                                        .map(data_type_name)
+                                        .collect::<Vec<_>>()
+                                        .join(" ")
                                 );
                             }
 
@@ -901,8 +914,7 @@ impl Parser {
                     }
                 }
 
-                let is_closure = (self.check(TokenType::Ident)
-                    || self.check(TokenType::SelfToken))
+                let is_closure = (self.check(TokenType::Ident) || self.check(TokenType::SelfToken))
                     && self.peek_n(1).ttype == TokenType::Pipeline;
 
                 if is_closure {
@@ -933,13 +945,37 @@ impl Parser {
         }
     }
 
-    fn check_lifecycle_expression_prefix(&self) -> bool {
+    fn check_keyword_ident(&self) -> bool {
         matches!(
             self.peek().ttype,
             TokenType::NewKw
-                | TokenType::OwnKw
-                | TokenType::MoveKw
                 | TokenType::DropKw
+                | TokenType::MoveKw
+                | TokenType::OwnKw
+                | TokenType::Set
+                | TokenType::To
+        )
+    }
+
+    fn parse_keyword_identifier(&mut self) -> Expression {
+        let token = self.peek();
+        let name = match token.ttype {
+            TokenType::NewKw => "new",
+            TokenType::DropKw => "drop",
+            TokenType::MoveKw => "move",
+            TokenType::OwnKw => "own",
+            TokenType::Set => "set",
+            TokenType::To => "to",
+            _ => unreachable!(),
+        };
+        self.advance();
+        identifier_expr_with_pos(name, token.line, token.column)
+    }
+
+    fn check_lifecycle_expression_prefix(&self) -> bool {
+        matches!(
+            self.peek().ttype,
+            TokenType::NewKw | TokenType::OwnKw | TokenType::MoveKw | TokenType::DropKw
         ) && self.check_double_colon()
             && self.peek_n(2).ttype == TokenType::Lparen
     }
@@ -1149,7 +1185,10 @@ impl Parser {
         Ok(args)
     }
 
-    pub(super) fn parse_expression_list_until(&mut self, terminator: TokenType) -> Result<Vec<Expression>> {
+    pub(super) fn parse_expression_list_until(
+        &mut self,
+        terminator: TokenType,
+    ) -> Result<Vec<Expression>> {
         let mut args = Vec::new();
         while !self.check(terminator) && !self.is_at_end() {
             if self.check(TokenType::Comma) {

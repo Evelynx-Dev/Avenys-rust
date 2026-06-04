@@ -50,7 +50,10 @@ impl Parser {
             return Ok(format!(
                 "{}[{}]",
                 base,
-                args.iter().map(data_type_name).collect::<Vec<_>>().join(" ")
+                args.iter()
+                    .map(data_type_name)
+                    .collect::<Vec<_>>()
+                    .join(" ")
             ));
         }
         Ok(base)
@@ -180,7 +183,10 @@ impl Parser {
                             Ok(DataType::StructNamed(format!(
                                 "{}[{}]",
                                 other,
-                                args.iter().map(data_type_name).collect::<Vec<_>>().join(" ")
+                                args.iter()
+                                    .map(data_type_name)
+                                    .collect::<Vec<_>>()
+                                    .join(" ")
                             )))
                         } else {
                             Ok(DataType::StructNamed(other.to_string()))
@@ -191,7 +197,10 @@ impl Parser {
                             Ok(DataType::EnumNamed(format!(
                                 "{}[{}]",
                                 other,
-                                args.iter().map(data_type_name).collect::<Vec<_>>().join(" ")
+                                args.iter()
+                                    .map(data_type_name)
+                                    .collect::<Vec<_>>()
+                                    .join(" ")
                             )))
                         } else {
                             Ok(DataType::EnumNamed(other.to_string()))

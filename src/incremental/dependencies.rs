@@ -271,19 +271,19 @@ fn collect_expression_dependencies(expression: &Expression, deps: &mut Vec<Strin
         } => {
             deps.push(enum_name.clone());
             deps.push(variant_name.clone());
-                for payload in payloads {
-                    collect_expression_dependencies(payload, deps);
-                }
+            for payload in payloads {
+                collect_expression_dependencies(payload, deps);
             }
-            Expression::Try { expr, .. } => {
-                collect_expression_dependencies(expr, deps);
-            }
-            Expression::Ok { value, .. } | Expression::Err { value, .. } => {
-                collect_expression_dependencies(value, deps);
-            }
-            Expression::Literal(_) => {}
         }
+        Expression::Try { expr, .. } => {
+            collect_expression_dependencies(expr, deps);
+        }
+        Expression::Ok { value, .. } | Expression::Err { value, .. } => {
+            collect_expression_dependencies(value, deps);
+        }
+        Expression::Literal(_) => {}
     }
+}
 
 fn collect_type_dependencies(data_type: &crate::parser::ast::DataType, deps: &mut Vec<String>) {
     match data_type {

@@ -3,11 +3,10 @@ use crate::parser::ast::{
     AssignmentTarget, DataType, Expression, Identifier, Literal, QueryBinding, QueryOp, Statement,
 };
 
-use crate::compiler::typeck::typeck_builtins;
 use crate::compiler::typeck::typeck_returns::{
     implicit_return_expression_mut, statements_contain_explicit_return,
 };
-use crate::compiler::typeck::{type_error, FunctionSig, TypeChecker};
+use crate::compiler::typeck::{FunctionSig, TypeChecker, type_error};
 impl TypeChecker {
     pub(super) fn check_let_statement(
         &mut self,
@@ -73,7 +72,9 @@ impl TypeChecker {
         }
 
         match target {
-            AssignmentTarget::Field(path) => self.check_field_assignment(path, value, &value_type)?,
+            AssignmentTarget::Field(path) => {
+                self.check_field_assignment(path, value, &value_type)?
+            }
             AssignmentTarget::Index { .. } => {}
             AssignmentTarget::Variable(name) => {
                 Self::validate_explicit_nested_literal(&target_type, value)?;
@@ -354,10 +355,7 @@ impl TypeChecker {
         Ok(())
     }
 
-    pub(super) fn check_return_statement(
-        &mut self,
-        expr: &mut Option<Expression>,
-    ) -> Result<()> {
+    pub(super) fn check_return_statement(&mut self, expr: &mut Option<Expression>) -> Result<()> {
         let return_type = if let Some(expression) = expr {
             self.check_expression(expression)?
         } else {
@@ -460,31 +458,6 @@ impl TypeChecker {
         Ok(())
     }
 
-    pub(super) fn check_use_statement(&mut self, path: &str) {
-        if path == "__std_all__" {
-            for module in ["math", "term", "strings", "lists", "dicts", "time"] {
-                typeck_builtins::import_std_members(self, module);
-            }
-        } else if let Some(rest) = path.strip_prefix("stdall:") {
-            typeck_builtins::import_std_members(self, rest);
-        } else if let Some(rest) = path.strip_prefix("stdselect:")
-            && let Some((_, items)) = rest.split_once(':')
-        {
-            for item in items.split(',').filter(|item| !item.is_empty()) {
-                self.insert_var(item.to_string(), DataType::Anything, true);
-            }
-        } else if let Some(rest) = path.strip_prefix("stdalias:")
-            && let Some((alias, _)) = rest.split_once(':')
-        {
-            self.insert_var(alias.to_string(), DataType::Anything, true);
-        } else if let Some(rest) = path.strip_prefix("stdaliasselect:") {
-            let mut parts = rest.splitn(3, ':');
-            if let Some(alias) = parts.next() {
-                self.insert_var(alias.to_string(), DataType::Anything, true);
-            }
-        }
-    }
-
     fn check_query_op(&mut self, op: &mut QueryOp) -> Result<()> {
         match op {
             QueryOp::Insert { assigns } => {
@@ -548,7 +521,9 @@ impl TypeChecker {
 
         let old_self = self.impl_self_type.take();
         let old_self_name = self.impl_self_name.take();
-        let method_mask = self.current_nested_statement_mask().map(|mask| mask.to_vec());
+        let method_mask = self
+            .current_nested_statement_mask()
+            .map(|mask| mask.to_vec());
 
         for (method_index, method) in methods.iter_mut().enumerate() {
             if method_mask

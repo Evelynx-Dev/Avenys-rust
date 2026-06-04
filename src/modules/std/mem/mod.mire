@@ -1,8 +1,0 @@
-pub fn used: () :i64
-pub fn total: () :i64
-pub fn free: () :i64
-pub fn available: () :i64
-pub fn percent: () :i64
-pub fn process: () :i64
-pub fn snapshot: () :map[str i64]
-pub fn format: (bytes :i64) :str

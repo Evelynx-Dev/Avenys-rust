@@ -69,8 +69,10 @@ impl Parser {
                     if brace_depth == 0 && index + 2 < tokens.len() =>
                 {
                     let keyword = tokens[index + 1].ttype;
-                    if matches!(keyword, TokenType::Enum | TokenType::Struct | TokenType::Type)
-                        && tokens[index + 2].ttype == TokenType::Ident
+                    if matches!(
+                        keyword,
+                        TokenType::Enum | TokenType::Struct | TokenType::Type
+                    ) && tokens[index + 2].ttype == TokenType::Ident
                         && let Some(name) = tokens[index + 2].value.as_ref()
                     {
                         match keyword {
@@ -98,7 +100,10 @@ impl Parser {
                 }
                 ttype
                     if brace_depth == 0
-                        && matches!(ttype, TokenType::Enum | TokenType::Struct | TokenType::Type) =>
+                        && matches!(
+                            ttype,
+                            TokenType::Enum | TokenType::Struct | TokenType::Type
+                        ) =>
                 {
                     if index + 1 < tokens.len()
                         && tokens[index + 1].ttype == TokenType::Ident
@@ -176,9 +181,7 @@ impl Parser {
         }
         Ok(Program { statements })
     }
-
 }
-
 
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
@@ -219,8 +222,7 @@ mod tests {
 
     #[test]
     fn parses_function_generics_and_explicit_type_args() {
-        let source =
-            "fn identity[T]: (x :T) :T { return x }\npub fn main: () { set a = identity[i64](42) }\n";
+        let source = "fn identity[T]: (x :T) :T { return x }\npub fn main: () { set a = identity[i64](42) }\n";
         let program = parse(source).expect("parse should succeed");
         let Statement::Function { type_params, .. } = &program.statements[0] else {
             panic!("expected function statement");
@@ -627,7 +629,10 @@ mod tests {
         let Statement::Function { body, .. } = &program.statements[0] else {
             panic!("expected function");
         };
-        let Statement::For { variable, index, .. } = &body[0] else {
+        let Statement::For {
+            variable, index, ..
+        } = &body[0]
+        else {
             panic!("expected for");
         };
         assert_eq!(variable, "item");
@@ -642,13 +647,25 @@ mod tests {
         let Statement::Function { body, .. } = &program.statements[0] else {
             panic!("expected function");
         };
-        let Statement::Let { value: Some(Expression::Literal(Literal::Int(b))), .. } = &body[0] else {
+        let Statement::Let {
+            value: Some(Expression::Literal(Literal::Int(b))),
+            ..
+        } = &body[0]
+        else {
             panic!("expected first int literal");
         };
-        let Statement::Let { value: Some(Expression::Literal(Literal::Int(o))), .. } = &body[1] else {
+        let Statement::Let {
+            value: Some(Expression::Literal(Literal::Int(o))),
+            ..
+        } = &body[1]
+        else {
             panic!("expected second int literal");
         };
-        let Statement::Let { value: Some(Expression::Literal(Literal::Int(h))), .. } = &body[2] else {
+        let Statement::Let {
+            value: Some(Expression::Literal(Literal::Int(h))),
+            ..
+        } = &body[2]
+        else {
             panic!("expected third int literal");
         };
         assert_eq!((*b, *o, *h), (10, 10, 255));
@@ -661,13 +678,25 @@ mod tests {
         let Statement::Function { body, .. } = &program.statements[0] else {
             panic!("expected function");
         };
-        let Statement::Let { value: Some(Expression::Literal(Literal::Str(a))), .. } = &body[0] else {
+        let Statement::Let {
+            value: Some(Expression::Literal(Literal::Str(a))),
+            ..
+        } = &body[0]
+        else {
             panic!("expected first raw string");
         };
-        let Statement::Let { value: Some(Expression::Literal(Literal::Str(b))), .. } = &body[1] else {
+        let Statement::Let {
+            value: Some(Expression::Literal(Literal::Str(b))),
+            ..
+        } = &body[1]
+        else {
             panic!("expected second raw string");
         };
-        let Statement::Let { value: Some(Expression::Literal(Literal::Str(c))), .. } = &body[2] else {
+        let Statement::Let {
+            value: Some(Expression::Literal(Literal::Str(c))),
+            ..
+        } = &body[2]
+        else {
             panic!("expected third raw string");
         };
         assert_eq!(a, "hello");
@@ -677,18 +706,31 @@ mod tests {
 
     #[test]
     fn parses_char_literals_as_unicode_scalar_u32() {
-        let source = "pub fn main: () {\nset a = 'a' :char\nset n = '\\n' :char\nset u = 'ñ' :char\n}\n";
+        let source =
+            "pub fn main: () {\nset a = 'a' :char\nset n = '\\n' :char\nset u = 'ñ' :char\n}\n";
         let program = parse(source).expect("parse should accept char literals");
         let Statement::Function { body, .. } = &program.statements[0] else {
             panic!("expected function");
         };
-        let Statement::Let { value: Some(Expression::Literal(Literal::Char(a))), .. } = &body[0] else {
+        let Statement::Let {
+            value: Some(Expression::Literal(Literal::Char(a))),
+            ..
+        } = &body[0]
+        else {
             panic!("expected first char");
         };
-        let Statement::Let { value: Some(Expression::Literal(Literal::Char(n))), .. } = &body[1] else {
+        let Statement::Let {
+            value: Some(Expression::Literal(Literal::Char(n))),
+            ..
+        } = &body[1]
+        else {
             panic!("expected second char");
         };
-        let Statement::Let { value: Some(Expression::Literal(Literal::Char(u))), .. } = &body[2] else {
+        let Statement::Let {
+            value: Some(Expression::Literal(Literal::Char(u))),
+            ..
+        } = &body[2]
+        else {
             panic!("expected third char");
         };
         assert_eq!((*a, *n, *u), ('a' as u32, '\n' as u32, 'ñ' as u32));
@@ -706,7 +748,8 @@ mod tests {
 
     #[test]
     fn parses_extern_lib_and_fn_statements() {
-        let source = "extern lib \"c\" \"libc.so.6\"\nextern fn puts: (msg :*const i8) :i32 lib \"c\"\n";
+        let source =
+            "extern lib \"c\" \"libc.so.6\"\nextern fn puts: (msg :*const i8) :i32 lib \"c\"\n";
         let program = parse(source).expect("parse should accept extern lib/fn");
         assert!(matches!(program.statements[0], Statement::ExternLib { .. }));
         let Statement::ExternFunction { name, lib_name, .. } = &program.statements[1] else {
@@ -744,5 +787,3 @@ mod tests {
         assert!(program.is_err(), "legacy angle blocks should be rejected");
     }
 }
-
-

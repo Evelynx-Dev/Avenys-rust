@@ -2,7 +2,129 @@
 
 All notable changes to Mire are documented in this file.
 
-## [3.8.14] - 2026-05-26
+## [3.11.4] - 2026-06-02
+
+### Added
+- Kioto `math` core module now split into submodules (`basic`, `stats`, `random`)
+  with a shared `_externs.mire` for runtime extern declarations.
+- Runtime C helpers for `rt_math_random`, `rt_math_random_range`.
+- Multi-level namespace resolution in the type checker: names like
+  `math.complex.new` are now resolved by iteratively stripping namespace
+  prefixes (`math.complex.new` → `complex.new` → `new`) until a match is
+  found in the flat function table.
+
+### Changed
+- `src/modules/kioto/ext/iter/mod.mire` rewritten to lower through `rt_lists_*`
+  externs directly instead of calling `lists.len`, avoiding a name-resolution
+  collision between the `lists` and `strings` modules in certain import
+  configurations.
+- `decimal.mire` now uses `rt_strings_*` externs directly for string
+  manipulation (strip, substr, index_of, pad_left), removing its dependency
+  on `import ./../strings` and the associated name-resolution instability.
+
+### Fixed
+- `rt_string_to_i64` implemented in `strings.c` and declared in `runtime.h`,
+  fixing a linker error when `decimal.mire` is loaded.
+- `strip_root_namespace` in the type checker now iterates across multiple
+  dot-separated prefixes instead of stopping at the first level, so
+  e.g. `kioto::fs::read` resolves correctly even after intermediate
+  namespace components are stripped.
+
+## [3.11.3] - 2026-06-02
+
+### Added
+- Kioto `strings` and `lists` now use reference-based read paths for shared
+  bindings, with runtime C helpers for `strings.index_of`, `strings.repeat`,
+  `lists.contains`, `lists.index_of`, `lists.reverse`, and `lists.unique`.
+- Regression coverage for Kioto reference APIs on `strings` and `lists`.
+
+### Changed
+- `strings.repeat` now lowers through `rt_strings_repeat` instead of an inline
+  Mire loop, avoiding reference-vs-value type drift in the wrapper layer.
+- `lists` read-only wrappers now borrow `&list` / `&vec[i64]` where appropriate
+  so repeated reads do not consume the source binding.
+- Kioto module docs now reflect the runtime-backed `strings` and `lists`
+  surface.
+
+## [3.11.2] - 2026-05-31
+
+### Added
+- Kioto `math` now executes through real runtime/PAL-backed wrappers for sum,
+  mean/avg, variance, stddev, median, range, trigonometric functions, powers,
+  constants, and rounding helpers, without changing syntax.
+
+### Fixed
+- `math.sum` no longer lowers through a stale Avenys special-case.
+- Top-level numeric helpers (`float`, `pow`, `round`, `floor`, `ceil`) now map
+  to real math runtime functions instead of identity-style stubs.
+- `math` module docs and regression tests now cover the live ABI surface.
+
+## [3.11.1] - 2026-05-31
+
+### Added
+- Kioto `async` module with task-result helpers and process-backed spawn/join
+  wrappers, without adding or changing language syntax.
+- `mire import --json` for CI/editor tooling.
+- PAL process spawn API (`pal_proc_spawn`) for Linux, with a safe WASM stub.
+
+### Fixed
+- Crate/package version now matches the documented 3.11 series.
+- CLI help now reads the crate version at build time instead of a stale literal.
+- PAL process declarations now use consistent `i64` PIDs across LLVM, C headers,
+  Linux, and WASM.
+
+## [3.11.0] - 2026-05-30
+
+### Removed
+- `kioto_abi.c` (643 lines) deleted — all `@mire_*` LLVM symbols renamed.
+- Dead declarations removed: `mire_list_new`, `mire_strings_split`, `mire_option_wrap`.
+
+### Changed
+- Every `@mire_*` LLVM IR symbol renamed to `@rt_*` (runtime core) or `@pal_*`
+  (platform layer). The only `@mire_*` left is `@mire_main`, the user entry
+  point. 76+ mappings catalogued in `abi_map.toml`.
+- Codegen in all 8 `llvm_*.rs` files updated: declarations and call sites.
+- `strings.c` extended with 14 new `rt_*` implementations migrated from kioto_abi.c
+  (contains, replace, replace_first, starts_with, ends_with, substr, pad_left,
+  pad_right, trim, split_list, join, read_line, get_args, time/cpu elapsed_ms_str).
+- `kioto_exports.c` created as a temporary shim (`__kioto_*` → `rt_*` / `pal_*`),
+  replacing the old kioto_abi.c. Will be deleted once std/ modules call
+  `rt_*` / `pal_*` directly.
+- ABI migration registry: `abi_map.toml` at project root documents every
+  symbol rename and its category (runtime / pal / removed).
+- Build pipeline unchanged — `build_pipeline.rs` already compiled all `.c`
+  files from `src/runtime/` and `src/pal/linux/`.
+- Crate version bumped to `3.11.0`.
+
+### Added
+- PAL documentation in `PAL.md` updated with current architecture, directory
+  layout, full function tables for runtime core and PAL, and ABI map reference.
+
+## [3.10.0] - 2026-05-30
+
+### Added
+- Kioto ABI v1 closed: all `__kioto_*` extern functions declared in `std/` and implemented in C.
+  - 3 new C wrappers: `__kioto_lists_first`, `__kioto_lists_last`, `__kioto_lists_is_empty`.
+  - `__kioto_strings_strip` extern added to `std/strings/mod.mire`.
+  - Filled remaining proc externs: `run`, `exec`, `shell`, `wait`, `kill`, `exit`, `exists` with function bodies.
+- TOML-based import system: `owl.toml` now supports `[imports]` section.
+  - New CLI command: `mire import <module> [--version <ver>] [--path <path>]`.
+  - `ImportResolver` checks manifest imports before filesystem resolution.
+  - New types: `MireImports`, `MireImportEntry` (Simple, WithPath, PathOnly).
+  - New functions: `write_manifest`, `load_manifest_imports`.
+- `kioto/` modules marked as deprecated — std/ is the canonical module source.
+
+### Changed
+- `std/proc/mod.mire` now links to Kioto ABI C externs.
+- `MireManifest` extended with optional `imports: MireImports` field.
+- Import resolution order: manifest imports > project local > owl home > bundled.
+
+## [3.9.1] - 2026-05-26
+
+### Fixed
+- `__kioto_dicts_merge` fixed: was iterating `a` entries instead of `b`, and accessing non-existent `entries[i].key_kind`.
+- `__kioto_cpu_loadavg` replaced `getloadavg()` with `/proc/loadavg` read (removes `_GNU_SOURCE` dependency).
+- Cleaned redundant `extern` declarations in `__kioto_time_elapsed_ns` / `__kioto_cpu_elapsed_ns`.
 
 ### Added
 - `match` advanced pattern support (compiler-internal, no syntax breaks):

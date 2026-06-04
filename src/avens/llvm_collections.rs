@@ -1,7 +1,11 @@
 use super::*;
 
 impl LlvmIrGen {
-    pub(super) fn compile_pipeline_len(&mut self, input: &Expression, value: LlValue) -> Result<LlValue> {
+    pub(super) fn compile_pipeline_len(
+        &mut self,
+        input: &Expression,
+        value: LlValue,
+    ) -> Result<LlValue> {
         match self.expression_data_type(input) {
             DataType::Str => {
                 let tmp = self.tmp();
@@ -63,7 +67,7 @@ impl LlvmIrGen {
 
         let initial_list = self.tmp();
         self.body.push(format!(
-            "  {initial_list} = call ptr @mire_list_create(i64 4, i64 {})",
+            "  {initial_list} = call ptr @rt_list_create(i64 4, i64 {})",
             elem_size
         ));
         self.body
@@ -173,11 +177,11 @@ impl LlvmIrGen {
         let result_list_new = self.tmp();
         if elem_size == 8 {
             self.body.push(format!(
-                "  {result_list_new} = call ptr @mire_list_push_i64(ptr {current_list}, i64 {result_i64_repr})"
+                "  {result_list_new} = call ptr @rt_list_push_i64(ptr {current_list}, i64 {result_i64_repr})"
             ));
         } else {
             self.body.push(format!(
-                "  {result_list_new} = call ptr @mire_list_push_scalar(ptr {current_list}, i64 {result_i64_repr}, i64 {})",
+                "  {result_list_new} = call ptr @rt_list_push_scalar(ptr {current_list}, i64 {result_i64_repr}, i64 {})",
                 elem_size
             ));
         }
@@ -394,13 +398,13 @@ impl LlvmIrGen {
         if ll_ty == LlType::I64 && elem_size == 8 {
             let casted = self.cast_to_i64(value)?;
             self.body.push(format!(
-                "  {result} = call ptr @mire_list_push_i64(ptr {}, i64 {})",
+                "  {result} = call ptr @rt_list_push_i64(ptr {}, i64 {})",
                 list.repr, casted.repr
             ));
         } else {
             let casted = self.cast_to_i64(value)?;
             self.body.push(format!(
-                "  {result} = call ptr @mire_list_push_scalar(ptr {}, i64 {}, i64 {})",
+                "  {result} = call ptr @rt_list_push_scalar(ptr {}, i64 {}, i64 {})",
                 list.repr, casted.repr, elem_size
             ));
         }
@@ -412,7 +416,11 @@ impl LlvmIrGen {
         })
     }
 
-    pub(super) fn compile_field_assignment(&mut self, target: &str, value: &Expression) -> Result<()> {
+    pub(super) fn compile_field_assignment(
+        &mut self,
+        target: &str,
+        value: &Expression,
+    ) -> Result<()> {
         let (field_ptr, field_ty, field_data_type) =
             self.resolve_struct_field_ptr_from_target(target)?;
         let compiled = self.compile_expr(value)?;
@@ -423,7 +431,7 @@ impl LlvmIrGen {
             } else {
                 let copied = self.tmp();
                 self.body.push(format!(
-                    "  {copied} = call ptr @mire_string_copy(ptr {})",
+                    "  {copied} = call ptr @rt_string_copy(ptr {})",
                     compiled.repr
                 ));
                 LlValue {
@@ -780,7 +788,11 @@ impl LlvmIrGen {
         }))
     }
 
-    pub(super) fn compile_member_access(&mut self, target: &Expression, member: &str) -> Result<LlValue> {
+    pub(super) fn compile_member_access(
+        &mut self,
+        target: &Expression,
+        member: &str,
+    ) -> Result<LlValue> {
         let target_val = self.compile_expr(target)?;
         let struct_name = self.struct_name_from_expr(target).ok_or_else(|| {
             MireError::new(ErrorKind::Runtime {
@@ -949,14 +961,31 @@ impl LlvmIrGen {
         target_data_type: &DataType,
         result_data_type: &DataType,
     ) -> Result<LlValue> {
-        if target.ty != LlType::Ptr {
+        let mut target = target;
+        if target.ty == LlType::I64 {
+            let tmp = self.tmp();
+            self.body
+                .push(format!("  {tmp} = inttoptr i64 {} to ptr", target.repr));
+            target = LlValue {
+                ty: LlType::Ptr,
+                repr: tmp,
+                owned: false,
+            };
+        } else if target.ty != LlType::Ptr {
             return Err(MireError::new(ErrorKind::Runtime {
-                message: "Avenys cannot index non-pointer type".to_string(),
+                message: format!(
+                    "Avenys cannot index non-pointer type (function '{}')",
+                    self.current_function
+                ),
             }));
         }
 
         match target_data_type {
-            DataType::List | DataType::Vector { .. } | DataType::Slice { .. } | DataType::Tuple => {
+            DataType::Unknown
+            | DataType::List
+            | DataType::Vector { .. }
+            | DataType::Slice { .. }
+            | DataType::Tuple => {
                 let index = self.cast_to_i64(index)?;
                 let len = self.compile_list_len_value(target.clone())?;
                 self.emit_bounds_check(index.clone(), len, "index out of bounds");
@@ -1156,6 +1185,62 @@ impl LlvmIrGen {
         }
     }
 
+    pub(super) fn compile_type_matches(&mut self, args: &[Expression]) -> Result<LlValue> {
+        if args.len() != 2 {
+            return Err(MireError::new(ErrorKind::Runtime {
+                message: "Avenys __type_matches expects 2 arguments".to_string(),
+            }));
+        }
+        let expr_type = self.expression_data_type(&args[0]);
+        let type_name = match &args[1] {
+            Expression::Literal(Literal::Str(s)) => s.clone(),
+            other => {
+                let compiled = self.compile_expr(other)?;
+                return Ok(LlValue {
+                    ty: LlType::I1,
+                    repr: compiled.repr,
+                    owned: false,
+                });
+            }
+        };
+        let expected_type = match type_name.as_str() {
+            "i64" => DataType::I64,
+            "str" => DataType::Str,
+            "bool" => DataType::Bool,
+            "f64" => DataType::F64,
+            "vec[anything]" | "vec" => DataType::Vector {
+                element_type: Box::new(DataType::Anything),
+                dynamic: true,
+            },
+            "map[anything anything]" | "map" => DataType::Map {
+                key_type: Box::new(DataType::Anything),
+                value_type: Box::new(DataType::Anything),
+            },
+            _ => {
+                return Ok(LlValue {
+                    ty: LlType::I1,
+                    repr: "false".to_string(),
+                    owned: false,
+                });
+            }
+        };
+        let expr_llvm_ty = self.map_type(&expr_type).unwrap_or(LlType::I64);
+        let expected_llvm_ty = self.map_type(&expected_type).unwrap_or(LlType::I64);
+        let result = if expr_llvm_ty == expected_llvm_ty
+            || expr_type == DataType::Unknown
+            || expr_type == DataType::Anything
+        {
+            "true".to_string()
+        } else {
+            "false".to_string()
+        };
+        Ok(LlValue {
+            ty: LlType::I1,
+            repr: result,
+            owned: false,
+        })
+    }
+
     pub(super) fn compile_contains(&mut self, args: &[Expression]) -> Result<LlValue> {
         if args.len() != 2 {
             return Err(MireError::new(ErrorKind::Runtime {
@@ -1172,7 +1257,7 @@ impl LlvmIrGen {
         let needle = self.compile_expr(&args[1])?;
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call i64 @mire_strings_contains(ptr {}, ptr {})",
+            "  {result} = call i64 @rt_strings_contains(ptr {}, ptr {})",
             haystack.repr, needle.repr
         ));
         Ok(LlValue {
@@ -1259,141 +1344,10 @@ impl LlvmIrGen {
         })
     }
 
-    pub(super) fn compile_math_sum(&mut self, args: &[Expression]) -> Result<LlValue> {
-        if args.len() != 1 {
-            return Err(MireError::new(ErrorKind::Runtime {
-                message: "Avenys math.sum expects 1 argument".to_string(),
-            }));
-        }
-
-        let list = self.compile_expr(&args[0])?;
-        let list_type = self.expression_data_type(&args[0]);
-        let elem_type = match &list_type {
-            DataType::Vector { element_type, .. } => *element_type.clone(),
-            DataType::Array { element_type, .. } => *element_type.clone(),
-            DataType::Slice { element_type } => *element_type.clone(),
-            _ => DataType::I64,
-        };
-        let elem_size = self.element_size(&elem_type);
-        let result_ptr = self.tmp();
-        let index_ptr = self.tmp();
-        self.entry_allocas
-            .push(format!("  {result_ptr} = alloca i64"));
-        self.entry_allocas
-            .push(format!("  {index_ptr} = alloca i64"));
-        self.body.push(format!("  store i64 0, ptr {result_ptr}"));
-        self.body.push(format!("  store i64 0, ptr {index_ptr}"));
-
-        let is_null = self.tmp();
-        let null_label = self.label("math_sum_null");
-        let loop_cond_label = self.label("math_sum_cond");
-        let loop_body_label = self.label("math_sum_body");
-        let end_label = self.label("math_sum_end");
-        self.body
-            .push(format!("  {is_null} = icmp eq ptr {}, null", list.repr));
-        self.body.push(format!(
-            "  br i1 {is_null}, label %{null_label}, label %{loop_cond_label}"
-        ));
-
-        self.body.push(format!("{null_label}:"));
-        self.body.push(format!("  br label %{end_label}"));
-
-        let len = self.tmp();
-        let index = self.tmp();
-        let has_more = self.tmp();
-        self.body.push(format!("{loop_cond_label}:"));
-        self.body
-            .push(format!("  {len} = load i64, ptr {}", list.repr));
-        self.body
-            .push(format!("  {index} = load i64, ptr {index_ptr}"));
-        self.body
-            .push(format!("  {has_more} = icmp slt i64 {index}, {len}"));
-        self.body.push(format!(
-            "  br i1 {has_more}, label %{loop_body_label}, label %{end_label}"
-        ));
-
-        self.body.push(format!("{loop_body_label}:"));
-        let data_ptr = self.tmp();
-        let offset = self.tmp();
-        let elem_ptr = self.tmp();
-        let elem = self.tmp();
-        let current_sum = self.tmp();
-        let next_sum = self.tmp();
-        let next_index = self.tmp();
-        self.body.push(format!(
-            "  {data_ptr} = getelementptr i8, ptr {}, i64 8",
-            list.repr
-        ));
-        self.body
-            .push(format!("  {offset} = mul i64 {index}, {}", elem_size));
-        self.body.push(format!(
-            "  {elem_ptr} = getelementptr i8, ptr {data_ptr}, i64 {offset}"
-        ));
-        match self.scalar_storage_ir_type(&elem_type) {
-            "i8" => {
-                let raw = self.tmp();
-                let ext = if matches!(elem_type, DataType::U8) {
-                    "zext"
-                } else {
-                    "sext"
-                };
-                self.body.push(format!("  {raw} = load i8, ptr {elem_ptr}"));
-                self.body.push(format!("  {elem} = {ext} i8 {raw} to i64"));
-            }
-            "i16" => {
-                let raw = self.tmp();
-                let ext = if matches!(elem_type, DataType::U16) {
-                    "zext"
-                } else {
-                    "sext"
-                };
-                self.body
-                    .push(format!("  {raw} = load i16, ptr {elem_ptr}"));
-                self.body.push(format!("  {elem} = {ext} i16 {raw} to i64"));
-            }
-            "i32" => {
-                let raw = self.tmp();
-                let ext = if matches!(elem_type, DataType::U32) {
-                    "zext"
-                } else {
-                    "sext"
-                };
-                self.body
-                    .push(format!("  {raw} = load i32, ptr {elem_ptr}"));
-                self.body.push(format!("  {elem} = {ext} i32 {raw} to i64"));
-            }
-            _ => {
-                self.body
-                    .push(format!("  {elem} = load i64, ptr {elem_ptr}"));
-            }
-        }
-        self.body
-            .push(format!("  {current_sum} = load i64, ptr {result_ptr}"));
-        self.body
-            .push(format!("  {next_sum} = add i64 {current_sum}, {elem}"));
-        self.body
-            .push(format!("  store i64 {next_sum}, ptr {result_ptr}"));
-        self.body
-            .push(format!("  {next_index} = add i64 {index}, 1"));
-        self.body
-            .push(format!("  store i64 {next_index}, ptr {index_ptr}"));
-        self.body.push(format!("  br label %{loop_cond_label}"));
-
-        self.body.push(format!("{end_label}:"));
-        let result = self.tmp();
-        self.body
-            .push(format!("  {result} = load i64, ptr {result_ptr}"));
-        Ok(LlValue {
-            ty: LlType::I64,
-            repr: result,
-            owned: false,
-        })
-    }
-
     pub(super) fn concat_values(&mut self, lhs: LlValue, rhs: LlValue) -> LlValue {
         let result = self.tmp();
         self.body.push(format!(
-            "  {result} = call ptr @mire_string_concat(ptr {}, ptr {})",
+            "  {result} = call ptr @rt_string_concat(ptr {}, ptr {})",
             lhs.repr, rhs.repr
         ));
         LlValue {
@@ -1402,5 +1356,4 @@ impl LlvmIrGen {
             owned: true,
         }
     }
-
 }

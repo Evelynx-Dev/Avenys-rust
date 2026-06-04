@@ -1,7 +1,7 @@
 import std
 
 pub fn main: () {
-    use dasu(struct ok)
+    use dasu("struct ok")
 }
 
 struct Point {

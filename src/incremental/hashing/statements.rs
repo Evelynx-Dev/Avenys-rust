@@ -10,6 +10,8 @@ pub(super) fn hash_statement(statement: &Statement, hasher: &mut FxHasher) {
             is_mutable,
             is_static,
             visibility,
+            name_line: _,
+            name_column: _,
         } => {
             hasher.write_u8(0);
             name.hash(hasher);
@@ -248,10 +250,7 @@ pub(super) fn hash_statements(statements: &[Statement], hasher: &mut FxHasher) {
     }
 }
 
-pub(super) fn hash_optional_statements(
-    statements: &Option<Vec<Statement>>,
-    hasher: &mut FxHasher,
-) {
+pub(super) fn hash_optional_statements(statements: &Option<Vec<Statement>>, hasher: &mut FxHasher) {
     match statements {
         Some(stmts) => {
             hasher.write_u8(1);
@@ -274,10 +273,7 @@ pub(super) fn hash_function_def(function: &FunctionDef, hasher: &mut FxHasher) {
     }
 }
 
-pub(super) fn hash_assignment_target(
-    target: &AssignmentTarget,
-    hasher: &mut FxHasher,
-) {
+pub(super) fn hash_assignment_target(target: &AssignmentTarget, hasher: &mut FxHasher) {
     match target {
         AssignmentTarget::Variable(name) => {
             hasher.write_u8(0);

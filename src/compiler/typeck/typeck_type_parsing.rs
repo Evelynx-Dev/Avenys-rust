@@ -89,10 +89,12 @@ impl TypeChecker {
 
 pub(super) fn data_type_name_for_diag(data_type: &DataType) -> String {
     match data_type {
-        DataType::EnumNamed(name) => TypeChecker::strip_root_namespace(name)
-            .unwrap_or_else(|| name.clone()),
-        DataType::StructNamed(name) => TypeChecker::strip_root_namespace(name)
-            .unwrap_or_else(|| name.clone()),
+        DataType::EnumNamed(name) => {
+            TypeChecker::strip_root_namespace(name).unwrap_or_else(|| name.clone())
+        }
+        DataType::StructNamed(name) => {
+            TypeChecker::strip_root_namespace(name).unwrap_or_else(|| name.clone())
+        }
         _ => format!("{:?}", data_type),
     }
 }

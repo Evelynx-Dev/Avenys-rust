@@ -28,20 +28,58 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
     let optimized_ir_path = options
         .persist_ir
         .then(|| output_dir.join(format!("{stem}.opt.ll")));
-    let runtime_support =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/avens/runtime_support.c");
-    let runtime_support_source = fs::read_to_string(&runtime_support).map_err(|err| {
-        MireError::new(ErrorKind::Runtime {
-            message: format!("Could not read '{}': {}", runtime_support.display(), err),
-        })
-    })?;
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let pal_backend = std::env::var("MIRE_PAL").unwrap_or_else(|_| "linux".to_string());
+    let c_source_files: Vec<String> = {
+        let mut files = Vec::new();
+        for entry in std::fs::read_dir(manifest_dir.join("src/runtime")).map_err(|err| {
+            MireError::new(ErrorKind::Runtime {
+                message: format!("Could not read src/runtime: {}", err),
+            })
+        })? {
+            let entry = entry.map_err(|err| {
+                MireError::new(ErrorKind::Runtime {
+                    message: format!("Could not read entry: {}", err),
+                })
+            })?;
+            let path = entry.path();
+            if path.extension().is_some_and(|e| e == "c") {
+                files.push(path.to_string_lossy().to_string());
+            }
+        }
+        for entry in std::fs::read_dir(manifest_dir.join(format!("src/pal/{pal_backend}")))
+            .map_err(|err| {
+                MireError::new(ErrorKind::Runtime {
+                    message: format!("Could not read src/pal/{pal_backend}: {}", err),
+                })
+            })?
+        {
+            let entry = entry.map_err(|err| {
+                MireError::new(ErrorKind::Runtime {
+                    message: format!("Could not read entry: {}", err),
+                })
+            })?;
+            let path = entry.path();
+            if path.extension().is_some_and(|e| e == "c") {
+                files.push(path.to_string_lossy().to_string());
+            }
+        }
+        files.sort();
+        files
+    };
+    let c_sources_combined: String = {
+        let mut combined = String::new();
+        for src in &c_source_files {
+            if let Ok(content) = fs::read_to_string(src) {
+                combined.push_str(&content);
+            }
+        }
+        combined
+    };
     let cache_settings = CacheSettings::resolve_for(source_path, options.cache)?;
     let mut cache = IncrementalCache::load_with_settings(source_path, cache_settings)?;
-    let loaded = load_program_with_metadata_with_settings(
-        source_path,
-        cache_settings,
-        options.import_mode,
-    )?;
+    let loaded =
+        load_program_with_metadata_with_settings(source_path, cache_settings, options.import_mode)?;
     if options.debug_dump
         && let Some(report) = cache.analysis_invalidation_report(source_path, &loaded.program)
     {
@@ -60,7 +98,7 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
         options.import_mode,
         options.opt_level,
         options.emit_binary,
-        &runtime_support_source,
+        &c_sources_combined,
     );
 
     if let Some(entry) = cache.build_entry(
@@ -103,7 +141,7 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
     }
     cache.record_build_miss();
 
-    let program = if let Some(cached) = cache.cached_analysis(source_path, fingerprint) {
+    let program = if let Some(cached) = cache.cached_analysis(source_path) {
         match cached {
             CachedAnalysis::Success(program) => program,
             CachedAnalysis::Error(error) => return Err(error),
@@ -149,11 +187,11 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
             } else {
                 err
             };
-            cache.store_analysis_error(source_path, fingerprint, &program, &err)?;
+            cache.store_analysis_error(source_path, &program, &err)?;
             cache.save()?;
             return Err(err);
         }
-        cache.store_analysis(source_path, fingerprint, &program)?;
+        cache.store_analysis(source_path, &program)?;
         program
     };
 
@@ -180,7 +218,7 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
         ));
     }
 
-    let ir = LlvmIrGen::new().compile_program(&program).map_err(|err| {
+    let (ir, extern_libs) = LlvmIrGen::new().compile_program(&program).map_err(|err| {
         let err = if err.source().is_none() {
             err.with_source(source.clone())
         } else {
@@ -215,7 +253,15 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
     }
 
     if options.emit_binary {
-        compile_binary_from_ir(&final_ir, &runtime_support, &binary_path, options.opt_level)?;
+        compile_binary_from_ir(
+            &final_ir,
+            &c_source_files,
+            &binary_path,
+            options.opt_level,
+            &extern_libs,
+            &manifest_dir,
+            &pal_backend,
+        )?;
     }
 
     cache.store_build(

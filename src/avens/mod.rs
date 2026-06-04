@@ -18,38 +18,38 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-mod config;
-mod utils;
-mod manifest;
-mod toolchain;
-mod reuse;
 mod build_pipeline;
-mod llvm_types;
-mod llvm_helpers;
-mod llvm_control;
+mod config;
 mod llvm_binary;
-mod llvm_strings;
 mod llvm_builtins;
 mod llvm_collections;
+mod llvm_control;
 mod llvm_dicts;
 mod llvm_functions;
+mod llvm_helpers;
 mod llvm_lists;
-pub use config::{
-    BuildMode, BuildOptions, BuildResult, ImportMode, MireCacheConfig, MireLock, MireLockBuild,
-    MireLockProject, MireManifest, MireProject, OptLevel,
-};
+mod llvm_strings;
+mod llvm_types;
+mod manifest;
+mod reuse;
+mod toolchain;
+mod utils;
 pub use build_pipeline::{compile_file_with_avenys, default_output_dir};
+pub use config::{
+    BuildMode, BuildOptions, BuildResult, ImportMode, MireCacheConfig, MireImportEntry,
+    MireImports, MireLock, MireLockBuild, MireLockProject, MireManifest, MireProject, OptLevel,
+};
 use llvm_types::*;
+pub use manifest::{
+    find_project_root, load_manifest_imports, load_project_manifest, project_lock_path,
+    project_manifest_path, write_lock_file, write_manifest,
+};
+use reuse::prepare_program_with_partial_analysis_reuse;
+use toolchain::{compile_binary_from_ir, optimize_ir};
 use utils::{
     escape_llvm_string, normalize_nominal_name, sanitize_symbol, string_byte_len,
     strip_root_namespace,
 };
-pub use manifest::{
-    find_project_root, load_project_manifest, project_lock_path, project_manifest_path,
-    write_lock_file,
-};
-use toolchain::{compile_binary_from_ir, optimize_ir};
-use reuse::prepare_program_with_partial_analysis_reuse;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct LlvmIrGen {
@@ -64,8 +64,11 @@ struct LlvmIrGen {
     user_structs: HashMap<String, StructInfo>,
     user_enums: HashMap<String, EnumInfo>,
     extern_decls: Vec<String>,
+    extern_libs: Vec<(String, String)>,
     loop_stack: Vec<LoopLabels>,
     current_return: LlType,
+    current_function: String,
+    next_fn_id: HashMap<String, usize>,
     current_line: usize,
     current_column: usize,
     next_tmp: usize,
@@ -87,8 +90,11 @@ impl LlvmIrGen {
             user_structs: HashMap::new(),
             user_enums: HashMap::new(),
             extern_decls: Vec::new(),
+            extern_libs: Vec::new(),
             loop_stack: Vec::new(),
             current_return: LlType::I64,
+            current_function: String::new(),
+            next_fn_id: HashMap::new(),
             current_line: 1,
             current_column: 1,
             next_tmp: 0,
@@ -96,5 +102,4 @@ impl LlvmIrGen {
             emitted_monomorph_wrappers: HashSet::new(),
         }
     }
-
 }

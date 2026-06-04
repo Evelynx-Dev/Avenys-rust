@@ -1,8 +1,8 @@
 import std
 
-fn quicksort_inner: (arr :arr[i64 8], left :i64, right :i64) {
+fn quicksort_inner: (arr :arr[i64 8], left :i64, right :i64) :arr[i64 8] {
     if left >= right {
-        return
+        return arr
     }
 
     set pivot = arr at right
@@ -25,22 +25,21 @@ fn quicksort_inner: (arr :arr[i64 8], left :i64, right :i64) {
     set arr at i = temp_pivot
     set arr at right = temp_i
 
-    quicksort_inner(arr left i - 1)
-    quicksort_inner(arr i + 1 right)
+    set left_sorted = quicksort_inner(arr left i - 1)
+    return quicksort_inner(left_sorted i + 1 right)
 }
 
-fn quicksort: (arr :arr[i64 8]) {
-    quicksort_inner(arr 0 7)
+fn quicksort: (arr :arr[i64 8]) :arr[i64 8] {
+    return quicksort_inner(arr 0 7)
 }
 
 pub fn main: () {
     set arr = [64 34 25 12 22 11 90 5] :arr[i64 8]
+    set sorted = quicksort(arr)
 
-    quicksort(arr)
-
-    set v0 = arr at 0
-    set v3 = arr at 3
-    set v7 = arr at 7
+    set v0 = sorted at 0
+    set v3 = sorted at 3
+    set v7 = sorted at 7
 
     use dasu("sorted[0]={v0} sorted[3]={v3} sorted[7]={v7}")
 }

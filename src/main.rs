@@ -3,9 +3,10 @@ use mire::error::format::format_diagnostic;
 use mire::lexer::tokenize;
 use mire::parser::parse;
 use mire::{
-    BuildMode, BuildOptions, CacheOverrides, ImportMode, MireError, OptLevel, WarningConfig, analyze_program,
-    analyze_program_with_warnings, compile_file_with_avenys, default_output_dir,
-    load_program_from_file,
+    BuildMode, BuildOptions, CacheOverrides, ImportMode, MireError, MireImportEntry, MireManifest,
+    MireProject, OptLevel, WarningConfig, analyze_program, analyze_program_with_warnings,
+    compile_file_with_avenys, default_output_dir, load_program_from_file, load_project_manifest,
+    project_manifest_path, write_manifest,
 };
 use std::collections::HashSet;
 use std::env;
@@ -63,6 +64,8 @@ fn run_cli() -> Result<i32, MireError> {
         "build" => build_command(&cwd, &args[2..]),
         "check" => check_command(&cwd, &args[2..]),
         "debug" => debug_command(&cwd, &args[2..]),
+        "test" => test_command(&cwd, &args[2..]),
+        "import" => import_command(&cwd, &args[2..]),
         "help" | "--help" | "-h" => {
             print_help();
             Ok(0)
@@ -157,16 +160,20 @@ fn debug_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
     let source = fs::read_to_string(&path).map_err(runtime_err)?;
 
     if options.show_tokens {
-        let tokens = tokenize(&source)
-            .map_err(|err| err.with_source(source.clone()).with_filename(path.display().to_string()))?;
+        let tokens = tokenize(&source).map_err(|err| {
+            err.with_source(source.clone())
+                .with_filename(path.display().to_string())
+        })?;
         for token in &tokens {
             println!("{:?}", token);
         }
     }
 
     if options.show_ast {
-        let program = parse(&source)
-            .map_err(|err| err.with_source(source.clone()).with_filename(path.display().to_string()))?;
+        let program = parse(&source).map_err(|err| {
+            err.with_source(source.clone())
+                .with_filename(path.display().to_string())
+        })?;
         println!("{:#?}", program);
     }
 
@@ -198,10 +205,170 @@ fn debug_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
         println!("OPT IR: {}", ir.display());
     }
     if options.run_binary && !options.emit_ir_only {
-        let status = Command::new(&build.binary_path).status().map_err(runtime_err)?;
+        let status = Command::new(&build.binary_path)
+            .status()
+            .map_err(runtime_err)?;
         return Ok(status.code().unwrap_or(1));
     }
     Ok(0)
+}
+
+fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
+    let mut run = true;
+    let mut verbose = false;
+    let mut paths: Vec<String> = Vec::new();
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--no-run" => run = false,
+            "--verbose" | "-v" => verbose = true,
+            _ => paths.push(args[i].clone()),
+        }
+        i += 1;
+    }
+
+    let mut test_files: Vec<PathBuf> = Vec::new();
+
+    if !paths.is_empty() {
+        for p in &paths {
+            let path = cwd.join(p);
+            if path.is_dir() {
+                let mut entries: Vec<_> = walkdir(&path, "*.mire")?;
+                entries.sort();
+                test_files.extend(entries);
+            } else if path.is_file() {
+                test_files.push(path);
+            } else {
+                eprintln!("warning: test path not found: {}", path.display());
+            }
+        }
+    } else {
+        let tests_dir = cwd.join("tests");
+        if tests_dir.is_dir() {
+            let mut entries: Vec<_> = walkdir(&tests_dir, "*.mire")?;
+            entries.sort();
+            test_files = entries;
+        }
+    }
+
+    if test_files.is_empty() {
+        println!("no extra tests found");
+        return Ok(0);
+    }
+
+    let _total = test_files.len();
+    let mut passed = 0u32;
+    let mut failed = 0u32;
+
+    for file in &test_files {
+        let display = file.strip_prefix(cwd).unwrap_or(file).display().to_string();
+
+        if verbose {
+            print!("test {} ... ", display);
+        }
+
+        if !file.exists() {
+            if verbose {
+                println!("FAILED");
+            } else {
+                println!("FAILED: {} - file not found", display);
+            }
+            failed += 1;
+            continue;
+        }
+
+        let options = BuildOptions {
+            mode: BuildMode::Debug,
+            opt_level: OptLevel::O0,
+            debug_dump: false,
+            output: Some(default_output_dir(file, BuildMode::Debug).join("test")),
+            emit_binary: run,
+            persist_ir: false,
+            import_mode: ImportMode::default(),
+            cache: Default::default(),
+            warning_filter: WarningFilter::Default,
+            deny_warnings: HashSet::new(),
+            module_paths: Vec::new(),
+        };
+
+        match compile_file_with_avenys(file, &options) {
+            Ok(build) => {
+                if run {
+                    match Command::new(&build.binary_path).status() {
+                        Ok(status) if status.success() => {
+                            if verbose {
+                                println!("ok");
+                            }
+                            passed += 1;
+                        }
+                        Ok(status) => {
+                            if verbose {
+                                println!("FAILED");
+                            } else {
+                                println!("FAILED: {} (exit code: {:?})", display, status.code());
+                            }
+                            failed += 1;
+                        }
+                        Err(e) => {
+                            if verbose {
+                                println!("FAILED");
+                            } else {
+                                println!("FAILED: {} - run error: {}", display, e);
+                            }
+                            failed += 1;
+                        }
+                    }
+                } else {
+                    if verbose {
+                        println!("ok");
+                    }
+                    passed += 1;
+                }
+            }
+            Err(e) => {
+                if verbose {
+                    println!("FAILED");
+                } else {
+                    println!("FAILED: {} - {}", display, e);
+                }
+                failed += 1;
+            }
+        }
+    }
+
+    let status = if failed == 0 { "ok" } else { "FAILED" };
+    println!(
+        "\ntest result: {}. {} passed; {} failed; finished",
+        status, passed, failed
+    );
+
+    Ok(if failed == 0 { 0 } else { 1 })
+}
+
+fn walkdir(dir: &Path, _pattern: &str) -> Result<Vec<PathBuf>, MireError> {
+    let mut results = Vec::new();
+    if !dir.is_dir() {
+        return Ok(results);
+    }
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&current) else {
+            continue;
+        };
+        for entry in entries {
+            let Ok(entry) = entry else { continue };
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if let Some(ext) = path.extension()
+                && ext == "mire"
+            {
+                results.push(path);
+            }
+        }
+    }
+    Ok(results)
 }
 
 fn parse_run_options(
@@ -256,9 +423,9 @@ fn parse_common_with_file(
             }
             "-O" | "--opt-level" => {
                 i += 1;
-                let level = args
-                    .get(i)
-                    .ok_or_else(|| runtime_msg("Missing optimization level after -O/--opt-level"))?;
+                let level = args.get(i).ok_or_else(|| {
+                    runtime_msg("Missing optimization level after -O/--opt-level")
+                })?;
                 opt_level = OptLevel::parse(level)
                     .ok_or_else(|| runtime_msg("Invalid optimization level, use 0/1/2/3/s/z"))?;
             }
@@ -387,6 +554,114 @@ fn parse_debug_options(cwd: &Path, args: &[String]) -> Result<DebugOptions, Mire
     })
 }
 
+fn import_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
+    if args.is_empty() {
+        eprintln!("Usage: mire import <module> [--version <ver>] [--path <path>]");
+        eprintln!("  mire import kioto              add kioto module (version-based)");
+        eprintln!("  mire import kioto --version 0.2 add kioto with version");
+        eprintln!("  mire import ./local-mod         add local module");
+        return Ok(1);
+    }
+
+    let module = &args[0];
+    let mut version = String::new();
+    let mut path = String::new();
+    let mut json_output = false;
+
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--version" | "-v" => {
+                i += 1;
+                version = args
+                    .get(i)
+                    .ok_or_else(|| {
+                        MireError::runtime("Missing version after --version".to_string())
+                    })?
+                    .clone();
+            }
+            "--path" | "-p" => {
+                i += 1;
+                path = args
+                    .get(i)
+                    .ok_or_else(|| MireError::runtime("Missing path after --path".to_string()))?
+                    .clone();
+            }
+            "--json" => {
+                json_output = true;
+            }
+            _ => {
+                return Err(MireError::runtime(format!("Unknown option: {}", args[i])));
+            }
+        }
+        i += 1;
+    }
+
+    let manifest_path = project_manifest_path(cwd);
+    let output_version = if version.is_empty() {
+        "latest".to_string()
+    } else {
+        version.clone()
+    };
+    let output_path = if path.is_empty() {
+        None
+    } else {
+        Some(path.clone())
+    };
+
+    // Load or create manifest
+    let mut manifest = match load_project_manifest(cwd) {
+        Ok(Some(m)) => m,
+        _ => MireManifest {
+            project: MireProject {
+                name: cwd
+                    .file_name()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "project".to_string()),
+                version: "0.1.0".to_string(),
+                entry: "code/main.mire".to_string(),
+            },
+            cache: None,
+            imports: Default::default(),
+        },
+    };
+
+    let entry = if !path.is_empty() {
+        if !version.is_empty() {
+            MireImportEntry::WithPath {
+                version,
+                path: path.clone(),
+            }
+        } else {
+            MireImportEntry::PathOnly { path: path.clone() }
+        }
+    } else if !version.is_empty() {
+        MireImportEntry::Simple { version }
+    } else {
+        MireImportEntry::Simple {
+            version: "latest".to_string(),
+        }
+    };
+
+    manifest.imports.entries.insert(module.clone(), entry);
+    write_manifest(&manifest, &manifest_path)?;
+    if json_output {
+        println!(
+            "{}",
+            serde_json::json!({
+                "status": "ok",
+                "module": module,
+                "manifest": manifest_path,
+                "version": output_version,
+                "path": output_path,
+            })
+        );
+    } else {
+        println!("Added import '{}' to {}", module, manifest_path.display());
+    }
+    Ok(0)
+}
+
 fn default_entry_from_manifest(cwd: &Path) -> Result<Option<String>, MireError> {
     let owl_toml = cwd.join("owl.toml");
     let path = if owl_toml.exists() {
@@ -410,9 +685,16 @@ fn resolve_source_path(cwd: &Path, file: Option<String>) -> Result<PathBuf, Mire
         runtime_msg("No input file provided and no `entry` was found in owl.toml")
     })?;
     let path = PathBuf::from(&file);
-    let resolved = if path.is_absolute() { path } else { cwd.join(path) };
+    let resolved = if path.is_absolute() {
+        path
+    } else {
+        cwd.join(path)
+    };
     if !resolved.exists() {
-        return Err(runtime_msg(&format!("Input file not found: {}", resolved.display())));
+        return Err(runtime_msg(&format!(
+            "Input file not found: {}",
+            resolved.display()
+        )));
     }
     Ok(resolved)
 }
@@ -480,7 +762,7 @@ fn runtime_err(err: std::io::Error) -> MireError {
 }
 
 fn print_help() {
-    println!("Mire / Avenys v2.8.0");
+    println!("Mire / Avenys v{}", env!("CARGO_PKG_VERSION"));
     println!("Usage: mire <run|build|check|debug> [file] [options]\n");
     println!("Profiles:");
     println!("  --debug               Build profile debug (default)");
@@ -492,4 +774,9 @@ fn print_help() {
     println!("  build [file]          Compile only");
     println!("  check [file]          Analyze only");
     println!("  debug [file]          Debug build, emits IR");
+    println!("  import <module>       Add import to owl.toml");
+    println!("    --json              Emit machine-readable import result");
+    println!("  test [paths...]       Run integration tests from tests/");
+    println!("    --no-run            Compile only, skip execution");
+    println!("    --verbose, -v       Show per-test results");
 }

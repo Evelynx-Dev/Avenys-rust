@@ -12,7 +12,7 @@ pub fn main: () {
         use dasu(b)
     }
     
-    if a & b {
-        use dasu(both)
+    if a && b {
+        use dasu("both")
     }
 }

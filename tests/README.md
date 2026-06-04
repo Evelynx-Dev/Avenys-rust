@@ -37,14 +37,29 @@ tests/
 
 ```bash
 # Run a single test
-./target/release/mire run tests/level/beginner/01_hello_world.mire
+./target/release/mire test tests/level/beginner/01_hello_world.mire
 
-# Run all tests in a directory
-for f in tests/level/beginner/*.mire; do ./target/release/mire run "$f"; done
+# Run all tests in a directory (recursively)
+./target/release/mire test tests/level/
+
+# Run all integration tests from tests/ (auto-detected)
+./target/release/mire test --verbose
+
+# Compile-check only (no execution)
+./target/release/mire test --no-run
 
 # Run with timing
 ./target/release/mire run tests/complex/algorithms/01_sum_loop.mire --ms
 ```
+
+## Test Strategy
+
+| Layer | Tool | Purpose |
+|-------|------|---------|
+| Compiler regressions | Rust `#[test]` (cargo test) | Type checking, borrowck, loader, incremental cache |
+| Integration tests | `mire test` | End-to-end compilation and execution |
+| PAL unit tests | C tests via `cc` crate | Platform abstraction layer correctness |
+| Manual smoke | `mire run` | Ad-hoc verification |
 
 ## Test Status Summary
 
@@ -66,13 +81,17 @@ for f in tests/level/beginner/*.mire; do ./target/release/mire run "$f"; done
 | edge/error_handling | 1 | ✅ Passing |
 | behavior/typeck | 2 | ✅ Passing |
 | behavior/borrowck | 3 | ⚠️ Partial |
-| modules | 1 | ✅ Passing |
+| modules | 3 | ✅ Passing |
 
 ## Known Issues
 
 See `docs/issues.md` for documented issues and limitations.
-- **math.avg**: Function not available, use `math.sum(x) / len(x)`
+- **math advanced surface**: core helpers now exist, but further overloads and
+  vectorized statistics are still open work.
 - **List HOF scope**: `lists.fold/map/filter` are working with inline closures; generic callback values are still not documented as stable surface. Current checked order is `lists.fold(acc, closure, list)`.
+- **proc.run/exec args**: process helpers currently preserve the frozen
+  two-argument surface, but shell-backed spawn executes the command string and
+  does not yet join the `args` list into argv.
 
 ## Incremental Compilation
 

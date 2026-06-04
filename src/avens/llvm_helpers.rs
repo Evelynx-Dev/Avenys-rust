@@ -7,7 +7,10 @@ impl LlvmIrGen {
                 name, data_type, ..
             } if data_type.is_struct_like() => {
                 data_type.struct_name().map(ToOwned::to_owned).or_else(|| {
-                    if self.user_structs.contains_key(&normalize_nominal_name(name)) {
+                    if self
+                        .user_structs
+                        .contains_key(&normalize_nominal_name(name))
+                    {
                         Some(normalize_nominal_name(name))
                     } else if let Some((owner, _method)) = name.split_once('.') {
                         self.vars
@@ -266,4 +269,27 @@ impl LlvmIrGen {
         out
     }
 
+    pub(super) fn null_value(&self) -> LlValue {
+        LlValue {
+            ty: LlType::Ptr,
+            repr: "null".to_string(),
+            owned: false,
+        }
+    }
+
+    /// Cast value to Ptr if it is I64 (from DataType::Unknown), otherwise pass through.
+    pub(super) fn ensure_ptr(&mut self, value: LlValue) -> LlValue {
+        if value.ty == LlType::I64 {
+            let result = self.tmp();
+            self.body
+                .push(format!("  {result} = inttoptr i64 {} to ptr", value.repr));
+            LlValue {
+                ty: LlType::Ptr,
+                repr: result,
+                owned: value.owned,
+            }
+        } else {
+            value
+        }
+    }
 }

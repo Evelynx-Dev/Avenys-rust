@@ -16,7 +16,7 @@ impl Matrix {
         return self.data at idx
     }
 
-    fn set: (self, row :i64, col :i64, val :i64) {
+    fn set_val: (self, row :i64, col :i64, val :i64) {
         set idx = row * self.cols + col
         set self.data at idx = val
     }
@@ -24,9 +24,9 @@ impl Matrix {
 
 pub fn main: () {
     set m = Matrix::new(3 3)
-    m.set(0 0 1)
-    m.set(1 1 5)
-    m.set(2 2 9)
+    m.set_val(0 0 1)
+    m.set_val(1 1 5)
+    m.set_val(2 2 9)
 
     set v00 = m.get(0 0)
     set v11 = m.get(1 1)

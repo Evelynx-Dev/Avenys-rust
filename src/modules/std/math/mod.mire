@@ -1,9 +1,0 @@
-pub fn abs: (n :i64) :i64
-pub fn min: (a :i64, b :i64) :i64
-pub fn max: (a :i64, b :i64) :i64
-pub fn sum: (list) :i64
-pub fn clamp: (n :i64, min :i64, max :i64) :i64
-pub fn range: (end :i64) :vec[i64]
-pub fn round: (n :f64) :i64
-pub fn floor: (n :f64) :i64
-pub fn ceil: (n :f64) :i64

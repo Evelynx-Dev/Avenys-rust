@@ -102,7 +102,7 @@ fn prepare_nested_reuse(
 fn container_children(statement: &Statement) -> Option<&[Statement]> {
     match statement {
         Statement::Type { fields, .. } => Some(fields.as_slice()),
-        | Statement::Impl { methods, .. } => Some(methods.as_slice()),
+        Statement::Impl { methods, .. } => Some(methods.as_slice()),
         _ => None,
     }
 }
@@ -110,7 +110,7 @@ fn container_children(statement: &Statement) -> Option<&[Statement]> {
 fn container_children_mut(statement: &mut Statement) -> Option<&mut Vec<Statement>> {
     match statement {
         Statement::Type { fields, .. } => Some(fields),
-        | Statement::Impl { methods, .. } => Some(methods),
+        Statement::Impl { methods, .. } => Some(methods),
         _ => None,
     }
 }

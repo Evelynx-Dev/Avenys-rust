@@ -17,8 +17,9 @@ Complete language syntax derived from test files and working examples.
 9. [Unsafe, Asm, Extern](#9-unsafe-asm-extern)
 10. [Lifecycle Operations](#10-lifecycle-operations)
 11. [Pipeline Operator](#11-pipeline-operator)
-12. [String Interpolation](#12-string-interpolation)
-13. [Imports](#13-imports)
+12. [I/O: dasu and ireru](#12-io-dasu-and-ireru)
+13. [String Interpolation](#13-string-interpolation)
+14. [Imports](#14-imports)
 14. [Traits/Skills](#14-traitsskills)
 15. [Operators](#15-operators)
 16. [Ownership and References](#16-ownership-and-references)
@@ -501,7 +502,21 @@ set result = read_file("data.txt")
 
 ---
 
-## 12. String Interpolation
+## 12. I/O: dasu and ireru
+
+### Output: `dasu`
+
+Prints any value to stdout followed by a newline:
+
+```mire
+use dasu("hello")       // str
+use dasu(42)            // i64
+use dasu(3.14)          // f64
+use dasu(true)          // bool
+use dasu({key: "val"})  // dict
+```
+
+String interpolation works inside `dasu`:
 
 ```mire
 use dasu("Hello {name}")
@@ -509,11 +524,34 @@ use dasu("Count: {count}")
 use dasu("Result: {add(5 3)}")
 ```
 
-Variables, function calls, and method calls can appear inside `{}`.
+### Input: `ireru`
+
+Reads a line from stdin. Accepts 0 or 1 arguments (an optional prompt). Returns `str` by default, or the annotated type:
+
+```mire
+// Read a line with no prompt
+set line = ireru()
+
+// Read a line with a prompt
+set name = ireru("Name: ")
+
+// Read and parse as integer
+set age = ireru("Age: ") :i64
+
+// Read and parse as float
+set height = ireru("Height: ") :f64
+
+// Read and parse as bool ("true"/"1" → true, "false"/"0" → false)
+set flag = ireru("Flag: ") :bool
+```
+
+The prompt (if provided) is printed to stdout without a newline before reading. The trailing newline from the user's input is stripped automatically.
 
 ---
 
-## 13. Imports
+## 14. Imports
+
+Modules are imported with the `import` keyword:
 
 ```mire
 import std
@@ -530,9 +568,23 @@ Specific imports select only named items from a module:
 import strings: (split replace trim)
 ```
 
+Module dependencies can also be declared in `owl.toml` under the `[imports]` section:
+
+```toml
+[imports]
+kioto = { version = "0.2" }
+my-lib = { path = "./lib/my-lib" }
+```
+
+Use the CLI to manage imports:
+```
+mire import kioto --version 0.2
+mire import ./local-lib --path lib/local-lib
+```
+
 ---
 
-## 14. Traits/Skills
+## 15. Traits/Skills
 
 ```mire
 pub skill Show {
@@ -552,7 +604,7 @@ impl Show for Box {
 
 ---
 
-## 15. Operators
+## 16. Operators
 
 ### Arithmetic
 
@@ -602,7 +654,7 @@ set arr at 1 = 99
 
 ---
 
-## 16. Ownership and References
+## 17. Ownership and References
 
 ### References
 
@@ -644,7 +696,7 @@ set owned = box[i64]
 
 ---
 
-## 17. Types
+## 18. Types
 
 ### Primitive Types
 
@@ -709,7 +761,7 @@ set p = (Point x: 1, y: 2) :Point
 
 ---
 
-## 18. Stability
+## 19. Stability
 
 Compatibility note (v2.7.0): no syntax changes were introduced in this release.
 

@@ -1,7 +1,10 @@
 use super::*;
 
 impl LlvmIrGen {
-    pub(super) fn compile_program(mut self, program: &Program) -> Result<String> {
+    pub(super) fn compile_program(
+        mut self,
+        program: &Program,
+    ) -> Result<(String, Vec<(String, String)>)> {
         // First pass: collect struct definitions
         for stmt in &program.statements {
             if let Statement::Type { name, fields, .. } = stmt {
@@ -106,6 +109,9 @@ impl LlvmIrGen {
                     },
                 );
             }
+            if let Statement::ExternLib { name, path } = stmt {
+                self.extern_libs.push((name.clone(), path.clone()));
+            }
             if let Statement::Function {
                 name,
                 params,
@@ -113,11 +119,6 @@ impl LlvmIrGen {
                 ..
             } = stmt
             {
-                let llvm_name = if name == "main" {
-                    "@mire_main".to_string()
-                } else {
-                    format!("@fn_{}", sanitize_symbol(name))
-                };
                 let param_types = params
                     .iter()
                     .map(|(_, ty)| self.map_type(ty))
@@ -127,6 +128,7 @@ impl LlvmIrGen {
                 } else {
                     self.map_type(return_type)?
                 };
+                let llvm_name = self.llvm_fn_name(name);
                 self.user_functions.insert(
                     name.clone(),
                     FnInfo {
@@ -150,10 +152,11 @@ impl LlvmIrGen {
                     } = method
                     {
                         let full_name = format!("{}.{}", normalize_nominal_name(type_name), name);
+                        let llvm_name = self.llvm_fn_name(&full_name);
                         self.user_functions.insert(
                             full_name.clone(),
                             FnInfo {
-                                llvm_name: format!("@fn_{}", sanitize_symbol(&full_name)),
+                                llvm_name,
                                 params: params
                                     .iter()
                                     .map(|(param_name, ty)| {
@@ -173,6 +176,10 @@ impl LlvmIrGen {
             }
         }
 
+        // Reset the function ID counter so the compilation pass produces the
+        // same unique LLVM names as the registration pass (in the same order).
+        self.next_fn_id.clear();
+
         for stmt in &program.statements {
             if let Statement::Function {
                 name,
@@ -187,7 +194,8 @@ impl LlvmIrGen {
                 } else {
                     self.map_type(return_type)?
                 };
-                let fn_ir = self.compile_function_ir(name, params, body, ret)?;
+                let returns_value = *return_type != DataType::None;
+                let fn_ir = self.compile_function_ir(name, params, body, ret, returns_value)?;
                 self.functions.push(fn_ir);
             }
             if let Statement::Impl {
@@ -203,13 +211,14 @@ impl LlvmIrGen {
                         ..
                     } = method
                     {
-                        let full_name =
-                            format!("{}.{}", normalize_nominal_name(type_name), name);
+                        let full_name = format!("{}.{}", normalize_nominal_name(type_name), name);
+                        let returns_value = *return_type != DataType::None;
                         let fn_ir = self.compile_function_ir(
                             &full_name,
                             params,
                             body,
                             self.map_type(return_type)?,
+                            returns_value,
                         )?;
                         self.functions.push(fn_ir);
                     }
@@ -244,55 +253,55 @@ impl LlvmIrGen {
             "declare i32 @strcmp(ptr, ptr)".to_string(),
             "declare i32 @getpagesize()".to_string(),
             "declare i64 @getpid()".to_string(),
-            "declare i64 @mire_wall_mark_ns()".to_string(),
-            "declare i64 @mire_wall_elapsed_ms(i64)".to_string(),
-            "declare ptr @mire_wall_elapsed_ms_str(i64)".to_string(),
-            "declare i64 @mire_cpu_mark_ns()".to_string(),
-            "declare i64 @mire_cpu_elapsed_ms(i64)".to_string(),
-            "declare ptr @mire_cpu_elapsed_ms_str(i64)".to_string(),
-            "declare i64 @mire_cpu_cycles_est(i64)".to_string(),
-            "declare i64 @mire_mem_process_bytes()".to_string(),
-            "declare ptr @mire_mem_format(i64)".to_string(),
-            "declare ptr @mire_gpu_snapshot()".to_string(),
-            "declare ptr @mire_i64_to_string(i64)".to_string(),
-            "declare ptr @mire_bool_to_string(i64)".to_string(),
-            "declare ptr @mire_f64_to_string(double)".to_string(),
-            "declare ptr @mire_string_copy(ptr)".to_string(),
-            "declare ptr @mire_string_concat(ptr, ptr)".to_string(),
-            "declare ptr @mire_string_append_owned(ptr, ptr)".to_string(),
-            "declare void @mire_string_free(ptr)".to_string(),
-            "declare ptr @mire_string_to_upper(ptr)".to_string(),
-            "declare ptr @mire_string_to_lower(ptr)".to_string(),
-            "declare ptr @mire_strings_replace(ptr, ptr, ptr)".to_string(),
-            "declare ptr @mire_strings_split(ptr, ptr)".to_string(),
-            "declare ptr @mire_strings_split_list(ptr, ptr)".to_string(),
-            "declare ptr @mire_strings_join(ptr, i64, ptr)".to_string(),
-            "declare ptr @mire_strings_trim(ptr)".to_string(),
-            "declare ptr @mire_strings_replace_first(ptr, ptr, ptr)".to_string(),
-            "declare i64 @mire_strings_starts_with(ptr, ptr)".to_string(),
-            "declare i64 @mire_strings_ends_with(ptr, ptr)".to_string(),
-            "declare i64 @mire_strings_contains(ptr, ptr)".to_string(),
-            "declare ptr @mire_strings_substr(ptr, i64, i64)".to_string(),
-            "declare ptr @mire_strings_pad_left(ptr, i64, ptr)".to_string(),
-            "declare ptr @mire_strings_pad_right(ptr, i64, ptr)".to_string(),
-            "declare ptr @mire_strings_repeat(ptr, i64)".to_string(),
-            "declare ptr @mire_list_create(i64, i64)".to_string(),
-            "declare ptr @mire_list_push_i64(ptr, i64)".to_string(),
-            "declare ptr @mire_list_new()".to_string(),
-            "declare ptr @mire_list_push_scalar(ptr, i64, i64)".to_string(),
-            "declare ptr @mire_list_push_ptr(ptr, ptr)".to_string(),
-            "declare ptr @mire_list_concat(ptr, ptr)".to_string(),
-            "declare i64 @mire_list_pop_i64(ptr)".to_string(),
-            "declare i64 @mire_dict_get_i64(ptr, i64, i64, ptr, i64)".to_string(),
-            "declare ptr @mire_dict_get_ptr(ptr, i64, i64, ptr, ptr)".to_string(),
-            "declare ptr @mire_dict_set_i64(ptr, i64, i64, i64, ptr, i64)".to_string(),
-            "declare ptr @mire_dict_set_ptr(ptr, i64, i64, i64, ptr, ptr)".to_string(),
-            "declare ptr @mire_dict_to_string(ptr)".to_string(),
-            "declare ptr @mire_dict_keys(ptr)".to_string(),
-            "declare ptr @mire_dict_values(ptr)".to_string(),
-            "declare ptr @mire_list_slice(ptr, i64, i64)".to_string(),
-            "declare void @mire_runtime_panic(ptr)".to_string(),
+            "declare i64 @pal_time_mark()".to_string(),
+            "declare i64 @pal_time_elapsed_ms(i64)".to_string(),
+            "declare ptr @rt_time_elapsed_ms_str(i64)".to_string(),
+            "declare i64 @pal_cpu_mark()".to_string(),
+            "declare i64 @pal_cpu_elapsed_ms(i64)".to_string(),
+            "declare ptr @rt_cpu_elapsed_ms_str(i64)".to_string(),
+            "declare i64 @pal_cpu_cycles_est(i64)".to_string(),
+            "declare i64 @pal_mem_process_bytes()".to_string(),
+            "declare ptr @pal_mem_format(i64)".to_string(),
+            "declare ptr @pal_gpu_snapshot()".to_string(),
+            "declare ptr @rt_i64_to_string(i64)".to_string(),
+            "declare ptr @rt_bool_to_string(i64)".to_string(),
+            "declare ptr @rt_f64_to_string(double)".to_string(),
+            "declare ptr @rt_string_copy(ptr)".to_string(),
+            "declare ptr @rt_string_concat(ptr, ptr)".to_string(),
+            "declare ptr @rt_string_append_owned(ptr, ptr)".to_string(),
+            "declare void @rt_managed_free(ptr)".to_string(),
+            "declare ptr @rt_string_to_upper(ptr)".to_string(),
+            "declare ptr @rt_string_to_lower(ptr)".to_string(),
+            "declare ptr @rt_strings_replace(ptr, ptr, ptr)".to_string(),
+            "declare ptr @rt_strings_split_list(ptr, ptr)".to_string(),
+            "declare ptr @rt_strings_join(ptr, i64, ptr)".to_string(),
+            "declare ptr @rt_strings_trim(ptr)".to_string(),
+            "declare ptr @rt_strings_replace_first(ptr, ptr, ptr)".to_string(),
+            "declare i64 @rt_strings_starts_with(ptr, ptr)".to_string(),
+            "declare i64 @rt_strings_ends_with(ptr, ptr)".to_string(),
+            "declare i64 @rt_strings_contains(ptr, ptr)".to_string(),
+            "declare ptr @rt_strings_substr(ptr, i64, i64)".to_string(),
+            "declare ptr @rt_strings_pad_left(ptr, i64, ptr)".to_string(),
+            "declare ptr @rt_strings_pad_right(ptr, i64, ptr)".to_string(),
+            "declare ptr @rt_list_create(i64, i64)".to_string(),
+            "declare ptr @rt_list_push_i64(ptr, i64)".to_string(),
+            "declare ptr @rt_list_push_scalar(ptr, i64, i64)".to_string(),
+            "declare ptr @rt_list_push_ptr(ptr, ptr)".to_string(),
+            "declare ptr @rt_list_concat(ptr, ptr)".to_string(),
+            "declare i64 @rt_list_pop_i64(ptr)".to_string(),
+            "declare i64 @rt_dict_get_i64(ptr, i64, i64, ptr, i64)".to_string(),
+            "declare ptr @rt_dict_get_ptr(ptr, i64, i64, ptr, ptr)".to_string(),
+            "declare ptr @rt_dict_set_i64(ptr, i64, i64, i64, ptr, i64)".to_string(),
+            "declare ptr @rt_dict_set_ptr(ptr, i64, i64, i64, ptr, ptr)".to_string(),
+            "declare ptr @rt_dict_to_string(ptr)".to_string(),
+            "declare ptr @rt_dict_keys(ptr)".to_string(),
+            "declare ptr @rt_dict_values(ptr)".to_string(),
+            "declare ptr @rt_list_slice(ptr, i64, i64)".to_string(),
+            "declare void @rt_panic(ptr)".to_string(),
             "declare ptr @fgets(ptr, i64, ptr)".to_string(),
+            "declare ptr @rt_read_line(ptr)".to_string(),
+            "declare i64 @atoll(ptr)".to_string(),
+            "declare double @atof(ptr)".to_string(),
             "@.fmt_i64 = private unnamed_addr constant [5 x i8] c\"%ld\\0A\\00\"".to_string(),
             "@.fmt_str = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\"".to_string(),
             "@.fmt_float = private unnamed_addr constant [4 x i8] c\"%f\\0A\\00\"".to_string(),
@@ -300,46 +309,65 @@ impl LlvmIrGen {
             "@.fmt_bool_true = private unnamed_addr constant [5 x i8] c\"true\\00\"".to_string(),
             "@.fmt_bool_false = private unnamed_addr constant [6 x i8] c\"false\\00\"".to_string(),
             "@.fmt_i32 = private unnamed_addr constant [4 x i8] c\"%d\\0A\\00\"".to_string(),
-            "@.fmt_prompt = private unnamed_addr constant [3 x i8] c\"%s\\00\"".to_string(),
-            "@.scanf_str = private unnamed_addr constant [3 x i8] c\"%s\\00\"".to_string(),
-            "@.scanf_i64 = private unnamed_addr constant [4 x i8] c\"%ld\\00\"".to_string(),
+            // ireru remains a language builtin; library I/O uses rt_/pal_ externs.
             "@.argc = global i32 0".to_string(),
             "@.argv = global ptr null".to_string(),
-            "declare ptr @mire_get_args(i32, ptr)".to_string(),
+            "declare ptr @rt_get_args(i32, ptr)".to_string(),
             // FS functions
-            "declare i32 @mire_fs_write(ptr, ptr)".to_string(),
-            "declare i32 @mire_fs_append(ptr, ptr)".to_string(),
-            "declare ptr @mire_fs_read(ptr)".to_string(),
-            "declare i32 @mire_fs_copy(ptr, ptr)".to_string(),
-            "declare i32 @mire_fs_move(ptr, ptr)".to_string(),
-            "declare i32 @mire_fs_drop(ptr)".to_string(),
-            "declare i32 @mire_fs_mkdir(ptr)".to_string(),
-            "declare i32 @mire_fs_rmdir(ptr)".to_string(),
-            "declare i64 @mire_fs_exists(ptr)".to_string(),
-            "declare i64 @mire_fs_is_dir(ptr)".to_string(),
-            "declare i64 @mire_fs_size(ptr)".to_string(),
-            "declare ptr @mire_fs_list(ptr)".to_string(),
-            "declare ptr @mire_fs_join(ptr, ptr)".to_string(),
-            "declare ptr @mire_fs_dir(ptr)".to_string(),
-            "declare ptr @mire_fs_name(ptr)".to_string(),
-            "declare ptr @mire_fs_ext(ptr)".to_string(),
+            "declare i32 @pal_fs_write(ptr, ptr)".to_string(),
+            "declare i32 @pal_fs_append(ptr, ptr)".to_string(),
+            "declare ptr @pal_fs_read(ptr)".to_string(),
+            "declare i32 @pal_fs_copy(ptr, ptr)".to_string(),
+            "declare i32 @pal_fs_move(ptr, ptr)".to_string(),
+            "declare i32 @pal_fs_delete(ptr)".to_string(),
+            "declare i32 @pal_fs_mkdir(ptr)".to_string(),
+            "declare i32 @pal_fs_rmdir(ptr)".to_string(),
+            "declare i64 @pal_fs_exists(ptr)".to_string(),
+            "declare i64 @pal_fs_is_dir(ptr)".to_string(),
+            "declare i64 @pal_fs_size(ptr)".to_string(),
+            "declare ptr @pal_fs_list(ptr)".to_string(),
+            "declare ptr @pal_fs_join(ptr, ptr)".to_string(),
+            "declare ptr @pal_fs_dir(ptr)".to_string(),
+            "declare ptr @pal_fs_name(ptr)".to_string(),
+            "declare ptr @pal_fs_ext(ptr)".to_string(),
             // PROC functions
-            "declare ptr @mire_proc_run(ptr)".to_string(),
-            "declare ptr @mire_proc_exec(ptr)".to_string(),
-            "declare i64 @mire_proc_wait(i32)".to_string(),
-            "declare i32 @mire_proc_kill(i32)".to_string(),
-            "declare void @mire_proc_exit(i32)".to_string(),
-            "declare ptr @mire_proc_shell(ptr)".to_string(),
-            "declare i32 @mire_proc_exists(i32)".to_string(),
-            "declare double @sqrt(double)".to_string(),
+            "declare ptr @pal_proc_run(ptr)".to_string(),
+            "declare ptr @pal_proc_exec(ptr)".to_string(),
+            "declare ptr @pal_proc_shell(ptr)".to_string(),
+            "declare i64 @pal_proc_spawn(ptr)".to_string(),
+            "declare i64 @pal_proc_wait(i64)".to_string(),
+            "declare i32 @pal_proc_kill(i64)".to_string(),
+            "declare void @pal_proc_exit(i64)".to_string(),
+            "declare i64 @pal_proc_exists(i64)".to_string(),
+            "declare double @rt_math_sqrt(double)".to_string(),
+            "declare double @rt_math_pow(double, double)".to_string(),
+            "declare i64 @rt_math_round(double)".to_string(),
+            "declare i64 @rt_math_floor(double)".to_string(),
+            "declare i64 @rt_math_ceil(double)".to_string(),
             // ENV functions
-            "declare ptr @mire_env_get(ptr)".to_string(),
-            "declare i32 @mire_env_set(ptr, ptr)".to_string(),
-            "declare ptr @mire_env_cwd()".to_string(),
-            "declare ptr @mire_env_all()".to_string(),
+            "declare ptr @pal_env_get(ptr)".to_string(),
+            "declare i32 @pal_env_set(ptr, ptr)".to_string(),
+            "declare ptr @pal_env_cwd()".to_string(),
+            "declare ptr @pal_env_all()".to_string(),
         ];
         out.extend(self.strings);
-        out.extend(self.extern_decls);
+        // Deduplicate extern declarations by function name.
+        // Hard-coded declarations (already in `out`) take priority.
+        let extra_externs: Vec<String> = {
+            fn extract_fn_name(decl: &str) -> Option<&str> {
+                let start = decl.find('@')?;
+                let end = decl[start..].find('(')?;
+                Some(&decl[start + 1..start + end])
+            }
+            let mut seen: std::collections::HashSet<&str> =
+                out.iter().filter_map(|s| extract_fn_name(s)).collect();
+            self.extern_decls
+                .iter()
+                .filter(|decl| extract_fn_name(decl).map_or(true, |name| seen.insert(name)))
+                .cloned()
+                .collect()
+        };
+        out.extend(extra_externs);
         out.push(String::new());
         let has_functions = !self.functions.is_empty();
         out.extend(self.functions);
@@ -354,7 +382,7 @@ impl LlvmIrGen {
         out.extend(self.body);
         out.push("}".to_string());
         out.push(String::new());
-        Ok(out.join("\n"))
+        Ok((out.join("\n"), self.extern_libs))
     }
 
     pub(super) fn compile_statement(&mut self, stmt: &Statement) -> Result<()> {
@@ -591,8 +619,7 @@ impl LlvmIrGen {
             | Statement::Skill { .. }
             | Statement::Impl { .. }
             | Statement::Enum { .. }
-            | Statement::Query { .. }
-            => Err(MireError::new(ErrorKind::Backend {
+            | Statement::Query { .. } => Err(MireError::new(ErrorKind::Backend {
                 message: "Avenys statement is parsed/typechecked but not lowered in backend yet"
                     .to_string(),
             })),
@@ -607,10 +634,13 @@ impl LlvmIrGen {
                 if dropped.ty == LlType::Ptr {
                     let dropped_ty = self.expression_data_type(value);
                     if dropped_ty == DataType::Str {
-                        self.body
-                            .push(format!("  call void @mire_string_free(ptr {})", dropped.repr));
+                        self.body.push(format!(
+                            "  call void @rt_managed_free(ptr {})",
+                            dropped.repr
+                        ));
                     } else {
-                        self.body.push(format!("  call void @free(ptr {})", dropped.repr));
+                        self.body
+                            .push(format!("  call void @free(ptr {})", dropped.repr));
                     }
                 }
                 Ok(())
@@ -702,15 +732,10 @@ impl LlvmIrGen {
                         owned: var.owns_heap_string,
                     });
                 }
-                if let Some(fn_info) = self
-                    .user_functions
-                    .get(name)
-                    .cloned()
-                    .or_else(|| {
-                        strip_root_namespace(name)
-                            .and_then(|alias| self.user_functions.get(&alias).cloned())
-                    })
-                {
+                if let Some(fn_info) = self.user_functions.get(name).cloned().or_else(|| {
+                    strip_root_namespace(name)
+                        .and_then(|alias| self.user_functions.get(&alias).cloned())
+                }) {
                     let tmp = self.tmp();
                     let signature = format!(
                         "{} ({})*",
@@ -780,7 +805,7 @@ impl LlvmIrGen {
                 if operator == "+" && left_is_list && right_is_list {
                     let result = self.tmp();
                     self.body.push(format!(
-                        "  {result} = call ptr @mire_list_concat(ptr {}, ptr {})",
+                        "  {result} = call ptr @rt_list_concat(ptr {}, ptr {})",
                         lhs.repr, rhs.repr
                     ));
                     return Ok(LlValue {
@@ -806,7 +831,7 @@ impl LlvmIrGen {
                     DataType::Dict | DataType::Map { .. } => {
                         let tmp = self.tmp();
                         self.body.push(format!(
-                            "  {tmp} = call ptr @mire_dict_to_string(ptr {})",
+                            "  {tmp} = call ptr @rt_dict_to_string(ptr {})",
                             value.repr
                         ));
                         Ok(LlValue {
@@ -819,7 +844,7 @@ impl LlvmIrGen {
                         let i64_value = self.cast_to_i64(value)?;
                         let tmp = self.tmp();
                         self.body.push(format!(
-                            "  {tmp} = call ptr @mire_bool_to_string(i64 {})",
+                            "  {tmp} = call ptr @rt_bool_to_string(i64 {})",
                             i64_value.repr
                         ));
                         Ok(LlValue {
@@ -831,7 +856,7 @@ impl LlvmIrGen {
                     DataType::F64 => {
                         let tmp = self.tmp();
                         self.body.push(format!(
-                            "  {tmp} = call ptr @mire_f64_to_string(double {})",
+                            "  {tmp} = call ptr @rt_f64_to_string(double {})",
                             value.repr
                         ));
                         Ok(LlValue {
@@ -845,7 +870,7 @@ impl LlvmIrGen {
                         LlType::I64 => {
                             let tmp = self.tmp();
                             self.body.push(format!(
-                                "  {tmp} = call ptr @mire_i64_to_string(i64 {})",
+                                "  {tmp} = call ptr @rt_i64_to_string(i64 {})",
                                 value.repr
                             ));
                             Ok(LlValue {
@@ -858,7 +883,7 @@ impl LlvmIrGen {
                             let i64_value = self.cast_to_i64(value)?;
                             let tmp = self.tmp();
                             self.body.push(format!(
-                                "  {tmp} = call ptr @mire_bool_to_string(i64 {})",
+                                "  {tmp} = call ptr @rt_bool_to_string(i64 {})",
                                 i64_value.repr
                             ));
                             Ok(LlValue {
@@ -870,7 +895,7 @@ impl LlvmIrGen {
                         LlType::F64 => {
                             let tmp = self.tmp();
                             self.body.push(format!(
-                                "  {tmp} = call ptr @mire_f64_to_string(double {})",
+                                "  {tmp} = call ptr @rt_f64_to_string(double {})",
                                 value.repr
                             ));
                             Ok(LlValue {
@@ -883,7 +908,7 @@ impl LlvmIrGen {
                             let i64_value = self.cast_to_i64(value)?;
                             let tmp = self.tmp();
                             self.body.push(format!(
-                                "  {tmp} = call ptr @mire_i64_to_string(i64 {})",
+                                "  {tmp} = call ptr @rt_i64_to_string(i64 {})",
                                 i64_value.repr
                             ));
                             Ok(LlValue {
@@ -935,16 +960,17 @@ impl LlvmIrGen {
                             .get(&ident.name)
                             .cloned()
                             .unwrap_or_else(|| ident.name.clone());
-                        let fn_info = self
-                            .user_functions
-                            .get(&callback_name)
-                            .cloned()
-                            .or_else(|| {
-                                strip_root_namespace(&callback_name)
-                                    .and_then(|alias| self.user_functions.get(&alias).cloned())
-                            });
+                        let fn_info =
+                            self.user_functions
+                                .get(&callback_name)
+                                .cloned()
+                                .or_else(|| {
+                                    strip_root_namespace(&callback_name)
+                                        .and_then(|alias| self.user_functions.get(&alias).cloned())
+                                });
                         if fn_info.is_none() {
-                            let dynamic_sig = self.function_value_signatures.get(&ident.name).cloned();
+                            let dynamic_sig =
+                                self.function_value_signatures.get(&ident.name).cloned();
                             if let Some(sig) = dynamic_sig {
                                 if sig.params.len() != args.len() - 1 {
                                     return Err(MireError::new(ErrorKind::Runtime {
@@ -999,8 +1025,7 @@ impl LlvmIrGen {
                                     LlType::Ptr => ("ptr".to_string(), value.repr),
                                     LlType::Struct(_) => {
                                         return Err(MireError::new(ErrorKind::Backend {
-                                            message: "Cannot pass struct to callback"
-                                                .to_string(),
+                                            message: "Cannot pass struct to callback".to_string(),
                                         }));
                                     }
                                 };
@@ -1107,8 +1132,9 @@ impl LlvmIrGen {
                         let callback_ptr = self.compile_expr(callback_expr)?;
                         if callback_ptr.ty != LlType::Ptr {
                             return Err(MireError::new(ErrorKind::Backend {
-                                message: "Avenys call(...) dynamic callback must be a function pointer"
-                                    .to_string(),
+                                message:
+                                    "Avenys call(...) dynamic callback must be a function pointer"
+                                        .to_string(),
                             }));
                         }
                         let mut rendered_args = Vec::with_capacity(args.len() - 1);
@@ -1162,9 +1188,7 @@ impl LlvmIrGen {
                 args,
                 data_type,
                 ..
-            }
-                if name == "new::" || name == "move::"
-            => {
+            } if name == "new::" || name == "move::" => {
                 if let Some(first) = args.first() {
                     self.compile_expr(first)
                 } else {
@@ -1190,10 +1214,13 @@ impl LlvmIrGen {
                     if dropped.ty == LlType::Ptr {
                         let dropped_ty = self.expression_data_type(arg);
                         if dropped_ty == DataType::Str {
-                            self.body
-                                .push(format!("  call void @mire_string_free(ptr {})", dropped.repr));
+                            self.body.push(format!(
+                                "  call void @rt_managed_free(ptr {})",
+                                dropped.repr
+                            ));
                         } else {
-                            self.body.push(format!("  call void @free(ptr {})", dropped.repr));
+                            self.body
+                                .push(format!("  call void @free(ptr {})", dropped.repr));
                         }
                     }
                 }
@@ -1207,8 +1234,7 @@ impl LlvmIrGen {
                     result.repr
                 ));
                 let is_ok = self.tmp();
-                self.body
-                    .push(format!("  {is_ok} = icmp eq i8 {tag}, 0"));
+                self.body.push(format!("  {is_ok} = icmp eq i8 {tag}, 0"));
                 let ok_label = self.label("try_ok");
                 let err_label = self.label("try_err");
                 self.body.push(format!(
@@ -1432,7 +1458,9 @@ impl LlvmIrGen {
                 self.compile_trim(args)
             }
             Expression::Call { name, args, .. }
-                if name == "strings.strip" || name == "strings.ltrim" || name == "strings.rtrim" =>
+                if name == "strings.strip"
+                    || name == "strings.ltrim"
+                    || name == "strings.rtrim" =>
             {
                 self.compile_trim(args)
             }
@@ -1454,26 +1482,7 @@ impl LlvmIrGen {
             Expression::Call { name, args, .. } if name == "strings.pad_right" => {
                 self.compile_pad_right(args)
             }
-            Expression::Call { name, args, .. } if name == "strings.repeat" => {
-                self.compile_repeat(args)
-            }
-            Expression::Call { name, args, .. } if name == "strings.is_empty" => {
-                if args.len() != 1 {
-                    return Err(MireError::new(ErrorKind::Runtime {
-                        message: "Avenys strings.is_empty(...) expects 1 argument".to_string(),
-                    }));
-                }
-                let len = self.compile_len(args)?;
-                let len_i64 = self.cast_to_i64(len)?;
-                let out = self.tmp();
-                self.body
-                    .push(format!("  {out} = icmp eq i64 {}, 0", len_i64.repr));
-                Ok(LlValue {
-                    ty: LlType::I1,
-                    repr: out,
-                    owned: false,
-                })
-            }
+
             Expression::Call { name, args, .. } if name == "abs" => self.compile_abs(args),
             Expression::Call { name, args, .. } if name == "sqrt" => self.compile_sqrt(args),
             Expression::Call { name, args, .. } if name == "pow" => self.compile_pow(args),
@@ -1487,16 +1496,28 @@ impl LlvmIrGen {
             Expression::Call { name, args, .. } if name == "exit" => self.compile_exit(args),
             Expression::Call { name, args, .. } if name == "env_args" => self.compile_env_args(),
             // FS functions
-            Expression::Call { name, args, .. } if name == "fs_write" => self.compile_fs_write(args),
-            Expression::Call { name, args, .. } if name == "fs_append" => self.compile_fs_append(args),
+            Expression::Call { name, args, .. } if name == "fs_write" => {
+                self.compile_fs_write(args)
+            }
+            Expression::Call { name, args, .. } if name == "fs_append" => {
+                self.compile_fs_append(args)
+            }
             Expression::Call { name, args, .. } if name == "fs_read" => self.compile_fs_read(args),
             Expression::Call { name, args, .. } if name == "fs_copy" => self.compile_fs_copy(args),
             Expression::Call { name, args, .. } if name == "fs_move" => self.compile_fs_move(args),
             Expression::Call { name, args, .. } if name == "fs_drop" => self.compile_fs_drop(args),
-            Expression::Call { name, args, .. } if name == "fs_mkdir" => self.compile_fs_mkdir(args),
-            Expression::Call { name, args, .. } if name == "fs_rmdir" => self.compile_fs_rmdir(args),
-            Expression::Call { name, args, .. } if name == "fs_exists" => self.compile_fs_exists(args),
-            Expression::Call { name, args, .. } if name == "fs_is_dir" => self.compile_fs_is_dir(args),
+            Expression::Call { name, args, .. } if name == "fs_mkdir" => {
+                self.compile_fs_mkdir(args)
+            }
+            Expression::Call { name, args, .. } if name == "fs_rmdir" => {
+                self.compile_fs_rmdir(args)
+            }
+            Expression::Call { name, args, .. } if name == "fs_exists" => {
+                self.compile_fs_exists(args)
+            }
+            Expression::Call { name, args, .. } if name == "fs_is_dir" => {
+                self.compile_fs_is_dir(args)
+            }
             Expression::Call { name, args, .. } if name == "fs_size" => self.compile_fs_size(args),
             Expression::Call { name, args, .. } if name == "fs_list" => self.compile_fs_list(args),
             Expression::Call { name, args, .. } if name == "fs_join" => self.compile_fs_join(args),
@@ -1504,13 +1525,30 @@ impl LlvmIrGen {
             Expression::Call { name, args, .. } if name == "fs_name" => self.compile_fs_name(args),
             Expression::Call { name, args, .. } if name == "fs_ext" => self.compile_fs_ext(args),
             // PROC functions
-            Expression::Call { name, args, .. } if name == "proc_run" => self.compile_proc_run(args),
-            Expression::Call { name, args, .. } if name == "proc_exec" => self.compile_proc_exec(args),
-            Expression::Call { name, args, .. } if name == "proc_wait" => self.compile_proc_wait(args),
-            Expression::Call { name, args, .. } if name == "proc_kill" => self.compile_proc_kill(args),
-            Expression::Call { name, args, .. } if name == "proc_exit" => self.compile_proc_exit(args),
-            Expression::Call { name, args, .. } if name == "proc_shell" => self.compile_proc_shell(args),
-            Expression::Call { name, args, .. } if name == "proc_exists" => self.compile_proc_exists(args),
+            Expression::Call { name, args, .. } if name == "proc_run" => {
+                self.compile_proc_run(args)
+            }
+            Expression::Call { name, args, .. } if name == "proc_exec" => {
+                self.compile_proc_exec(args)
+            }
+            Expression::Call { name, args, .. } if name == "proc_spawn" => {
+                self.compile_proc_spawn(args)
+            }
+            Expression::Call { name, args, .. } if name == "proc_wait" => {
+                self.compile_proc_wait(args)
+            }
+            Expression::Call { name, args, .. } if name == "proc_kill" => {
+                self.compile_proc_kill(args)
+            }
+            Expression::Call { name, args, .. } if name == "proc_exit" => {
+                self.compile_proc_exit(args)
+            }
+            Expression::Call { name, args, .. } if name == "proc_shell" => {
+                self.compile_proc_shell(args)
+            }
+            Expression::Call { name, args, .. } if name == "proc_exists" => {
+                self.compile_proc_exists(args)
+            }
             // ENV functions
             Expression::Call { name, args, .. } if name == "env_get" => self.compile_env_get(args),
             Expression::Call { name, args, .. } if name == "env_set" => self.compile_env_set(args),
@@ -1570,8 +1608,8 @@ impl LlvmIrGen {
             Expression::Call { name, args, .. } if name == "lists.filter" => {
                 self.compile_lists_filter(args)
             }
-            Expression::Call { name, args, .. } if name == "math.sum" => {
-                self.compile_math_sum(args)
+            Expression::Call { name, args, .. } if name == "__type_matches" => {
+                self.compile_type_matches(args)
             }
             Expression::Call {
                 name,
@@ -1681,9 +1719,7 @@ impl LlvmIrGen {
                     owned: false,
                 })
             }
-            Expression::Pipeline {
-                input, stage, safe, ..
-            } => {
+            Expression::Pipeline { input, stage, .. } => {
                 let input_val = self.compile_expr(input)?;
 
                 match stage.as_ref() {
@@ -1701,19 +1737,6 @@ impl LlvmIrGen {
                         for arg in args {
                             let arg_val = self.compile_expr(arg)?;
                             all_args.push(arg_val);
-                        }
-
-                        if *safe {
-                            let tmp = self.tmp();
-                            self.body.push(format!(
-                                "  {tmp} = call ptr @mire_option_wrap(i64 {})",
-                                all_args[1].repr
-                            ));
-                            return Ok(LlValue {
-                                ty: LlType::Ptr,
-                                repr: tmp,
-                                owned: true,
-                            });
                         }
 
                         let fn_info = self.user_functions.get(name).cloned().ok_or_else(|| {
@@ -1756,19 +1779,6 @@ impl LlvmIrGen {
                         }
 
                         let all_args = [input_val];
-
-                        if *safe {
-                            let tmp = self.tmp();
-                            self.body.push(format!(
-                                "  {tmp} = call ptr @mire_option_wrap(i64 {})",
-                                all_args[0].repr
-                            ));
-                            return Ok(LlValue {
-                                ty: LlType::Ptr,
-                                repr: tmp,
-                                owned: true,
-                            });
-                        }
 
                         let fn_info = self.user_functions.get(name).cloned().ok_or_else(|| {
                             MireError::new(ErrorKind::Backend {
@@ -1817,7 +1827,9 @@ impl LlvmIrGen {
                 }
             }
             Expression::NamedArg { value, .. } => self.compile_expr(value),
-            Expression::Tuple { elements, .. } => self.compile_list_literal(elements, &DataType::Unknown),
+            Expression::Tuple { elements, .. } => {
+                self.compile_list_literal(elements, &DataType::Unknown)
+            }
             Expression::Box { value, .. } => self.compile_expr(value),
             Expression::Closure { .. } => Ok(self.string_value("<closure>")),
         };
@@ -1867,9 +1879,11 @@ impl LlvmIrGen {
     pub(super) fn statement_location(statement: &Statement) -> (usize, usize) {
         match statement {
             Statement::Let {
-                value: Some(value), ..
-            }
-            | Statement::Assignment { value, .. }
+                name_line,
+                name_column,
+                ..
+            } => (*name_line, *name_column),
+            Statement::Assignment { value, .. }
             | Statement::Expression(value)
             | Statement::Drop { value }
             | Statement::New {
@@ -1917,10 +1931,9 @@ impl LlvmIrGen {
             Expression::Index { target, .. } | Expression::MemberAccess { target, .. } => {
                 Self::expression_location(target)
             }
-            Expression::Closure { body, .. } => body
-                .first()
-                .map(Self::statement_location)
-                .unwrap_or((1, 1)),
+            Expression::Closure { body, .. } => {
+                body.first().map(Self::statement_location).unwrap_or((1, 1))
+            }
             Expression::Match { value, .. } => Self::expression_location(value),
             Expression::EnumVariant { payloads, .. } => payloads
                 .first()
@@ -1930,54 +1943,89 @@ impl LlvmIrGen {
         }
     }
 
-
-
-    pub(super) fn compile_input_expr(&mut self, args: &[Expression], data_type: &DataType) -> Result<LlValue> {
-        if args.len() != 1 {
+    pub(super) fn compile_input_expr(
+        &mut self,
+        args: &[Expression],
+        data_type: &DataType,
+    ) -> Result<LlValue> {
+        // ireru accepts 0 or 1 argument:
+        //   ireru()          — read line with no prompt
+        //   ireru("prompt")  — show prompt, then read line
+        // Optional type annotation: ireru() :i64, ireru("> ") :f64, ireru() :bool
+        if args.len() > 1 {
             return Err(MireError::new(ErrorKind::Runtime {
-                message: "Avenys ireru expects 1 argument".to_string(),
+                message: "Avenys ireru expects 0 or 1 argument".to_string(),
             }));
         }
 
-        let prompt = self.compile_expr(&args[0])?;
+        let prompt = if args.is_empty() {
+            self.null_value()
+        } else {
+            self.compile_expr(&args[0])?
+        };
+
+        let input = self.tmp();
         self.body.push(format!(
-            "  call i32 (ptr, ...) @printf(ptr @.fmt_prompt, ptr {})",
+            "  {input} = call ptr @rt_read_line(ptr {})",
             prompt.repr
         ));
 
         match data_type {
             DataType::I64 | DataType::I32 | DataType::I16 | DataType::I8 => {
-                let temp_buf = self.tmp();
-                let result = self.tmp();
-                self.body.push(format!("  {temp_buf} = alloca i64"));
-                self.body.push(format!(
-                    "  call i32 (ptr, ...) @scanf(ptr @.scanf_i64, ptr {temp_buf})"
-                ));
+                let parsed = self.tmp();
                 self.body
-                    .push(format!("  {result} = load i64, ptr {temp_buf}"));
+                    .push(format!("  {parsed} = call i64 @atoll(ptr {input})"));
                 Ok(LlValue {
                     ty: LlType::I64,
+                    repr: parsed,
+                    owned: false,
+                })
+            }
+            DataType::F64 => {
+                let parsed = self.tmp();
+                self.body
+                    .push(format!("  {parsed} = call double @atof(ptr {input})"));
+                Ok(LlValue {
+                    ty: LlType::F64,
+                    repr: parsed,
+                    owned: false,
+                })
+            }
+            DataType::Bool => {
+                let true_str = self.string_value("true");
+                let one_str = self.string_value("1");
+                let cmp_true = self.tmp();
+                let is_true = self.tmp();
+                let cmp_one = self.tmp();
+                let is_one = self.tmp();
+                let result = self.tmp();
+                self.body.push(format!(
+                    "  {cmp_true} = call i32 @strcmp(ptr {input}, ptr {})",
+                    true_str.repr
+                ));
+                self.body
+                    .push(format!("  {is_true} = icmp eq i32 {cmp_true}, 0"));
+                self.body.push(format!(
+                    "  {cmp_one} = call i32 @strcmp(ptr {input}, ptr {})",
+                    one_str.repr
+                ));
+                self.body
+                    .push(format!("  {is_one} = icmp eq i32 {cmp_one}, 0"));
+                self.body
+                    .push(format!("  {result} = or i1 {is_true}, {is_one}"));
+                Ok(LlValue {
+                    ty: LlType::I1,
                     repr: result,
                     owned: false,
                 })
             }
-            _ => {
-                let input_buf = self.tmp();
-                self.body
-                    .push(format!("  {input_buf} = call ptr @malloc(i64 256)"));
-                self.body.push(format!(
-                    "  call i32 (ptr, ...) @scanf(ptr @.scanf_str, ptr {input_buf})"
-                ));
-                Ok(LlValue {
-                    ty: LlType::Ptr,
-                    repr: input_buf,
-                    owned: true,
-                })
-            }
+            _ => Ok(LlValue {
+                ty: LlType::Ptr,
+                repr: input,
+                owned: true,
+            }),
         }
     }
-
-
 
     pub(super) fn runtime_kind_code(&self, data_type: &DataType) -> i64 {
         match data_type {
@@ -2054,14 +2102,20 @@ impl LlvmIrGen {
         wrapper_name
     }
 
-
-
-
-
-
-
-
-
+    fn llvm_fn_name(&mut self, name: &str) -> String {
+        if name == "main" {
+            "@mire_main".to_string()
+        } else if name.contains('.') {
+            format!("@fn_{}", sanitize_symbol(name))
+        } else {
+            let counter = {
+                let c = self.next_fn_id.entry(name.to_string()).or_insert(0usize);
+                *c += 1;
+                *c
+            };
+            format!("@fn_{}_{}", sanitize_symbol(name), counter)
+        }
+    }
 
     pub(super) fn compile_function_ir(
         &mut self,
@@ -2069,25 +2123,26 @@ impl LlvmIrGen {
         params: &[(String, DataType)],
         body: &[Statement],
         ret: LlType,
+        returns_value: bool,
     ) -> Result<String> {
         let saved_allocas = std::mem::take(&mut self.entry_allocas);
         let saved_body = std::mem::take(&mut self.body);
         let saved_vars = std::mem::take(&mut self.vars);
         let saved_loop_stack = std::mem::take(&mut self.loop_stack);
         let saved_return = self.current_return.clone();
+        let saved_function = self.current_function.clone();
+        self.current_function = name.to_string();
         self.current_return = ret.clone();
-
-        let fn_info = self.user_functions.get(name).cloned().ok_or_else(|| {
-            MireError::new(ErrorKind::Runtime {
-                message: format!("Avenys missing function metadata for '{}'", name),
-            })
-        })?;
         let method_owner = name.split_once('.').map(|(owner, _)| owner.to_string());
 
-        for ((param_name, param_data_type), param_ty) in params.iter().zip(fn_info.params.iter()) {
+        for (param_name, param_data_type) in params.iter() {
+            let param_ty = if param_name == "self" {
+                LlType::Ptr
+            } else {
+                self.map_type(param_data_type)?
+            };
             let ptr = self.tmp();
             let arg_name = format!("%arg_{}", sanitize_symbol(param_name));
-            let param_ty = param_ty.clone();
             self.entry_allocas
                 .push(format!("  {ptr} = alloca {}", self.ty(param_ty.clone())));
             self.body.push(format!(
@@ -2144,7 +2199,7 @@ impl LlvmIrGen {
             .iter()
             .all(|stmt| !matches!(stmt, Statement::Return(_)))
         {
-            if fn_info.returns_value {
+            if returns_value {
                 if let Some(Statement::Expression(expr)) = body.last() {
                     let value = self.compile_expr(expr)?;
                     let ret = self.cast_to_type(value, ret_clone.clone())?;
@@ -2186,18 +2241,23 @@ impl LlvmIrGen {
 
         let args = params
             .iter()
-            .zip(fn_info.params.iter())
-            .map(|((name, _), ty)| {
-                format!("{} %arg_{}", self.ty(ty.clone()), sanitize_symbol(name))
+            .map(|(name, data_type)| {
+                let ty = if name == "self" {
+                    LlType::Ptr
+                } else {
+                    self.map_type(data_type).unwrap_or(LlType::I64)
+                };
+                format!("{} %arg_{}", self.ty(ty), sanitize_symbol(name))
             })
             .collect::<Vec<_>>()
             .join(", ");
 
+        let llvm_name = self.llvm_fn_name(name);
         let mut lines = Vec::new();
         lines.push(format!(
             "define {} {}({}) {{",
             self.ty(ret_clone.clone()),
-            fn_info.llvm_name,
+            llvm_name,
             args
         ));
         lines.push("entry:".to_string());
@@ -2210,6 +2270,7 @@ impl LlvmIrGen {
         self.vars = saved_vars;
         self.loop_stack = saved_loop_stack;
         self.current_return = saved_return;
+        self.current_function = saved_function;
 
         Ok(lines.join("\n"))
     }
