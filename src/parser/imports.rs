@@ -1,8 +1,8 @@
 use super::*;
 
 impl Parser {
-    pub(super) fn parse_import_statement(&mut self) -> Result<Statement> {
-        self.expect(TokenType::Import)?;
+    pub(super) fn parse_load_statement(&mut self) -> Result<Statement> {
+        self.expect(TokenType::Load)?;
         let (path, is_local) = self.parse_import_path()?;
 
         let alias = if self.check(TokenType::As) {
@@ -26,10 +26,10 @@ impl Parser {
         };
 
         if is_local && alias.is_some() {
-            return Err(self.error("Local import statements do not support aliasing"));
+            return Err(self.error("Local load statements do not support aliasing"));
         }
 
-        Ok(Statement::Use {
+        Ok(Statement::Load {
             path,
             alias,
             items,

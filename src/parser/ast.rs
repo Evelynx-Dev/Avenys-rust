@@ -578,7 +578,7 @@ pub enum Statement {
     Asm {
         instructions: Vec<(String, Expression)>,
     },
-    Use {
+    Load {
         path: String,
         alias: Option<String>,
         items: Option<Vec<String>>,

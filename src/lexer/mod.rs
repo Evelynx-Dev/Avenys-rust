@@ -11,7 +11,7 @@ pub enum TokenType {
     CharLit,
     BoolLit,
     NoneLit,
-    Import,
+    Load,
     Set,
     Use,
     Return,
@@ -516,8 +516,8 @@ impl Lexer {
                 let start_col = self.column;
                 let ident = self.read_identifier();
                 let token = match ident.as_str() {
-                    "import" => Token::new(TokenType::Import, self.line, self.column),
                     "set" => Token::new(TokenType::Set, self.line, self.column),
+                    "load" => Token::new(TokenType::Load, self.line, self.column),
                     "use" => Token::new(TokenType::Use, self.line, self.column),
                     "return" => Token::new(TokenType::Return, self.line, self.column),
                     "if" => Token::new(TokenType::If, self.line, self.column),

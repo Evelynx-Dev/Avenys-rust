@@ -86,6 +86,11 @@ pub fn statement_export_name(statement: &Statement) -> Option<&str> {
         | Statement::Enum { name, .. }
         | Statement::ExternLib { name, .. }
         | Statement::ExternFunction { name, .. } => Some(name.as_str()),
+        Statement::Load { path, alias, .. } => Some(
+            alias
+                .as_deref()
+                .unwrap_or_else(|| path.rsplit('/').next().unwrap_or(path.as_str())),
+        ),
         _ => None,
     }
 }

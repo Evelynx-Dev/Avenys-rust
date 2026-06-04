@@ -1,0 +1,41 @@
+pub fn ready: (value :str) :map[str str] {
+    return {"state": "done", "value": value}
+}
+
+pub fn failed: (message :str) :map[str str] {
+    return {"state": "error", "error": message}
+}
+
+pub fn is_done: (task :map[str str]) :bool {
+    return dicts.get(task "state") == "done"
+}
+
+pub fn is_error: (task :map[str str]) :bool {
+    return dicts.get(task "state") == "error"
+}
+
+pub fn value: (task :map[str str] fallback :str) :str {
+    if is_done(task) {
+        return dicts.get(task "value")
+    }
+    return fallback
+}
+
+pub fn error: (task :map[str str]) :str {
+    if is_error(task) {
+        return dicts.get(task "error")
+    }
+    return ""
+}
+
+pub fn spawn: (cmd :str) :i64 {
+    return proc.spawn_shell(cmd)
+}
+
+pub fn join: (pid :i64) :i64 {
+    return proc.wait(pid)
+}
+
+pub fn exists: (pid :i64) :bool {
+    return proc.exists(pid)
+}

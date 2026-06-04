@@ -1,6 +1,6 @@
-import lists as lists
-import math as math
-import strings as strings
+load lists as lists
+load math as math
+load strings as strings
 
 pub fn main: () {
 set counts = [] :vec[i64] mut

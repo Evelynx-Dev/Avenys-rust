@@ -262,22 +262,35 @@ mod tests {
     }
 
     #[test]
-    fn parses_import_and_brace_blocks() {
-        let source = "import std\npub fn main: () {\n    use dasu(\"ok\")\n}\n";
+    fn parses_load_and_brace_blocks() {
+        let source = "load kioto\npub fn main: () {\n    use dasu(\"ok\")\n}\n";
         let program = parse(source);
         assert!(program.is_ok(), "{program:?}");
     }
 
     #[test]
-    fn parses_local_import_with_dot_slash() {
-        let source = "import ./utils/helpers\n";
-        let program = parse(source);
-        assert!(program.is_ok(), "{program:?}");
+    fn parses_load_statement() {
+        let source = "load kioto\n";
+        let program = parse(source).expect("parse should succeed");
+        let Statement::Load { path, .. } = &program.statements[0] else {
+            panic!("expected load statement");
+        };
+        assert_eq!(path, "kioto");
     }
 
     #[test]
-    fn parses_local_import_with_parent_segments() {
-        let source = "import ./../modules/fs_ops\n";
+    fn parses_local_load_with_dot_slash() {
+        let source = "load ./utils/helpers\n";
+        let program = parse(source).expect("parse should succeed");
+        let Statement::Load { is_local, .. } = &program.statements[0] else {
+            panic!("expected load statement");
+        };
+        assert!(*is_local);
+    }
+
+    #[test]
+    fn parses_local_load_with_parent_segments() {
+        let source = "load ./../modules/fs_ops\n";
         let program = parse(source);
         assert!(program.is_ok(), "{program:?}");
     }

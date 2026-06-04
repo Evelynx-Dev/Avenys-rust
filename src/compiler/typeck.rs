@@ -382,7 +382,7 @@ impl TypeChecker {
             | Statement::ExternLib { .. }
             | Statement::ExternFunction { .. }
             | Statement::Enum { .. } => {}
-            Statement::Use { .. } => {}
+            Statement::Load { .. } => {}
         }
 
         Ok(())

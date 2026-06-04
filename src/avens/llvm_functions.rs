@@ -390,7 +390,7 @@ impl LlvmIrGen {
         self.current_line = line;
         self.current_column = column;
         let result = match stmt {
-            Statement::Use { .. } => Ok(()),
+            Statement::Load { .. } => Ok(()),
             Statement::Function { .. } => Ok(()),
             Statement::Let {
                 name,
@@ -2105,8 +2105,6 @@ impl LlvmIrGen {
     fn llvm_fn_name(&mut self, name: &str) -> String {
         if name == "main" {
             "@mire_main".to_string()
-        } else if name.contains('.') {
-            format!("@fn_{}", sanitize_symbol(name))
         } else {
             let counter = {
                 let c = self.next_fn_id.entry(name.to_string()).or_insert(0usize);

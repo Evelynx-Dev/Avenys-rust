@@ -109,7 +109,7 @@ fn statement_contains_self_placeholder(statement: &Statement) -> bool {
         | Statement::Continue
         | Statement::ExternLib { .. }
         | Statement::ExternFunction { .. }
-        | Statement::Use { .. }
+        | Statement::Load { .. }
         | Statement::Enum { .. } => false,
     }
 }

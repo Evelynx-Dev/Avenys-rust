@@ -146,6 +146,8 @@ char   *rt_strings_join_list(void *parts, const char *sep);
 int64_t rt_lists_len(void *list);
 int64_t rt_lists_get_i64(void *list, int64_t index);
 void   *rt_lists_get_ptr(void *list, int64_t index);
+char   *rt_vec_get_str(void *list, int64_t index);
+int64_t rt_vec_len(void *list);
 void   *rt_lists_push_i64(void *list, int64_t value);
 void   *rt_lists_push_ptr(void *list, void *value);
 int64_t rt_lists_pop(void *list);

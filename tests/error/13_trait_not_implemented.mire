@@ -1,4 +1,4 @@
-import std
+load kioto
 
 pub skill Printer {
     print: (self) -> ()

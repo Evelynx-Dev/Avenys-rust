@@ -1,4 +1,4 @@
-import std
+load kioto
 
 enum Shape {
     Circle(radius :i64)

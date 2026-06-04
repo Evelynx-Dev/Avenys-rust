@@ -167,7 +167,7 @@ pub(crate) fn collect_statement_dependencies(statement: &Statement, deps: &mut V
                 collect_expression_dependencies(expr, deps);
             }
         }
-        Statement::Use { path, items, .. } => {
+        Statement::Load { path, items, .. } => {
             deps.push(path.clone());
             if let Some(items) = items {
                 deps.extend(items.iter().cloned());

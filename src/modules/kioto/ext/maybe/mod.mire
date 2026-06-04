@@ -15,29 +15,35 @@ pub fn is_none: (m) :bool {
 }
 
 pub fn map: (m next_value) {
-    if dicts.get(m "tag") == "some" {
+    set m0 = m
+    if dicts.get(m0 "tag") == "some" {
         return {tag: "some", value: next_value}
     }
     return m
 }
 
 pub fn bind: (m next_maybe) :map[str anything] {
-    if dicts.get(m "tag") == "some" {
+    set m0 = m
+    if dicts.get(m0 "tag") == "some" {
         return next_maybe
     }
     return m
 }
 
 pub fn or_else: (m fallback) {
-    if dicts.get(m "tag") == "some" {
-        return dicts.get(m "value")
+    set m1 = m
+    if dicts.get(m1 "tag") == "some" {
+        set m2 = m
+        return dicts.get(m2 "value")
     }
     return fallback
 }
 
 pub fn unwrap: (m) {
-    if dicts.get(m "tag") == "some" {
-        return dicts.get(m "value")
+    set m1 = m
+    if dicts.get(m1 "tag") == "some" {
+        set m2 = m
+        return dicts.get(m2 "value")
     }
-    return mu
+    return m
 }

@@ -13,13 +13,13 @@ impl Parser {
             return Err(crate::error::MireError::deprecated_syntax(
                 token.line,
                 token.column,
-                "Legacy `add` imports are no longer supported; use `import ...` instead"
+                "Legacy `add` imports are no longer supported; use `load` instead"
                     .to_string(),
             ));
         }
 
         match self.peek().ttype {
-            TokenType::Import => self.parse_import_statement(),
+            TokenType::Load => self.parse_load_statement(),
             TokenType::Set => self.parse_set_statement(),
             TokenType::Use => Ok(Statement::Expression(self.parse_use_expr()?)),
             TokenType::Pub | TokenType::Priv => {

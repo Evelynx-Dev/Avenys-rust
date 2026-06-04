@@ -2,7 +2,7 @@
 
 Mire is a compiled, statically typed programming language with ownership-oriented memory safety checks and an LLVM-based backend.
 
-Current compiler crate version: `3.11.6`.
+Current compiler crate version: `3.11.10`.
 
 ## Status
 
@@ -10,12 +10,13 @@ Current compiler crate version: `3.11.6`.
 - Compiler pipeline: lexer, parser, type checker, semantic analysis, borrow checker, LLVM lowering
 - Incremental compilation: enabled (cache, reuse, LRU pruning)
 - Optimization profiles: `debug/release` + `-O0/-O1/-O2/-O3/-Os/-Oz`
-- Public CLI surface: `run`, `build`, `check`, `debug`, `test`, `import`
+- Public CLI surface: `run`, `build`, `check`, `debug`, `test`
+- Source-level module loading: `load` is the canonical keyword.
 - Standard library (`std/` / Kioto): provides fs, env, strings, lists, dicts, time, cpu, mem, proc, async, gpu, term, math, and io via direct `rt_*` / `pal_*` externs.
 - LLVM codegen emits `rt_*` / `pal_*` calls directly — the old `@mire_*` symbols are gone.
 - PAL (Platform Abstraction Layer): `src/pal/` with linux backend. WASM backend in progress.
 - Runtime core: `src/runtime/` — platform-independent managed strings, lists, dicts.
-- TOML-based import management: `owl.toml` `[dependencies]` section with `mire import` CLI command.
+- Dependency management: `owl.toml` `[dependencies]` section.
 
 ## Quick Start
 
@@ -31,7 +32,6 @@ mire run [file] [options] [-- args]      # Compile and run
 mire build [file] [options]               # Compile to binary
 mire check [file] [options]               # Type-check without codegen
 mire debug [file] [options]               # Debug compilation
-mire import <module> [options]            # Add import to owl.toml
 mire test [paths...] [options]            # Compile/run .mire tests
 ```
 
@@ -49,10 +49,9 @@ mire run tests/complex/algorithms/01_sum_loop.mire -- --ms
 # Build a release binary
 mire build my_program.mire --release
 
-# Add a module dependency
-mire import kioto --version 0.2
-mire import ./local-lib --path lib/local-lib
-mire import kioto --json
+# Declare dependencies in owl.toml
+# [dependencies]
+# kioto = "3.11.10"
 ```
 
 ## Documentation

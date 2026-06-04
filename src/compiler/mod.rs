@@ -27,15 +27,6 @@ pub struct WarningConfig {
     pub deny: HashSet<DiagnosticCode>,
 }
 
-impl Default for WarningConfig {
-    fn default() -> Self {
-        Self {
-            filter: WarningFilter::Default,
-            deny: HashSet::new(),
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct AnalysisReport {
     pub semantic: SemanticModel,

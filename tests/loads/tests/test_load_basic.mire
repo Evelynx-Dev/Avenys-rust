@@ -1,0 +1,25 @@
+load helpers
+load math_utils
+
+pub fn main: () {
+    set result = helpers::greet(5)
+    use dasu(result)
+
+    set doubled = helpers::double(21)
+    use dasu(doubled)
+
+    set sum = helpers::add(10 20)
+    use dasu(sum)
+
+    set sq = math_utils::square(4)
+    use dasu(sq)
+
+    set cubed = math_utils::cube(3)
+    use dasu(cubed)
+
+    set even = math_utils::is_even(10)
+    use dasu(even)
+
+    set mx = math_utils::max(100 200)
+    use dasu(mx)
+}

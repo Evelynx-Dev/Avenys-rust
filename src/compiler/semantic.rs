@@ -436,7 +436,7 @@ impl SemanticModelBuilder {
             | Statement::Continue
             | Statement::ExternLib { .. }
             | Statement::ExternFunction { .. }
-            | Statement::Use { .. }
+            | Statement::Load { .. }
             | Statement::Enum { .. } => {}
         }
     }

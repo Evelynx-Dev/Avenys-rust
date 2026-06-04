@@ -1,5 +1,5 @@
-import lists as lists
-import time as time
+load lists as lists
+load time as time
 
 pub fn main: () {
 set started = time.mark() :i64 mut

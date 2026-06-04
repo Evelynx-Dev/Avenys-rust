@@ -1,0 +1,13 @@
+load helpers
+load math_utils
+load nested
+
+pub fn main: () {
+    set a = helpers::add(3 4)
+    set b = math_utils::square(a)
+    set c = nested::deep_value()
+    use dasu(a + b + c)
+
+    set msg = nested::from_nested()
+    use dasu(msg)
+}

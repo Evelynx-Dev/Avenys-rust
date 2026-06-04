@@ -33,7 +33,7 @@ Complete language syntax derived from test files and working examples.
 ## 1. Minimal Program
 
 ```mire
-load std
+load kioto
 
 pub fn main: () {
     use dasu("Hello Mire")
@@ -568,18 +568,15 @@ Interpolation calls `str()` on the inner expression and concatenates at compile 
 
 ## 14. Module Loading (load)
 
-Modules are loaded with the `load` keyword:
+Modules are loaded with the `load` keyword (the `import` keyword was removed — `load` is the only way to import modules):
 
 ```mire
-load std                              # load the Kioto standard library
+load kioto                            # load the Kioto standard library
 load strings                           # load a bundled module by name
-load ./utils                           # load a local module (relative path)
+load ./utils                           # local load (warns; prefer owl.toml dependency names)
 load fs as fs                          # alias a module
 load strings: (split replace trim)     # selective item loading
 ```
-
-The `import` keyword was the legacy syntax and is still accepted with
-`--allow-legacy-imports`, but `load` is the canonical keyword going forward.
 
 ### Module Resolution
 
@@ -587,9 +584,11 @@ The compiler resolves module names in this order:
 
 1. **Bundled modules** — `src/modules/kioto/` (the Kioto standard library)
 2. **OWL_HOME modules** — `$OWL_HOME/modules/` (user-installed packages)
-3. **Project-local modules** — relative paths starting with `./`
+3. **Project-local modules** — named modules in the project root or `modules/`
+4. **Relative local loads** — paths starting with `./` (supported, but warned)
 
-Local loads require a project root with `owl.toml`:
+Local loads should be replaced with owl.toml dependencies when possible. Relative
+`./` paths require a project root with `owl.toml`:
 
 ```toml
 [project]
@@ -608,12 +607,7 @@ kioto = "3.11.10"
 my-lib = { path = "./lib/my-lib" }
 ```
 
-Manage them through the CLI:
-
-```
-mire import kioto
-mire import ./local-lib --path lib/local-lib
-```
+Dependencies in `owl.toml` are resolved by name — edit the file directly to add or update them.
 
 ### Selective Loading
 
@@ -626,15 +620,11 @@ load strings: (split replace trim)
 use dasu(split("a,b,c" ","))
 ```
 
-### Legacy Import
-
-The old `import` keyword is a deprecated alias for `load`. It may be removed in a future version. Use `--allow-legacy-imports` to suppress deprecation warnings.
-
 ---
 
 ## 15. Kioto Standard Library
 
-Kioto is the standard library for Mire. It lives at `src/modules/kioto/` and is bundled with the compiler. Use `load std` or `load kioto` to pull in the full library.
+Kioto is the standard library for Mire. It lives at `src/modules/kioto/` and is bundled with the compiler. Use `load kioto` to pull in the full library.
 
 ### Module Tree
 
@@ -666,7 +656,7 @@ kioto/
 ### Usage
 
 ```mire
-load std
+load kioto
 
 pub fn main: () {
     use dasu(strings.join(strings.split("a,b,c" ",") "|"))
@@ -893,8 +883,9 @@ Compiler version: `3.11.10`.
 - Character literals (`char`)
 - Prefixed integer literals (`0b`, `0o`, `0x`)
 - Raw strings (`r"..."`, `r#"..."#`)
-- Module loading (`load`) — `import` is deprecated
-- Selective imports
+- Module loading (`load`) — bundled modules use names, local `./` loads are warned
+- Selective loading (`load strings: (split join)`)
+
 - Generic functions, structs, enums
 - Incremental compilation
 - Pipeline `|>` and safe pipeline `|?>`

@@ -1,4 +1,4 @@
-import std
+load kioto
 
 pub fn main: () {
     set m = [] :map[str i64] mut

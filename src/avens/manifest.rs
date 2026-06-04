@@ -115,7 +115,7 @@ pub fn write_manifest(manifest: &MireManifest, path: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn load_manifest_imports(cwd: &Path) -> Result<HashMap<String, MireImportEntry>> {
+pub fn load_manifest_dependencies(cwd: &Path) -> Result<HashMap<String, MireDependency>> {
     match load_project_manifest(cwd) {
         Ok(Some(manifest)) => Ok(manifest.dependencies.entries),
         Ok(None) => Ok(HashMap::new()),

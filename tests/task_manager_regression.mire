@@ -1,6 +1,6 @@
-import time as time
-import lists as lists
-import math as math
+load time as time
+load lists as lists
+load math as math
 
 pub fn main: () {
 set wall = time.mark() :i64 mut

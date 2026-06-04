@@ -36,12 +36,12 @@ mod toolchain;
 mod utils;
 pub use build_pipeline::{compile_file_with_avenys, default_output_dir};
 pub use config::{
-    BuildMode, BuildOptions, BuildResult, ImportMode, MireCacheConfig, MireImportEntry,
-    MireImports, MireLock, MireLockBuild, MireLockProject, MireManifest, MireProject, OptLevel,
+    BuildMode, BuildOptions, BuildResult, ImportMode, MireCacheConfig, MireDependencies,
+    MireDependency, MireLock, MireLockBuild, MireLockProject, MireManifest, MireProject, OptLevel,
 };
 use llvm_types::*;
 pub use manifest::{
-    find_project_root, load_manifest_imports, load_project_manifest, project_lock_path,
+    find_project_root, load_manifest_dependencies, load_project_manifest, project_lock_path,
     project_manifest_path, write_lock_file, write_manifest,
 };
 use reuse::prepare_program_with_partial_analysis_reuse;

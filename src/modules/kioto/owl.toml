@@ -1,0 +1,9 @@
+[owl]
+version = "1.0.0"
+
+[project]
+name = "kioto"
+version = "3.11.10"
+entry = "mod.mire"
+
+[dependencies]

@@ -514,7 +514,7 @@ impl<'a> BorrowChecker<'a> {
             | Statement::Continue
             | Statement::ExternLib { .. }
             | Statement::ExternFunction { .. }
-            | Statement::Use { .. }
+            | Statement::Load { .. }
             | Statement::Enum { .. } => {}
         }
 
@@ -878,18 +878,11 @@ impl<'a> BorrowChecker<'a> {
                         return Err(self.ownership_error(MssError::MultipleMutableRefs));
                     }
                     self.ensure_borrow_allowed(&target, false)?;
-                } else if let Some(binding) =
-                    Self::identifier_name(arg).and_then(|name| self.semantic_binding(&name))
-                    && !matches!(
-                        binding.kind,
-                        BindingKind::SharedRef | BindingKind::MutableRef
-                    )
+                } else if let Some(name) = Self::identifier_name(arg)
+                    && let Some(binding) = self.semantic_binding(&name)
+                    && !matches!(binding.kind, BindingKind::SharedRef | BindingKind::MutableRef)
                 {
-                    return Err(MireError::type_error(format!(
-                        "Function '{}' argument {} requires a shared reference",
-                        callee,
-                        index + 1
-                    )));
+                    self.ensure_borrow_allowed(&name, false)?;
                 }
             }
             DataType::RefMut { .. } => {
@@ -902,15 +895,11 @@ impl<'a> BorrowChecker<'a> {
                         )));
                     }
                     self.ensure_borrow_allowed(&target, true)?;
-                } else if let Some(binding) =
-                    Self::identifier_name(arg).and_then(|name| self.semantic_binding(&name))
+                } else if let Some(name) = Self::identifier_name(arg)
+                    && let Some(binding) = self.semantic_binding(&name)
                     && !matches!(binding.kind, BindingKind::MutableRef)
                 {
-                    return Err(MireError::type_error(format!(
-                        "Function '{}' argument {} requires a mutable reference",
-                        callee,
-                        index + 1
-                    )));
+                    self.ensure_borrow_allowed(&name, true)?;
                 }
             }
             _ => {

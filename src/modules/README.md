@@ -7,7 +7,7 @@ This directory holds Mire's bundled Kioto standard library.
 ```
 src/modules/
 ├── kioto/                # Standard library surface
-│   ├── mod.mire          # Aggregator: imports all sections
+│   ├── mod.mire          # Aggregator: loads all sections
 │   ├── core/
 │   │   ├── async/mod.mire
 │   │   ├── cpu/mod.mire
@@ -59,5 +59,7 @@ kioto = { version = "0.2" }
 my-lib = { path = "./lib/my-lib" }
 ```
 
-Use `mire import <module> [--version <ver>] [--path <path>] [--json]` to add
-entries. The default manifest is `owl.toml`.
+Edit `owl.toml` manually to add or update entries.
+
+At the source level, use `load` for module wiring and keep local modules named
+in `owl.toml` whenever possible.

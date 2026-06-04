@@ -1,4 +1,4 @@
-import std
+load kioto
 
 fn identity: (x :i64) :i64 {
     x

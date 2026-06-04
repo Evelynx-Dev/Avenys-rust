@@ -1,0 +1,8 @@
+load helpers
+load math_utils
+
+pub fn main: () {
+    set a = helpers::add(2 3)
+    set b = math_utils::square(a)
+    use dasu(b)
+}

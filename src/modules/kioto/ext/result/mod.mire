@@ -15,13 +15,16 @@ pub fn is_err: (r) :bool {
 }
 
 pub fn map_err: (r next_error: str) {
-    if dicts.get(r "tag") == "ok" { return r }
+    set r_tag = r
+    if dicts.get(r_tag "tag") == "ok" { return r }
     return {tag: "err", error: next_error}
 }
 
 pub fn unwrap: (r) {
-    if dicts.get(r "tag") == "ok" {
-        return dicts.get(r "value")
+    set r_tag = r
+    if dicts.get(r_tag "tag") == "ok" {
+        set r_val = r
+        return dicts.get(r_val "value")
     }
     return mu
 }

@@ -175,7 +175,7 @@ pub(super) fn hash_statement(statement: &Statement, hasher: &mut FxHasher) {
                 hash_expression(expr, hasher);
             }
         }
-        Statement::Use {
+        Statement::Load {
             path,
             alias,
             items,

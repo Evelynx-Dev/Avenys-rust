@@ -1,4 +1,4 @@
-import std
+load kioto
 
 struct Result {
     ok :bool

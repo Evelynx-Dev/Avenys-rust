@@ -1,4 +1,4 @@
-import lists as lists
+load lists as lists
 
 pub fn main: () {
 set user = "mire"

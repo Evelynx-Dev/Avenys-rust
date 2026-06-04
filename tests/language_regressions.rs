@@ -169,7 +169,7 @@ fn compile_attributes_imported_type_error_to_imported_file() {
     .expect("write project");
     fs::write(
         &main_path,
-        "import ./lib\n\npub fn main: () {\n    use fail()\n}\n",
+        "load ./lib\n\npub fn main: () {\n    use fail()\n}\n",
     )
     .expect("write main");
     fs::write(
@@ -991,7 +991,7 @@ fn impl_self_parameter_must_be_first() {
 #[test]
 fn empty_skill_is_rejected() {
     let err = expect_analysis_error(
-        "import std\n\npub skill Printable {\n}\n\npub fn main: () {\n    use dasu(\"test\")\n}\n",
+        "load kioto\n\npub skill Printable {\n}\n\npub fn main: () {\n    use dasu(\"test\")\n}\n",
     );
 
     assert!(
@@ -1011,7 +1011,7 @@ fn runtime_division_by_zero_exits_with_error() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\npub fn main: () {\n    set x = 10 / 0\n    use dasu(x)\n}\n",
+        "load kioto\n\npub fn main: () {\n    set x = 10 / 0\n    use dasu(x)\n}\n",
     )
     .expect("write source");
 
@@ -1053,7 +1053,7 @@ fn signed_integer_division_and_remainder_match_runtime_expectations() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\npub fn main: () {\n    set a = -10 / 3\n    set b = -10 % 3\n    use dasu(\"{a} {b}\")\n}\n",
+        "load kioto\n\npub fn main: () {\n    set a = -10 / 3\n    set b = -10 % 3\n    use dasu(\"{a} {b}\")\n}\n",
     )
     .expect("write source");
 
@@ -1095,7 +1095,7 @@ fn float_arithmetic_with_typed_float_variable_executes() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\npub fn main: () {\n    set x = 2.0 :f64\n    set y = x + 1.5\n    set z = y * 2.0\n    use dasu(z > 6.9 && z < 7.1)\n}\n",
+        "load kioto\n\npub fn main: () {\n    set x = 2.0 :f64\n    set y = x + 1.5\n    set z = y * 2.0\n    use dasu(z > 6.9 && z < 7.1)\n}\n",
     )
     .expect("write source");
 
@@ -1129,7 +1129,7 @@ fn float_arithmetic_with_typed_float_variable_executes() {
 #[test]
 fn nested_vector_type_is_preserved_for_lists_push() {
     let err = expect_analysis_error(
-        "import std\n\npub fn main: () {\n    set nested = [[1 2] [3 4]] :vec[vec[i64]]\n    set bad = lists.push(nested [\"x\"])\n    use dasu(bad)\n}\n",
+        "load kioto\n\npub fn main: () {\n    set nested = [[1 2] [3 4]] :vec[vec[i64]]\n    set bad = lists.push(nested [\"x\"])\n    use dasu(bad)\n}\n",
     );
 
     assert!(
@@ -1151,7 +1151,7 @@ fn secondary_for_loop_binding_compiles_and_uses_index() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\npub fn main: () {\n    set acc = 0 :i64 mut\n    for item, index in range(4) {\n        set acc = acc + item + index\n    }\n    use dasu(acc)\n}\n",
+        "load kioto\n\npub fn main: () {\n    set acc = 0 :i64 mut\n    for item, index in range(4) {\n        set acc = acc + item + index\n    }\n    use dasu(acc)\n}\n",
     )
     .expect("write source");
 
@@ -1193,7 +1193,7 @@ fn advanced_literals_compile_and_run() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\npub fn main: () {\n    set bin = 0b1010 :i64\n    set oct = 0o12 :i64\n    set hex = 0xFF :i64\n    set c = 'a' :char\n    set newline = '\\n' :char\n    set raw = r##\"hello \"world\" with ##\"## :str\n    use dasu(bin == oct && hex == 255)\n    use dasu(c == 97 && newline == 10)\n    use dasu(raw)\n}\n",
+        "load kioto\n\npub fn main: () {\n    set bin = 0b1010 :i64\n    set oct = 0o12 :i64\n    set hex = 0xFF :i64\n    set c = 'a' :char\n    set newline = '\\n' :char\n    set raw = r##\"hello \"world\" with ##\"## :str\n    use dasu(bin == oct && hex == 255)\n    use dasu(c == 97 && newline == 10)\n    use dasu(raw)\n}\n",
     )
     .expect("write source");
 
@@ -1244,7 +1244,7 @@ fn unsafe_block_compiles_and_runs() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\npub fn main: () {\n    set sum = 0 :i64 mut\n    unsafe {\n        set sum = sum + 2\n    }\n    use dasu(sum)\n}\n",
+        "load kioto\n\npub fn main: () {\n    set sum = 0 :i64 mut\n    unsafe {\n        set sum = sum + 2\n    }\n    use dasu(sum)\n}\n",
     )
     .expect("write source");
 
@@ -1285,7 +1285,7 @@ fn extern_and_inline_asm_declarations_parse_and_compile() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\nextern lib \"c\" \"libc.so.6\"\nextern fn puts: (msg :*const i8) :i32 lib \"c\"\n\npub fn main: () {\n    asm {\n        nop\n        nop\n    }\n    use dasu(\"ok\")\n}\n",
+        "load kioto\nextern lib \"c\" \"libc.so.6\"\nextern fn puts: (msg :*const i8) :i32 lib \"c\"\n\npub fn main: () {\n    asm {\n        nop\n        nop\n    }\n    use dasu(\"ok\")\n}\n",
     )
     .expect("write source");
 
@@ -1319,7 +1319,7 @@ fn runtime_out_of_bounds_exits_with_error() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\npub fn main: () {\n    set nums = [1 2 3] :arr[i64 3]\n    set x = nums at 10\n    use dasu(x)\n}\n",
+        "load kioto\n\npub fn main: () {\n    set nums = [1 2 3] :arr[i64 3]\n    set x = nums at 10\n    use dasu(x)\n}\n",
     )
     .expect("write source");
 
@@ -1361,7 +1361,7 @@ fn callback_call_named_function_runs_end_to_end() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\nfn add1: (x :i64) :i64 {\n    return x + 1\n}\n\npub fn main: () {\n    use dasu(call(add1, 41))\n}\n",
+        "load kioto\n\nfn add1: (x :i64) :i64 {\n    return x + 1\n}\n\npub fn main: () {\n    use dasu(call(add1, 41))\n}\n",
     )
     .expect("write source");
 
@@ -1402,7 +1402,7 @@ fn callback_call_extern_fn_runs_end_to_end() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\nextern lib \"c\" \"libc.so.6\"\nextern fn abs: (x :i64) :i64 lib \"c\"\n\npub fn main: () {\n    use dasu(call(abs, -7))\n}\n",
+        "load kioto\nextern lib \"c\" \"libc.so.6\"\nextern fn abs: (x :i64) :i64 lib \"c\"\n\npub fn main: () {\n    use dasu(call(abs, -7))\n}\n",
     )
     .expect("write source");
 
@@ -1443,7 +1443,7 @@ fn callback_call_closure_with_capture_runs_end_to_end() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\npub fn main: () {\n    set offset = 10 :i64\n    use dasu(call((x) => x + offset, 32))\n}\n",
+        "load kioto\n\npub fn main: () {\n    set offset = 10 :i64\n    use dasu(call((x) => x + offset, 32))\n}\n",
     )
     .expect("write source");
 
@@ -1484,7 +1484,7 @@ fn callback_call_function_value_alias_runs_end_to_end() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\nfn add1: (x :i64) :i64 {\n    return x + 1\n}\n\npub fn main: () {\n    set f = add1\n    use dasu(call(f, 41))\n}\n",
+        "load kioto\n\nfn add1: (x :i64) :i64 {\n    return x + 1\n}\n\npub fn main: () {\n    set f = add1\n    use dasu(call(f, 41))\n}\n",
     )
     .expect("write source");
 
@@ -1525,7 +1525,7 @@ fn callback_call_extern_function_value_alias_runs_end_to_end() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\nextern lib \"c\" \"libc.so.6\"\nextern fn abs: (x :i64) :i64 lib \"c\"\n\npub fn main: () {\n    set f = abs\n    use dasu(call(f, -7))\n}\n",
+        "load kioto\nextern lib \"c\" \"libc.so.6\"\nextern fn abs: (x :i64) :i64 lib \"c\"\n\npub fn main: () {\n    set f = abs\n    use dasu(call(f, -7))\n}\n",
     )
     .expect("write source");
 
@@ -1560,7 +1560,7 @@ fn callback_call_dynamic_function_param_without_signature_is_rejected() {
     let err = expect_compile_error_from_source(
         "mire_callback_call_dynamic_function_param_rejected",
         "callback_call_dynamic_function_param_rejected.mire",
-        "import std\n\nfn add1: (x :i64) :i64 {\n    return x + 1\n}\n\nfn apply: (f :function x :i64) :i64 {\n    return call(f, x)\n}\n\npub fn main: () {\n    set f = add1\n    use dasu(apply(f, 41))\n}\n",
+        "load kioto\n\nfn add1: (x :i64) :i64 {\n    return x + 1\n}\n\nfn apply: (f :function x :i64) :i64 {\n    return call(f, x)\n}\n\npub fn main: () {\n    set f = add1\n    use dasu(apply(f, 41))\n}\n",
     );
     let rendered = err.to_string();
     assert!(
@@ -1574,7 +1574,7 @@ fn callback_call_function_return_value_without_signature_is_rejected() {
     let err = expect_compile_error_from_source(
         "mire_callback_call_function_return_value_rejected",
         "callback_call_function_return_value_rejected.mire",
-        "import std\n\nfn add1: (x :i64) :i64 {\n    return x + 1\n}\n\nfn pick: (f :function) :function {\n    return f\n}\n\npub fn main: () {\n    use dasu(call(pick(add1), 41))\n}\n",
+        "load kioto\n\nfn add1: (x :i64) :i64 {\n    return x + 1\n}\n\nfn pick: (f :function) :function {\n    return f\n}\n\npub fn main: () {\n    use dasu(call(pick(add1), 41))\n}\n",
     );
     let rendered = err.to_string();
     assert!(
@@ -1588,7 +1588,7 @@ fn callback_call_dynamic_extern_multi_arg_without_signature_is_rejected() {
     let err = expect_compile_error_from_source(
         "mire_callback_call_dynamic_extern_multi_arg_rejected",
         "callback_call_dynamic_extern_multi_arg_rejected.mire",
-        "import std\nextern lib \"c\" \"libc.so.6\"\nextern fn strncmp: (a :str b :str n :i64) :i64 lib \"c\"\n\nfn invoke3: (f :function a :str b :str n :i64) :i64 {\n    return call(f, a, b, n)\n}\n\npub fn main: () {\n    set f = strncmp\n    use dasu(invoke3(f, \"abc\", \"abc\", 3))\n}\n",
+        "load kioto\nextern lib \"c\" \"libc.so.6\"\nextern fn strncmp: (a :str b :str n :i64) :i64 lib \"c\"\n\nfn invoke3: (f :function a :str b :str n :i64) :i64 {\n    return call(f, a, b, n)\n}\n\npub fn main: () {\n    set f = strncmp\n    use dasu(invoke3(f, \"abc\", \"abc\", 3))\n}\n",
     );
     let rendered = err.to_string();
     assert!(
@@ -1608,7 +1608,7 @@ fn string_literals_accept_braces_without_escape_hacks() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\npub fn main: () {\n    use dasu(\"json-like: {{ok}}\")\n}\n",
+        "load kioto\n\npub fn main: () {\n    use dasu(\"json-like: {{ok}}\")\n}\n",
     )
     .expect("write source");
 
@@ -1643,7 +1643,7 @@ fn backend_rejects_unimplemented_contains_instead_of_returning_silent_false() {
     let err = expect_compile_error_from_source(
         "mire_backend_contains_stub",
         "contains_stub.mire",
-        "import std\n\npub fn main: () {\n    set nums = [1 2 3]\n    use dasu(contains(nums 2))\n}\n",
+        "load kioto\n\npub fn main: () {\n    set nums = [1 2 3]\n    use dasu(contains(nums 2))\n}\n",
     );
 
     assert!(matches!(err.kind, ErrorKind::Backend { .. }));
@@ -1661,7 +1661,7 @@ fn strings_split_returns_list_and_works_with_join() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\npub fn main: () {\n    set parts = strings.split(\"a,b,c\" \",\")\n    set joined = strings.join(parts \"-\")\n    use dasu(joined)\n}\n",
+        "load kioto\n\npub fn main: () {\n    set parts = strings.split(\"a,b,c\" \",\")\n    set joined = strings.join(parts \"-\")\n    use dasu(joined)\n}\n",
     )
     .expect("write source");
 
@@ -1703,7 +1703,7 @@ fn strings_split_supports_multi_char_delimiter() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\npub fn main: () {\n    set parts = strings.split(\"alpha--beta--gamma\" \"--\")\n    use dasu(strings.join(parts \"|\"))\n}\n",
+        "load kioto\n\npub fn main: () {\n    set parts = strings.split(\"alpha--beta--gamma\" \"--\")\n    use dasu(strings.join(parts \"|\"))\n}\n",
     )
     .expect("write source");
 
@@ -1748,7 +1748,7 @@ fn strings_split_preserves_empty_segments() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\npub fn main: () {\n    set parts = strings.split(\"a,,b,\" \",\")\n    use dasu(strings.join(parts \"|\"))\n}\n",
+        "load kioto\n\npub fn main: () {\n    set parts = strings.split(\"a,,b,\" \",\")\n    use dasu(strings.join(parts \"|\"))\n}\n",
     )
     .expect("write source");
 
@@ -1790,7 +1790,7 @@ fn kioto_strings_reference_api_reuses_the_same_binding() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\npub fn main: () {\n    set text = \"ab\" :str\n    set len1 = strings.len(text)\n    set upper = strings.upper(text)\n    set repeated = strings.repeat(text 3)\n    set len2 = strings.len(text)\n    use dasu(\"{len1}-{upper}-{repeated}-{len2}\")\n}\n",
+        "load kioto\n\npub fn main: () {\n    set text = \"ab\" :str\n    set len1 = strings.len(text)\n    set upper = strings.upper(text)\n    set repeated = strings.repeat(text 3)\n    set len2 = strings.len(text)\n    use dasu(\"{len1}-{upper}-{repeated}-{len2}\")\n}\n",
     )
     .expect("write source");
 
@@ -1831,7 +1831,7 @@ fn kioto_lists_reference_api_reuses_the_same_binding() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\npub fn main: () {\n    set nums = [1 2 3 2] :vec[i64]\n    set len1 = lists.len(nums)\n    set has_two = lists.contains(nums 2)\n    set first = lists.first(nums)\n    set last = lists.last(nums)\n    set idx = lists.index_of(nums 2)\n    set len2 = lists.len(nums)\n    use dasu(\"{len1}-{has_two}-{first}-{last}-{idx}-{len2}\")\n}\n",
+        "load kioto\n\npub fn main: () {\n    set nums = [1 2 3 2] :vec[i64]\n    set len1 = lists.len(nums)\n    set has_two = lists.contains(nums 2)\n    set first = lists.first(nums)\n    set last = lists.last(nums)\n    set idx = lists.index_of(nums 2)\n    set len2 = lists.len(nums)\n    use dasu(\"{len1}-{has_two}-{first}-{last}-{idx}-{len2}\")\n}\n",
     )
     .expect("write source");
 
@@ -1914,7 +1914,7 @@ fn array_index_assignment_mutates_elements_in_place() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\nfn test_swap: () {\n    set arr = [10 20 30 40] :arr[i64 4] mut\n    set left = arr at 0\n    set right = arr at 3\n    set arr at 0 = right\n    set arr at 3 = left\n    use dasu(\"{arr at 0} {arr at 1} {arr at 2} {arr at 3}\")\n}\n\npub fn main: () {\n    test_swap()\n}\n",
+        "load kioto\n\nfn test_swap: () {\n    set arr = [10 20 30 40] :arr[i64 4] mut\n    set left = arr at 0\n    set right = arr at 3\n    set arr at 0 = right\n    set arr at 3 = left\n    use dasu(\"{arr at 0} {arr at 1} {arr at 2} {arr at 3}\")\n}\n\npub fn main: () {\n    test_swap()\n}\n",
     )
     .expect("write source");
 
@@ -1956,7 +1956,7 @@ fn struct_array_field_index_assignment_compiles_and_runs() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\nstruct Matrix {\n    data :arr[i64 4]\n    cols :i64\n}\n\nimpl Matrix {\n    fn new: () :Matrix {\n        return (Matrix data: [0 0 0 0] :arr[i64 4], cols: 2)\n    }\n\n    fn update: (self row :i64 col :i64 val :i64) {\n        set idx = row * self.cols + col\n        set self.data at idx = val\n    }\n\n    fn get: (self row :i64 col :i64) :i64 {\n        set idx = row * self.cols + col\n        return self.data at idx\n    }\n}\n\npub fn main: () {\n    set m = Matrix::new()\n    m.update(0 1 7)\n    m.update(1 0 9)\n    use dasu(\"{m.get(0 1)} {m.get(1 0)}\")\n}\n",
+        "load kioto\n\nstruct Matrix {\n    data :arr[i64 4]\n    cols :i64\n}\n\nimpl Matrix {\n    fn new: () :Matrix {\n        return (Matrix data: [0 0 0 0] :arr[i64 4], cols: 2)\n    }\n\n    fn update: (self row :i64 col :i64 val :i64) {\n        set idx = row * self.cols + col\n        set self.data at idx = val\n    }\n\n    fn get: (self row :i64 col :i64) :i64 {\n        set idx = row * self.cols + col\n        return self.data at idx\n    }\n}\n\npub fn main: () {\n    set m = Matrix::new()\n    m.update(0 1 7)\n    m.update(1 0 9)\n    use dasu(\"{m.get(0 1)} {m.get(1 0)}\")\n}\n",
     )
     .expect("write source");
 
@@ -1998,7 +1998,7 @@ fn shared_reference_lowering_compiles_and_runs() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\nfn read_ref: (value :&i64) :i64 {\n    return *value\n}\n\npub fn main: () {\n    set x = 41 :i64\n    set rx = &x\n    set y = read_ref(rx)\n    use dasu(y + 1)\n}\n",
+        "load kioto\n\nfn read_ref: (value :&i64) :i64 {\n    return *value\n}\n\npub fn main: () {\n    set x = 41 :i64\n    set rx = &x\n    set y = read_ref(rx)\n    use dasu(y + 1)\n}\n",
     )
     .expect("write source");
 
@@ -2040,7 +2040,7 @@ fn impl_method_can_mutate_self_field_and_run() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\nstruct Counter {\n    value :i64 mut\n    step :i64\n}\n\nimpl Counter {\n    fn new: (step :i64) :Counter {\n        return (Counter value: 0, step: step)\n    }\n\n    fn increment: (self) {\n        set self.value = self.value + self.step\n    }\n\n    fn reset: (self) {\n        set self.value = 0\n    }\n\n    fn get: (self) :i64 {\n        return self.value\n    }\n}\n\npub fn main: () {\n    set c = Counter::new(5)\n    c.increment()\n    c.increment()\n    c.reset()\n    c.increment()\n    use dasu(c.get())\n}\n",
+        "load kioto\n\nstruct Counter {\n    value :i64 mut\n    step :i64\n}\n\nimpl Counter {\n    fn new: (step :i64) :Counter {\n        return (Counter value: 0, step: step)\n    }\n\n    fn increment: (self) {\n        set self.value = self.value + self.step\n    }\n\n    fn reset: (self) {\n        set self.value = 0\n    }\n\n    fn get: (self) :i64 {\n        return self.value\n    }\n}\n\npub fn main: () {\n    set c = Counter::new(5)\n    c.increment()\n    c.increment()\n    c.reset()\n    c.increment()\n    use dasu(c.get())\n}\n",
     )
     .expect("write source");
 
@@ -2100,16 +2100,16 @@ fn impl_method_local_assignment_parses() {
 }
 
 #[test]
-fn parses_local_import_with_selection() {
-    let program = parse("import ./utils: (helper value)\n").expect("source should parse");
-    let Statement::Use {
+fn parses_local_load_with_selection() {
+    let program = parse("load ./utils: (helper value)\n").expect("source should parse");
+    let Statement::Load {
         path,
         items,
         is_local,
         ..
     } = &program.statements[0]
     else {
-        panic!("expected use statement");
+        panic!("expected load statement");
     };
 
     assert_eq!(path, "./utils");
@@ -2137,7 +2137,7 @@ fn local_import_loads_selected_symbols_from_project_root() {
     let main_path = root.join("code").join("main.mire");
     fs::write(
         &main_path,
-        "import ./helpers: (helper)\n\npub fn main: () {\n    use helper()\n}\n",
+        "load ./helpers: (helper)\n\npub fn main: () {\n    use helper()\n}\n",
     )
     .expect("write main");
 
@@ -2176,7 +2176,7 @@ fn local_import_selected_symbol_keeps_private_dependencies() {
     let main_path = root.join("code").join("main.mire");
     fs::write(
         &main_path,
-        "import ./helpers: (helper)\n\npub fn main: () {\n    use dasu(helper())\n}\n",
+        "load ./helpers: (helper)\n\npub fn main: () {\n    use dasu(helper())\n}\n",
     )
     .expect("write main");
 
@@ -2215,7 +2215,7 @@ fn global_local_import_reachable_mode_loads_only_used_symbols() {
     let main_path = root.join("code").join("main.mire");
     fs::write(
         &main_path,
-        "import ./helpers\n\npub fn main: () {\n    use dasu(helper())\n}\n",
+        "load ./helpers\n\npub fn main: () {\n    use dasu(helper())\n}\n",
     )
     .expect("write main");
 
@@ -2248,7 +2248,7 @@ fn local_import_requires_project_root() {
     let main_path = root.join("main.mire");
     fs::write(
         &main_path,
-        "import ./helpers: (helper)\n\npub fn main: () {\n    use helper()\n}\n",
+        "load ./helpers: (helper)\n\npub fn main: () {\n    use helper()\n}\n",
     )
     .expect("write main");
     fs::write(
@@ -2266,7 +2266,7 @@ fn local_import_requires_project_root() {
 
 #[test]
 fn pipeline_self_placeholder_analyzes_after_desugaring() {
-    let source = "import std\npub fn main: () {\nuse range(5) => dasu(self)\n}\n";
+    let source = "load kioto\npub fn main: () {\nuse range(5) => dasu(self)\n}\n";
     let mut program = parse(source).expect("source should parse");
 
     analyze_program(&mut program, source).expect("pipeline self placeholder should analyze");
@@ -2414,7 +2414,7 @@ fn pipeline_len_builtin_compiles() {
     let source_path = root.join("pipeline_len.mire");
     fs::write(
         &source_path,
-        "import std\npub fn main: () {\nset x = [1 2 3] :arr[i64 3]\nset y = x => len()\nuse dasu(\"y: {y}\")\n}\n",
+        "load kioto\npub fn main: () {\nset x = [1 2 3] :arr[i64 3]\nset y = x => len()\nuse dasu(\"y: {y}\")\n}\n",
     )
     .expect("write source");
 
@@ -2443,7 +2443,7 @@ fn nested_output_pipeline_compiles() {
     let source_path = root.join("nested_output.mire");
     fs::write(
         &source_path,
-        "import std\npub fn main: () {\nuse dasu(\"Hello\") => use dasu(self)\n}\n",
+        "load kioto\npub fn main: () {\nuse dasu(\"Hello\") => use dasu(self)\n}\n",
     )
     .expect("write source");
 
@@ -2472,7 +2472,7 @@ fn find_statement_compiles_and_lowers() {
     let source_path = root.join("find_statement.mire");
     fs::write(
         &source_path,
-        "import std\npub fn main: () {\n    find item in [1 2 3] {\n        use dasu(item)\n    }\n}\n",
+        "load kioto\npub fn main: () {\n    find item in [1 2 3] {\n        use dasu(item)\n    }\n}\n",
     )
     .expect("write source");
 
@@ -2611,7 +2611,7 @@ fn debug_build_persists_ir_on_disk() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\npub fn main: () {\n    use dasu(\"debug\")\n}\n",
+        "load kioto\npub fn main: () {\n    use dasu(\"debug\")\n}\n",
     )
     .expect("write source");
 
@@ -2661,7 +2661,7 @@ fn incremental_loader_tracks_hashes_for_local_dependencies() {
     let main_path = root.join("code").join("main.mire");
     fs::write(
         &main_path,
-        "import ./helper: (helper)\n\npub fn main: () {\n    use helper()\n}\n",
+        "load ./helper: (helper)\n\npub fn main: () {\n    use helper()\n}\n",
     )
     .expect("write main");
 
@@ -2708,20 +2708,9 @@ fn kioto_double_colon_namespace_calls_resolve_with_selected_imports() {
         "[project]\nname = \"kioto-double-colon\"\nversion = \"0.1.0\"\nentry = \"main.mire\"\n",
     )
     .expect("write project");
-    fs::create_dir_all(root.join("kioto")).expect("mkdir kioto");
-    fs::write(
-        root.join("kioto").join("lib.mire"),
-        "pub fn version: () :str { return \"0.1.0\" }\n",
-    )
-    .expect("write lib");
-    fs::write(
-        root.join("kioto").join("fs.mire"),
-        "pub fn read: (path: str) :str { return path }\n",
-    )
-    .expect("write fs module");
 
     let main_path = root.join("main.mire");
-    let source = "import kioto: (fs)\n\npub fn main: () {\n    set text = kioto::fs::read(\"ok\")\n    use dasu(text)\n}\n";
+    let source = "load kioto\n\npub fn main: () {\n    set text = strings.join(strings.split(\"a,b,c\" \",\") \"-\")\n    use dasu(text)\n}\n";
     fs::write(&main_path, source).expect("write main");
 
     let mut loaded = load_program_with_metadata(&main_path).expect("load with imports");
@@ -2739,7 +2728,7 @@ fn incremental_build_reuses_artifacts_when_inputs_are_unchanged() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\npub fn main: () {\n    use dasu(\"cache\")\n}\n",
+        "load kioto\npub fn main: () {\n    use dasu(\"cache\")\n}\n",
     )
     .expect("write source");
 
@@ -2813,7 +2802,7 @@ fn incremental_build_invalidates_on_local_import_change() {
     let main_path = root.join("code").join("main.mire");
     fs::write(
         &main_path,
-        "import ./helper: (helper)\n\npub fn main: () {\n    use helper()\n}\n",
+        "load ./helper: (helper)\n\npub fn main: () {\n    use helper()\n}\n",
     )
     .expect("write main");
 
@@ -2953,7 +2942,7 @@ fn list_hofs_infer_closure_params_and_execute() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\npub fn main: () {\n    set sum = lists.fold(0, (acc elem) => acc + elem, [1 2 3 4 5])\n    set doubled = lists.map((x) => x * 2, [1 2 3])\n    set filtered = lists.filter((x) => x > 2, [1 2 3 4])\n    use dasu(\"{sum} {lists.get(doubled 2)} {lists.get(filtered 1)}\")\n}\n",
+        "load kioto\n\npub fn main: () {\n    set sum = lists.fold(0, (acc elem) => acc + elem, [1 2 3 4 5])\n    set doubled = lists.map((x) => x * 2, [1 2 3])\n    set filtered = lists.filter((x) => x > 2, [1 2 3 4])\n    use dasu(\"{sum} {lists.get(doubled 2)} {lists.get(filtered 1)}\")\n}\n",
     )
     .expect("write source");
 
@@ -2996,7 +2985,7 @@ fn nested_map_string_render_executes_without_runtime_errors() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\npub fn main: () {\n    set inner = {x: 1, y: 2} :map[str i64]\n    set outer = {child: inner} :map[str map[str i64]]\n    use dasu(outer)\n}\n",
+        "load kioto\n\npub fn main: () {\n    set inner = {x: 1, y: 2} :map[str i64]\n    set outer = {child: inner} :map[str map[str i64]]\n    use dasu(outer)\n}\n",
     )
     .expect("write source");
 
@@ -3083,7 +3072,7 @@ fn borrowck_moves_non_copy_value_when_passing_by_value() {
     let err = expect_compile_error_from_source(
         "mire_borrowck_move_on_call_arg",
         "borrowck_move_on_call_arg.mire",
-        "import std\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    use consume(xs)\n    use dasu(len(xs))\n}\n",
+        "load kioto\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    use consume(xs)\n    use dasu(len(xs))\n}\n",
     );
 
     assert!(matches!(err.kind, ErrorKind::Ownership { .. }), "{err:?}");
@@ -3102,7 +3091,7 @@ fn match_supports_or_patterns_and_numeric_ranges() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\npub fn main: () {\n    set x = 2 :i64\n    set y = match x {\n        1 | 2 { 20 }\n        3..5 { 40 }\n        _ { 0 }\n    } :i64\n    use dasu(y)\n}\n",
+        "load kioto\n\npub fn main: () {\n    set x = 2 :i64\n    set y = match x {\n        1 | 2 { 20 }\n        3..5 { 40 }\n        _ { 0 }\n    } :i64\n    use dasu(y)\n}\n",
     )
     .expect("write source");
 
@@ -3143,7 +3132,7 @@ fn match_guard_when_is_supported() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\nenum State {\n    Idle\n    Busy\n}\n\npub fn main: () {\n    set s = State.Idle\n    set out = match s {\n        State.Idle when true { 1 }\n        _ { 0 }\n    } :i64\n    use dasu(out)\n}\n",
+        "load kioto\n\nenum State {\n    Idle\n    Busy\n}\n\npub fn main: () {\n    set s = State.Idle\n    set out = match s {\n        State.Idle when true { 1 }\n        _ { 0 }\n    } :i64\n    use dasu(out)\n}\n",
     )
     .expect("write source");
 
@@ -3178,7 +3167,7 @@ fn match_guard_requires_bool_condition() {
     let err = expect_compile_error_from_source(
         "mire_match_guard_requires_bool",
         "match_guard_requires_bool.mire",
-        "import std\n\nenum State {\n    Idle\n}\n\npub fn main: () {\n    set s = State.Idle\n    set out = match s {\n        State.Idle when 123 { 1 }\n        _ { 0 }\n    } :i64\n    use dasu(out)\n}\n",
+        "load kioto\n\nenum State {\n    Idle\n}\n\npub fn main: () {\n    set s = State.Idle\n    set out = match s {\n        State.Idle when 123 { 1 }\n        _ { 0 }\n    } :i64\n    use dasu(out)\n}\n",
     );
     let rendered = err.to_string();
     assert!(rendered.contains("match guard must be bool"), "{rendered}");
@@ -3271,7 +3260,7 @@ fn result_type_div_safe_compiles_and_runs() {
     fs::write(
         &source_path,
         "\
-import std
+load kioto
 
 pub fn div_safe: (a: i64, b: i64): result[i64 str] {
     if b == 0 {
@@ -3328,7 +3317,7 @@ fn borrowck_moves_in_if_else_are_tracked_per_branch() {
     .unwrap();
     fs::write(
         &source_path,
-        "import std\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    set cond = true :bool\n    if cond {\n        use consume(xs)\n    } else {\n        use dasu(len(xs))\n    }\n}\n"
+        "load kioto\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    set cond = true :bool\n    if cond {\n        use consume(xs)\n    } else {\n        use dasu(len(xs))\n    }\n}\n"
     ).unwrap();
 
     let build = compile_file_with_avenys(
@@ -3355,7 +3344,7 @@ fn borrowck_moves_in_if_else_are_tracked_per_branch() {
     let err = expect_compile_error_from_source(
         "mire_borrowck_if_else_invalid",
         "invalid.mire",
-        "import std\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    set cond = true :bool\n    if cond {\n        use consume(xs)\n    }\n    use dasu(len(xs))\n}\n",
+        "load kioto\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    set cond = true :bool\n    if cond {\n        use consume(xs)\n    }\n    use dasu(len(xs))\n}\n",
     );
     assert!(matches!(err.kind, ErrorKind::Ownership { .. }), "{err:?}");
     assert!(
@@ -3376,7 +3365,7 @@ fn borrowck_moves_in_match_arms_are_tracked_per_arm() {
     .unwrap();
     fs::write(
         &source_path,
-        "import std\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    set val = 2 :i64\n    match val {\n        1 { use consume(xs) }\n        _ { use dasu(len(xs)) }\n    }\n}\n"
+        "load kioto\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    set val = 2 :i64\n    match val {\n        1 { use consume(xs) }\n        _ { use dasu(len(xs)) }\n    }\n}\n"
     ).unwrap();
 
     let build = compile_file_with_avenys(
@@ -3403,7 +3392,7 @@ fn borrowck_moves_in_match_arms_are_tracked_per_arm() {
     let err = expect_compile_error_from_source(
         "mire_borrowck_match_invalid",
         "invalid.mire",
-        "import std\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    set val = 2 :i64\n    match val {\n        1 { use consume(xs) }\n        _ {} \n    }\n    use dasu(len(xs))\n}\n",
+        "load kioto\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    set val = 2 :i64\n    match val {\n        1 { use consume(xs) }\n        _ {} \n    }\n    use dasu(len(xs))\n}\n",
     );
     assert!(matches!(err.kind, ErrorKind::Ownership { .. }), "{err:?}");
     assert!(
@@ -3420,7 +3409,7 @@ fn borrowck_closure_captures_and_moves() {
     // For now, the tests verify successful compilation (capture isn't tracked yet).
     let root = make_temp_project_root("mire_borrowck_closure_move_after");
     let source_path = root.join("invalid.mire");
-    fs::write(&source_path, "import std\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    set f = (mu) => len(xs)\n    set result = consume(xs)\n    use dasu(str(result))\n}\n").unwrap();
+    fs::write(&source_path, "load kioto\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    set f = (mu) => len(xs)\n    set result = consume(xs)\n    use dasu(str(result))\n}\n").unwrap();
     let build = compile_file_with_avenys(
         &source_path,
         &BuildOptions {
@@ -3450,7 +3439,7 @@ fn borrowck_ok_consumes_non_copy_binding() {
     let err = expect_compile_error_from_source(
         "mire_borrowck_ok_consume",
         "invalid.mire",
-        "import std\n\npub fn main: () {\n    set val = \"hello\" :str\n    set r = ok(val) :result[str str]\n    use dasu(val)\n}\n",
+        "load kioto\n\npub fn main: () {\n    set val = \"hello\" :str\n    set r = ok(val) :result[str str]\n    use dasu(val)\n}\n",
     );
     assert!(matches!(err.kind, ErrorKind::Ownership { .. }), "{err:?}");
     assert!(
@@ -3465,7 +3454,7 @@ fn borrowck_try_consumes_result_binding() {
     let err = expect_compile_error_from_source(
         "mire_borrowck_try",
         "invalid.mire",
-        "import std\n\nfn safe_div: (a :i64 b :i64) :result[i64 str] {\n    if b == 0 { return err(\"div by zero\") }\n    return ok(a / b)\n}\n\nfn helper: () :result[i64 str] {\n    set res = safe_div(10 2)\n    set val = res?\n    use dasu(str(val))\n    use dasu(str(res))\n    return ok(0)\n}\n\npub fn main: () {\n    use dasu(\"done\")\n}\n",
+        "load kioto\n\nfn safe_div: (a :i64 b :i64) :result[i64 str] {\n    if b == 0 { return err(\"div by zero\") }\n    return ok(a / b)\n}\n\nfn helper: () :result[i64 str] {\n    set res = safe_div(10 2)\n    set val = res?\n    use dasu(str(val))\n    use dasu(str(res))\n    return ok(0)\n}\n\npub fn main: () {\n    use dasu(\"done\")\n}\n",
     );
     assert!(matches!(err.kind, ErrorKind::Ownership { .. }), "{err:?}");
     assert!(
@@ -3480,7 +3469,7 @@ fn borrowck_err_consumes_non_copy_binding() {
     let err = expect_compile_error_from_source(
         "mire_borrowck_err_consume",
         "invalid.mire",
-        "import std\n\npub fn main: () {\n    set msg = \"oops\" :str\n    set r = err(msg) :result[i64 str]\n    use dasu(msg)\n}\n",
+        "load kioto\n\npub fn main: () {\n    set msg = \"oops\" :str\n    set r = err(msg) :result[i64 str]\n    use dasu(msg)\n}\n",
     );
     assert!(matches!(err.kind, ErrorKind::Ownership { .. }), "{err:?}");
     assert!(
@@ -3495,7 +3484,7 @@ fn borrowck_match_expression_tracks_moves() {
     let err = expect_compile_error_from_source(
         "mire_borrowck_match_expr",
         "invalid.mire",
-        "import std\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    set val = 2 :i64\n    set result = match val {\n        1 { consume(xs) }\n        _ { consume(xs) }\n    }\n    use dasu(str(result))\n    use dasu(str(len(xs)))\n}\n",
+        "load kioto\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    set val = 2 :i64\n    set result = match val {\n        1 { consume(xs) }\n        _ { consume(xs) }\n    }\n    use dasu(str(result))\n    use dasu(str(len(xs)))\n}\n",
     );
     assert!(matches!(err.kind, ErrorKind::Ownership { .. }), "{err:?}");
     assert!(
@@ -3510,7 +3499,7 @@ fn borrowck_loop_moves_are_tracked() {
     let err = expect_compile_error_from_source(
         "mire_borrowck_loop_move",
         "invalid.mire",
-        "import std\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    set i = 0 :i64 mut\n    while i < 3 {\n        use dasu(len(xs))\n        use consume(xs)\n        set i = i + 1 :i64\n    }\n}\n",
+        "load kioto\n\nfn consume: (xs :vec[i64]) :i64 {\n    return len(xs)\n}\n\npub fn main: () {\n    set xs = [1 2 3] :vec[i64]\n    set i = 0 :i64 mut\n    while i < 3 {\n        use dasu(len(xs))\n        use consume(xs)\n        set i = i + 1 :i64\n    }\n}\n",
     );
     assert!(matches!(err.kind, ErrorKind::Ownership { .. }), "{err:?}");
     assert!(
@@ -3539,7 +3528,7 @@ fn local_import_restructured_module_dir() {
     let main_path = root.join("code/main.mire");
     fs::write(
         &main_path,
-        "import ./helpers/calc: (mul)\n\npub fn main: () {\n    use dasu(str(mul(6 7)))\n}\n",
+        "load ./helpers/calc: (mul)\n\npub fn main: () {\n    use dasu(str(mul(6 7)))\n}\n",
     )
     .expect("write main");
 
@@ -3577,7 +3566,7 @@ fn kioto_async_ready_value_compiles_and_runs() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\npub fn main: () {\n    set task = async.ready(\"done\")\n    use dasu(async.value(task \"fallback\"))\n}\n",
+        "load kioto\n\npub fn main: () {\n    set task = async.ready(\"done\")\n    use dasu(async.value(task \"fallback\"))\n}\n",
     )
     .expect("write source");
 
@@ -3618,7 +3607,7 @@ fn kioto_math_module_compiles_and_runs_real_wrappers() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\npub fn main: () {\n    set nums = [1 2 3 4 5] :vec[i64]\n    set avg = math.mean(nums)\n    use dasu(\"{math.sum(nums)}-{math.round(avg)}-{math.round(2.6)}-{math.floor(2.6)}-{math.ceil(2.1)}\")\n}\n",
+        "load kioto\n\npub fn main: () {\n    set nums = [1 2 3 4 5] :vec[i64]\n    set avg = math.mean(nums)\n    use dasu(\"{math.sum(nums)}-{math.round(avg)}-{math.round(2.6)}-{math.floor(2.6)}-{math.ceil(2.1)}\")\n}\n",
     )
     .expect("write source");
 
@@ -3659,7 +3648,7 @@ fn math_sum_lowers_to_runtime_math_abi() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\npub fn main: () {\n    set nums = [1 2 3] :vec[i64]\n    use dasu(str(math.sum(nums)))\n}\n",
+        "load kioto\n\npub fn main: () {\n    set nums = [1 2 3] :vec[i64]\n    use dasu(str(math.sum(nums)))\n}\n",
     )
     .expect("write source");
 
@@ -3688,28 +3677,6 @@ fn math_sum_lowers_to_runtime_math_abi() {
 }
 
 #[test]
-fn import_command_json_output_updates_manifest() {
-    let root = make_temp_project_root("mire_import_json");
-    let exe = env!("CARGO_BIN_EXE_mire");
-    let output = Command::new(exe)
-        .current_dir(&root)
-        .args(["import", "kioto", "--version", "0.2.0", "--json"])
-        .output()
-        .expect("run mire import");
-
-    assert!(output.status.success(), "{output:?}");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let json: serde_json::Value = serde_json::from_str(&stdout).expect("json output");
-    assert_eq!(json["status"], "ok");
-    assert_eq!(json["module"], "kioto");
-    assert_eq!(json["version"], "0.2.0");
-
-    let manifest = fs::read_to_string(root.join("owl.toml")).expect("manifest written");
-    assert!(manifest.contains("[dependencies.kioto]"), "{manifest}");
-    assert!(manifest.contains("version = \"0.2.0\""), "{manifest}");
-}
-
-#[test]
 fn owl_home_overrides_kioto_package_resolution() {
     let root = make_temp_project_root("mire_owl_home_resolution");
     let source_path = root.join("owl_home_resolution.mire");
@@ -3729,7 +3696,7 @@ fn owl_home_overrides_kioto_package_resolution() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import strings\n\npub fn main: () {\n    use dasu(strings.marker())\n}\n",
+        "load strings\n\npub fn main: () {\n    use dasu(strings.marker())\n}\n",
     )
     .expect("write source");
 
@@ -3750,6 +3717,93 @@ fn owl_home_overrides_kioto_package_resolution() {
 }
 
 #[test]
+fn load_keyword_discovers_root_level_modules() {
+    let root = make_temp_project_root("mire_load_root_discovery");
+    let source_path = root.join("load_root_discovery.mire");
+    fs::write(
+        root.join("owl.toml"),
+        "[project]\nname = \"load-root-discovery\"\nversion = \"0.1.0\"\nentry = \"load_root_discovery.mire\"\n",
+    )
+    .expect("write project");
+    fs::write(
+        root.join("helper.mire"),
+        "pub fn marker: () :str { return \"root-load\" }\n",
+    )
+    .expect("write helper");
+    fs::write(
+        &source_path,
+        "load helper\n\npub fn main: () {\n    use dasu(helper.marker())\n}\n",
+    )
+    .expect("write source");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_mire"))
+        .current_dir(&root)
+        .args(["run", source_path.to_str().expect("source path")])
+        .output()
+        .expect("run mire");
+
+    assert!(output.status.success(), "{output:?}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("root-load"), "{stdout}");
+}
+
+#[test]
+fn load_module_recursion_preserves_internal_references() {
+    let root = make_temp_project_root("mire_load_module_recursion");
+    let source_path = root.join("module_recursion.mire");
+    fs::write(
+        root.join("owl.toml"),
+        "[project]\nname = \"load-module-recursion\"\nversion = \"0.1.0\"\nentry = \"module_recursion.mire\"\n",
+    )
+    .expect("write project");
+    fs::write(
+        root.join("helpers.mire"),
+        "pub fn fibonacci: (n :i64) :i64 {\n    if n <= 1 {\n        return n\n    }\n    return fibonacci(n - 1) + fibonacci(n - 2)\n}\n",
+    )
+    .expect("write helpers");
+    fs::write(
+        &source_path,
+        "load helpers\n\npub fn main: () {\n    use dasu(str(helpers.fibonacci(6)))\n}\n",
+    )
+    .expect("write source");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_mire"))
+        .current_dir(&root)
+        .args(["run", source_path.to_str().expect("source path")])
+        .output()
+        .expect("run mire");
+
+    assert!(output.status.success(), "{output:?}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("8"), "{stdout}");
+}
+
+#[test]
+fn local_load_emits_warning_under_warn_all() {
+    let source = "load ./helpers\n\npub fn main: () {\n    use dasu(\"ok\")\n}\n";
+    let mut program = parse(source).expect("source should parse");
+    let report = mire::analyze_program_with_warnings(
+        &mut program,
+        source,
+        Some("local_load_warning.mire"),
+        mire::WarningConfig {
+            filter: mire::error::diagnostic::WarningFilter::All,
+            deny: std::collections::HashSet::new(),
+        },
+    )
+    .expect("warnings analysis should succeed");
+
+    assert!(
+        report
+            .diagnostics
+            .iter()
+            .any(|diag| diag.code == mire::error::diagnostic::DiagnosticCode::W0010),
+        "{:?}",
+        report.diagnostics
+    );
+}
+
+#[test]
 fn kioto_async_spawn_wait_compiles_and_runs() {
     let root = make_temp_project_root("mire_kioto_async_spawn_wait");
     let source_path = root.join("async_spawn_wait.mire");
@@ -3760,7 +3814,7 @@ fn kioto_async_spawn_wait_compiles_and_runs() {
     .expect("write project");
     fs::write(
         &source_path,
-        "import std\n\npub fn main: () {\n    set pid = async.spawn(\"true\")\n    set code = async.join(pid)\n    use dasu(str(code))\n}\n",
+        "load kioto\n\npub fn main: () {\n    set pid = async.spawn(\"true\")\n    set code = async.join(pid)\n    use dasu(str(code))\n}\n",
     )
     .expect("write source");
 

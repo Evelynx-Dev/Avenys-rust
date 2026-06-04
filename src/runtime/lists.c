@@ -153,6 +153,8 @@ void *rt_list_get_ptr(void *list_ptr, int64_t index) {
 int64_t rt_lists_len(void *list) { return rt_list_len(list); }
 int64_t rt_lists_get_i64(void *list, int64_t index) { return rt_list_get_i64(list, index); }
 void *rt_lists_get_ptr(void *list, int64_t index) { return rt_list_get_ptr(list, index); }
+char *rt_vec_get_str(void *list, int64_t index) { return (char *)rt_list_get_ptr(list, index); }
+int64_t rt_vec_len(void *list) { return rt_list_len(list); }
 void *rt_lists_push_i64(void *list, int64_t value) { return rt_list_push_i64(list, value); }
 void *rt_lists_push_ptr(void *list, void *value) { return rt_list_push_ptr(list, value); }
 int64_t rt_lists_pop(void *list) { return rt_list_pop_i64(list); }

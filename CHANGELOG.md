@@ -2,6 +2,74 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.11.11] - 2026-06-04
+
+### Removed
+- `import` keyword removed entirely from lexer, parser, AST, and CLI. `load`
+  is now the only way to import modules. Legacy `import` will fail to parse
+  with an "unexpected token" error.
+- `--allow-legacy-imports` flag, `allow_legacy_imports` warning config, and
+  `MIRE_ALLOW_LEGACY_IMPORTS` env var removed.
+- `mire import` CLI command removed. Dependencies must be managed by editing
+  `owl.toml` directly.
+
+### Changed
+- `load std` standardized to `load kioto` everywhere — Kioto is the standard
+  library; `std` was never a real name.
+- Local `load ./path` now warns: declare the module in `owl.toml`
+  `[dependencies]` instead.
+
+### Fixed
+- Module loading now rewrites internal references inside prefixed modules, so
+  recursive calls and cross-references remain valid after namespacing.
+
+## [3.11.10] - 2026-06-02
+
+### Added
+- Regression coverage for recursive `load X` modules and root-level local
+  module discovery.
+
+### Fixed
+- Module loading now rewrites internal references inside prefixed modules, so
+  recursive calls and cross-references remain valid after namespacing.
+- Local `load` diagnostics now describe the actual `load` path instead of the
+  legacy wording.
+
+## [3.11.9] - 2026-06-02
+
+### Changed
+- Public manifest dependency types were renamed from `MireImports` / `MireImportEntry`
+  to `MireDependencies` / `MireDependency`, with `load_manifest_dependencies`
+  as the new loader helper name.
+- Documentation in Mire and `mire-docs/` was aligned with the current `load`
+  keyword, `--owl-home`, and `[dependencies]` naming.
+
+## [3.11.8] - 2026-06-02
+
+### Added
+- `load helper` now auto-discovers local root modules from the project root
+  using direct-file and module-directory candidates.
+- Regression coverage for root-level module discovery and legacy import
+  deprecation warnings.
+
+### Changed
+- `import` remains as a legacy alias for `load`, with analyzer support for
+  deprecation warnings and the `--allow-legacy-imports` escape hatch.
+
+## [3.11.7] - 2026-06-02
+
+### Added
+- New `load` module keyword, with `import` retained as a legacy alias during
+  the migration window.
+- `--allow-legacy-imports` CLI flag to silence legacy import warnings when
+  working with old sources.
+
+### Changed
+- Module loading is now surfaced as `Statement::Load` in the compiler AST and
+  analysis pipeline, with legacy imports tracked separately for warnings.
+- Built-in module documentation now calls out `load` as the preferred source
+  keyword.
+
 ## [3.11.6] - 2026-06-02
 
 ### Fixed

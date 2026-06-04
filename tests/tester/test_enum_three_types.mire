@@ -1,4 +1,4 @@
-import std
+load kioto
 
 enum Token {
     Number(value :i64)

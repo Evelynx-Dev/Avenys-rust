@@ -1,4 +1,4 @@
-import std
+load kioto
 
 pub fn main: () {
     set nums = [10 20 30 40 50] :arr[i64 5]

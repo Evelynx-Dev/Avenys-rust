@@ -1,4 +1,4 @@
-import std
+load kioto
 
 enum Point2D {
     Origin

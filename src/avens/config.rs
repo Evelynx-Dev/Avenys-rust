@@ -82,18 +82,18 @@ pub struct MireManifest {
     pub cache: Option<MireCacheConfig>,
     #[serde(default)]
     #[serde(alias = "imports")]
-    pub dependencies: MireImports,
+    pub dependencies: MireDependencies,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct MireImports {
+pub struct MireDependencies {
     #[serde(flatten)]
-    pub entries: HashMap<String, MireImportEntry>,
+    pub entries: HashMap<String, MireDependency>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum MireImportEntry {
+pub enum MireDependency {
     Simple { version: String },
     WithPath { version: String, path: String },
     PathOnly { path: String },

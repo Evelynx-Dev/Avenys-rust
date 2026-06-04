@@ -3,10 +3,9 @@ use mire::error::format::format_diagnostic;
 use mire::lexer::tokenize;
 use mire::parser::parse;
 use mire::{
-    BuildMode, BuildOptions, CacheOverrides, ImportMode, MireError, MireImportEntry, MireManifest,
-    MireProject, OptLevel, WarningConfig, analyze_program, analyze_program_with_warnings,
-    compile_file_with_avenys, default_output_dir, load_program_from_file, load_project_manifest,
-    project_manifest_path, write_manifest,
+    BuildMode, BuildOptions, CacheOverrides, ImportMode, MireError, OptLevel, WarningConfig,
+    analyze_program, analyze_program_with_warnings, compile_file_with_avenys,
+    default_output_dir, load_program_from_file,
 };
 use std::collections::HashSet;
 use std::env;
@@ -65,7 +64,7 @@ fn run_cli() -> Result<i32, MireError> {
         "check" => check_command(&cwd, &args[2..]),
         "debug" => debug_command(&cwd, &args[2..]),
         "test" => test_command(&cwd, &args[2..]),
-        "import" => import_command(&cwd, &args[2..]),
+
         "help" | "--help" | "-h" => {
             print_help();
             Ok(0)
@@ -566,114 +565,6 @@ fn parse_debug_options(cwd: &Path, args: &[String]) -> Result<DebugOptions, Mire
     })
 }
 
-fn import_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
-    if args.is_empty() {
-        eprintln!("Usage: mire import <module> [--version <ver>] [--path <path>]");
-        eprintln!("  mire import kioto              add kioto module (version-based)");
-        eprintln!("  mire import kioto --version 0.2 add kioto with version");
-        eprintln!("  mire import ./local-mod         add local module");
-        return Ok(1);
-    }
-
-    let module = &args[0];
-    let mut version = String::new();
-    let mut path = String::new();
-    let mut json_output = false;
-
-    let mut i = 1;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--version" | "-v" => {
-                i += 1;
-                version = args
-                    .get(i)
-                    .ok_or_else(|| {
-                        MireError::runtime("Missing version after --version".to_string())
-                    })?
-                    .clone();
-            }
-            "--path" | "-p" => {
-                i += 1;
-                path = args
-                    .get(i)
-                    .ok_or_else(|| MireError::runtime("Missing path after --path".to_string()))?
-                    .clone();
-            }
-            "--json" => {
-                json_output = true;
-            }
-            _ => {
-                return Err(MireError::runtime(format!("Unknown option: {}", args[i])));
-            }
-        }
-        i += 1;
-    }
-
-    let manifest_path = project_manifest_path(cwd);
-    let output_version = if version.is_empty() {
-        "latest".to_string()
-    } else {
-        version.clone()
-    };
-    let output_path = if path.is_empty() {
-        None
-    } else {
-        Some(path.clone())
-    };
-
-    // Load or create manifest
-    let mut manifest = match load_project_manifest(cwd) {
-        Ok(Some(m)) => m,
-        _ => MireManifest {
-            project: MireProject {
-                name: cwd
-                    .file_name()
-                    .map(|s| s.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "project".to_string()),
-                version: "0.1.0".to_string(),
-                entry: "code/main.mire".to_string(),
-            },
-            cache: None,
-            dependencies: Default::default(),
-        },
-    };
-
-    let entry = if !path.is_empty() {
-        if !version.is_empty() {
-            MireImportEntry::WithPath {
-                version,
-                path: path.clone(),
-            }
-        } else {
-            MireImportEntry::PathOnly { path: path.clone() }
-        }
-    } else if !version.is_empty() {
-        MireImportEntry::Simple { version }
-    } else {
-        MireImportEntry::Simple {
-            version: "latest".to_string(),
-        }
-    };
-
-    manifest.dependencies.entries.insert(module.clone(), entry);
-    write_manifest(&manifest, &manifest_path)?;
-    if json_output {
-        println!(
-            "{}",
-            serde_json::json!({
-                "status": "ok",
-                "module": module,
-                "manifest": manifest_path,
-                "version": output_version,
-                "path": output_path,
-            })
-        );
-    } else {
-        println!("Added import '{}' to {}", module, manifest_path.display());
-    }
-    Ok(0)
-}
-
 fn default_entry_from_manifest(cwd: &Path) -> Result<Option<String>, MireError> {
     let owl_toml = cwd.join("owl.toml");
     let path = if owl_toml.exists() {
@@ -786,8 +677,7 @@ fn print_help() {
     println!("  build [file]          Compile only");
     println!("  check [file]          Analyze only");
     println!("  debug [file]          Debug build, emits IR");
-    println!("  import <module>       Add import to owl.toml");
-    println!("    --json              Emit machine-readable import result");
+
     println!("  test [paths...]       Run integration tests from tests/");
     println!("    --no-run            Compile only, skip execution");
     println!("    --verbose, -v       Show per-test results");

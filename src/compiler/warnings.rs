@@ -23,7 +23,10 @@ pub struct WarningAnalyzer {
 }
 
 impl WarningAnalyzer {
-    pub fn new(filter: WarningFilter, deny: HashSet<DiagnosticCode>) -> Self {
+    pub fn new(
+        filter: WarningFilter,
+        deny: HashSet<DiagnosticCode>,
+    ) -> Self {
         Self {
             diagnostics: Vec::new(),
             filter,
@@ -103,17 +106,17 @@ impl WarningAnalyzer {
         }
 
         let imported_modules = self.imported_modules.clone();
-        for import in &imported_modules {
-            if !self.used_imports.contains(&import.name) {
-                let (line, column) = if import.line == 1 && import.column == 1 {
-                    find_position_for_import(source, &import.name).unwrap_or((1, 1))
+        for load in &imported_modules {
+            if !self.used_imports.contains(&load.name) {
+                let (line, column) = if load.line == 1 && load.column == 1 {
+                    find_position_for_load(source, &load.name).unwrap_or((1, 1))
                 } else {
-                    (import.line, import.column)
+                    (load.line, load.column)
                 };
                 self.push_warn(
                     DiagnosticCode::W0003,
-                    "Unused Import",
-                    format!("Import '{}' is never used", import.name),
+                    "Unused Load",
+                    format!("Load '{}' is never used", load.name),
                     line,
                     column,
                     None,
@@ -261,7 +264,29 @@ impl WarningAnalyzer {
                     self.scan_defs(b);
                 }
             }
-            Statement::Use { path, is_local, .. } if !*is_local => {
+            Statement::Load {
+                path,
+                is_local: true,
+                ..
+            } => {
+                self.push_warn_at(
+                    DiagnosticCode::W0010,
+                    "Local Load",
+                    format!(
+                        "Local load '{}' should be declared in owl.toml [dependencies] instead",
+                        path
+                    ),
+                    line,
+                    column,
+                    path.len().max(3),
+                    Some("declare the module in owl.toml and load it by name".to_string()),
+                );
+            }
+            Statement::Load {
+                path,
+                is_local: false,
+                ..
+            } => {
                 self.imported_modules.push(Identifier {
                     name: path.clone(),
                     data_type: DataType::Unknown,
@@ -480,7 +505,7 @@ impl WarningAnalyzer {
                 );
             }
             Statement::Break | Statement::Continue => {}
-            Statement::Use { path, .. } => {
+            Statement::Load { path, .. } => {
                 self.used_imports.insert(path.clone());
             }
             Statement::Function { body, .. } => {
@@ -920,13 +945,13 @@ fn expression_location(expression: &Expression) -> (usize, usize) {
     }
 }
 
-fn find_position_for_import(source: &str, module: &str) -> Option<(usize, usize)> {
+fn find_position_for_load(source: &str, module: &str) -> Option<(usize, usize)> {
     find_position_for_any_pattern(
         source,
         &[
-            &format!("import {} ", module),
-            &format!("import {}\n", module),
-            &format!("import {}", module),
+            &format!("load {} ", module),
+            &format!("load {}\n", module),
+            &format!("load {}", module),
         ],
     )
 }
