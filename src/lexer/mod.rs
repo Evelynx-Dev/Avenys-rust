@@ -12,6 +12,7 @@ pub enum TokenType {
     BoolLit,
     NoneLit,
     Load,
+    Module,
     Set,
     Use,
     Return,
@@ -131,8 +132,8 @@ impl Token {
     }
 }
 
-pub struct Lexer {
-    source_chars: Vec<char>,
+pub struct Lexer<'a> {
+    source: &'a str,
     pos: usize,
     len: usize,
     line: usize,
@@ -140,13 +141,12 @@ pub struct Lexer {
     tokens: Vec<Token>,
 }
 
-impl Lexer {
-    pub fn new(source: &str) -> Self {
-        let source_chars: Vec<char> = source.chars().collect();
-        let len = source_chars.len();
+impl<'a> Lexer<'a> {
+    pub fn new(source: &'a str) -> Self {
+        let len = source.len();
         let token_capacity = (len / 4).max(64);
         Self {
-            source_chars,
+            source,
             pos: 0,
             len,
             line: 1,
@@ -155,13 +155,17 @@ impl Lexer {
         }
     }
 
+    fn remaining(&self) -> &'a str {
+        &self.source[self.pos..]
+    }
+
     fn peek(&self, offset: usize) -> Option<char> {
-        self.source_chars.get(self.pos + offset).copied()
+        self.remaining().chars().nth(offset)
     }
 
     fn advance(&mut self) -> Option<char> {
-        let c = *self.source_chars.get(self.pos)?;
-        self.pos += 1;
+        let c = self.remaining().chars().next()?;
+        self.pos += c.len_utf8();
         if c == '\n' {
             self.line += 1;
             self.column = 1;
@@ -518,6 +522,7 @@ impl Lexer {
                 let token = match ident.as_str() {
                     "set" => Token::new(TokenType::Set, self.line, self.column),
                     "load" => Token::new(TokenType::Load, self.line, self.column),
+                    "module" => Token::new(TokenType::Module, self.line, self.column),
                     "use" => Token::new(TokenType::Use, self.line, self.column),
                     "return" => Token::new(TokenType::Return, self.line, self.column),
                     "if" => Token::new(TokenType::If, self.line, self.column),

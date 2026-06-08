@@ -8,7 +8,7 @@ use crate::compiler::typeck::typeck_type_parsing::data_type_name_for_diag;
 use crate::compiler::typeck::{TypeChecker, type_error, type_error_at};
 impl TypeChecker {
     pub(super) fn check_expression(&mut self, expression: &mut Expression) -> Result<DataType> {
-        let (line, column) = Self::expression_location(expression);
+        let (line, column) = super::location::expression_location(expression);
         self.current_line = line;
         self.current_column = column;
         match expression {

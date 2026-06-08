@@ -2,8 +2,23 @@ use super::*;
 
 impl Parser {
     pub(super) fn parse_load_statement(&mut self) -> Result<Statement> {
+        if self.function_body_depth > 0 {
+            return Err(self.error(
+                "`load` must be at the top level, not inside a function body",
+            ));
+        }
         self.expect(TokenType::Load)?;
-        let (path, is_local) = self.parse_import_path()?;
+
+        if self.check(TokenType::Dot) {
+            return Err(self.error("Local paths are not allowed; declare the dependency in owl.toml"));
+        }
+
+        let mut path = vec![self.expect_ident()?];
+        while self.check(TokenType::Colon) && self.peek_n(1).ttype == TokenType::Colon {
+            self.advance();
+            self.advance();
+            path.push(self.expect_ident()?);
+        }
 
         let alias = if self.check(TokenType::As) {
             self.advance();
@@ -25,41 +40,21 @@ impl Parser {
             None
         };
 
-        if is_local && alias.is_some() {
-            return Err(self.error("Local load statements do not support aliasing"));
-        }
-
         Ok(Statement::Load {
             path,
             alias,
             items,
-            is_local,
         })
     }
 
-    fn parse_import_path(&mut self) -> Result<(String, bool)> {
-        if self.check(TokenType::Dot) {
+    pub(super) fn parse_use_path(&mut self) -> Result<Vec<String>> {
+        self.expect(TokenType::Use)?;
+        let mut path = vec![self.expect_ident()?];
+        while self.check(TokenType::Colon) && self.peek_n(1).ttype == TokenType::Colon {
             self.advance();
-            self.expect(TokenType::Slash)?;
-            let mut path = String::from("./");
-            path.push_str(&self.parse_local_import_segment()?);
-            while self.check(TokenType::Slash) {
-                self.advance();
-                path.push('/');
-                path.push_str(&self.parse_local_import_segment()?);
-            }
-            return Ok((path, true));
+            self.advance();
+            path.push(self.expect_ident()?);
         }
-
-        Ok((self.expect_ident()?, false))
-    }
-
-    fn parse_local_import_segment(&mut self) -> Result<String> {
-        if self.check(TokenType::Dot) && self.peek_n(1).ttype == TokenType::Dot {
-            self.advance();
-            self.advance();
-            return Ok("..".to_string());
-        }
-        self.expect_member_name()
+        Ok(path)
     }
 }

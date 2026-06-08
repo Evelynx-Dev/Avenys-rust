@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use self::typeck_returns::{implicit_return_expression_mut, statements_contain_explicit_return};
-use crate::compiler::AnalysisSelection;
+use crate::compiler::{location, AnalysisSelection};
 use crate::error::{MireError, Result};
 use crate::incremental::analysis_unit_key;
 use crate::parser::ast::{
@@ -295,7 +295,7 @@ impl TypeChecker {
     }
 
     fn check_statement(&mut self, statement: &mut Statement) -> Result<()> {
-        let (line, column) = Self::statement_location(statement);
+        let (line, column) = location::statement_location(statement);
         self.current_line = line;
         self.current_column = column;
         match statement {
@@ -351,9 +351,7 @@ impl TypeChecker {
                 cases,
                 default,
             } => self.check_match_statement(value, cases, default)?,
-            Statement::Unsafe { body } | Statement::Module { body, .. } => {
-                self.check_scoped_body(body)?
-            }
+            Statement::Unsafe { body } => self.check_scoped_body(body)?,
             Statement::Asm { instructions } => self.check_asm_statement(instructions)?,
             Statement::Drop { value } => self.check_drop_statement(value)?,
             Statement::New {
@@ -381,79 +379,16 @@ impl TypeChecker {
             | Statement::Continue
             | Statement::ExternLib { .. }
             | Statement::ExternFunction { .. }
-            | Statement::Enum { .. } => {}
+            | Statement::Enum { .. }
+            | Statement::Module { .. }
+            | Statement::Use { .. }
+            | Statement::UseModule { .. } => {}
             Statement::Load { .. } => {}
         }
 
         Ok(())
     }
 
-    fn statement_location(statement: &Statement) -> (usize, usize) {
-        match statement {
-            Statement::Let {
-                name_line,
-                name_column,
-                ..
-            } => (*name_line, *name_column),
-            Statement::Assignment { value, .. }
-            | Statement::Expression(value)
-            | Statement::Drop { value }
-            | Statement::New {
-                value: Some(value), ..
-            }
-            | Statement::Own {
-                value: Some(value), ..
-            }
-            | Statement::Move { value, .. } => Self::expression_location(value),
-            Statement::Return(Some(value)) => Self::expression_location(value),
-            Statement::If { condition, .. } | Statement::While { condition, .. } => {
-                Self::expression_location(condition)
-            }
-            Statement::For { iterable, .. } | Statement::Find { iterable, .. } => {
-                Self::expression_location(iterable)
-            }
-            Statement::Match { value, .. } => Self::expression_location(value),
-            _ => (1, 1),
-        }
-    }
-
-    fn expression_location(expression: &Expression) -> (usize, usize) {
-        match expression {
-            Expression::Identifier(ident) => (ident.line.max(1), ident.column.max(1)),
-            Expression::BinaryOp { left, .. }
-            | Expression::NamedArg { value: left, .. }
-            | Expression::Reference { expr: left, .. }
-            | Expression::Dereference { expr: left, .. }
-            | Expression::Box { value: left, .. }
-            | Expression::Pipeline { input: left, .. }
-            | Expression::Try { expr: left, .. }
-            | Expression::Ok { value: left, .. }
-            | Expression::Err { value: left, .. } => Self::expression_location(left),
-            Expression::UnaryOp { operand, .. } => Self::expression_location(operand),
-            Expression::Call { args, .. }
-            | Expression::List { elements: args, .. }
-            | Expression::Tuple { elements: args, .. } => args
-                .first()
-                .map(Self::expression_location)
-                .unwrap_or((1, 1)),
-            Expression::Dict { entries, .. } => entries
-                .first()
-                .map(|(key, _)| Self::expression_location(key))
-                .unwrap_or((1, 1)),
-            Expression::Index { target, .. } | Expression::MemberAccess { target, .. } => {
-                Self::expression_location(target)
-            }
-            Expression::Closure { body, .. } => {
-                body.first().map(Self::statement_location).unwrap_or((1, 1))
-            }
-            Expression::Match { value, .. } => Self::expression_location(value),
-            Expression::EnumVariant { payloads, .. } => payloads
-                .first()
-                .map(Self::expression_location)
-                .unwrap_or((1, 1)),
-            Expression::Literal(_) | Expression::EnumVariantPath { .. } => (1, 1),
-        }
-    }
 }
 
 fn type_error(message: String) -> MireError {

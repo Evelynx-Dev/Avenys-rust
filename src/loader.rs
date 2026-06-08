@@ -1,16 +1,26 @@
-use crate::avens::{ImportMode, MireDependency, find_project_root, load_manifest_dependencies};
+use crate::avens::{
+    find_project_root, load_exports, load_manifest_dependencies, load_project_manifest,
+    resolve_export_path, ImportMode, MireDependency,
+};
 use crate::error::{ErrorKind, MireError, Result};
 use crate::incremental::{
-    CacheSettings, CachedImport, CachedParsedFile, IncrementalCache, LoadedFile, LoadedProgram,
-    collect_statement_dependencies, source_hash, statement_export_name,
+    collect_statement_bindings, collect_statement_dependencies, source_hash,
+    statement_export_name, CacheSettings, CachedImport, CachedParsedFile, IncrementalCache,
+    LoadedFile, LoadedProgram,
 };
 use crate::parser::ast::{
     AssignmentTarget, DataType, EnumVariantDef, Expression, Identifier, Literal, Statement,
 };
-use crate::parser::{Program, parse};
+use crate::parser::{parse, Program};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+#[derive(Clone)]
+struct PackageEntry {
+    root: PathBuf,
+    entry: String,
+}
 
 pub fn load_program_from_file(path: &Path) -> Result<Program> {
     Ok(load_program_with_metadata(path)?.program)
@@ -66,14 +76,6 @@ fn load_shallow_program(path: &Path) -> Result<LoadedProgram> {
         err.with_source(source.clone())
             .with_filename(path.display().to_string())
     })?;
-    if contains_local_import(&program.statements) {
-        return Err(MireError::new(ErrorKind::Runtime {
-            message: format!(
-                "Local load statements require a Mire project root with owl.toml: '{}'",
-                path.display()
-            ),
-        }));
-    }
     let mut files = HashMap::new();
     files.insert(
         path.to_path_buf(),
@@ -93,6 +95,14 @@ fn load_shallow_program(path: &Path) -> Result<LoadedProgram> {
     })
 }
 
+fn owl_home_modules() -> PathBuf {
+    if let Some(home) = std::env::var_os("MIRE_OWL_HOME") {
+        return PathBuf::from(home);
+    }
+    let home = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
+    PathBuf::from(home).join(".owl").join("modules")
+}
+
 struct ImportResolver {
     project_root: PathBuf,
     cache: IncrementalCache,
@@ -102,6 +112,7 @@ struct ImportResolver {
     sources: HashMap<PathBuf, String>,
     import_mode: ImportMode,
     manifest_dependencies: HashMap<String, MireDependency>,
+    package_registry: HashMap<String, PackageEntry>,
 }
 
 impl ImportResolver {
@@ -120,6 +131,7 @@ impl ImportResolver {
             sources: HashMap::new(),
             import_mode,
             manifest_dependencies,
+            package_registry: HashMap::new(),
         }
     }
 
@@ -144,124 +156,80 @@ impl ImportResolver {
         let imported_symbol_candidates = collect_program_dependency_candidates(&parsed.program);
         let mut expanded = Vec::new();
         let mut direct_dependencies = Vec::new();
+        let mut dep_set = HashSet::new();
         for statement in parsed.program.statements {
             match statement {
                 Statement::Load {
                     path,
-                    alias: _,
-                    items,
-                    is_local: false,
-                } if path == "kioto" => {
-                    let imported_path = self.resolve_kioto_module_path("kioto")?;
-                    let selected = if items.is_some() {
-                        items
-                    } else if matches!(self.import_mode, ImportMode::Reachable) {
-                        self.infer_reachable_import_items(
-                            &imported_path,
-                            None,
-                            &imported_symbol_candidates,
-                        )?
-                    } else {
-                        None
-                    };
-                    let imported = if selected.is_some() {
-                        self.load_selected_imports(&imported_path, selected.as_deref())?
-                    } else {
-                        self.load_file(&imported_path)?
-                    };
-                    direct_dependencies.push(imported_path.clone());
-                    expanded.extend(select_imported_statements(
-                        &imported,
-                        selected.as_deref(),
-                        &imported_path,
-                    )?);
-                }
-                Statement::Load {
-                    path,
                     alias,
                     items,
-                    is_local: true,
-                } => {
-                    if alias.is_some() {
-                        self.active_stack.remove(&canonical);
-                        return Err(MireError::new(ErrorKind::Runtime {
-                            message: "Local load statements do not support aliasing".to_string(),
-                        }));
-                    }
-                    let imported_path = match parsed
-                        .local_imports
-                        .iter()
-                        .find(|import| import.raw_path == path && import.items == items)
-                    {
-                        Some(import) => import.resolved_path.clone(),
-                        None => {
-                            self.active_stack.remove(&canonical);
-                            return Err(MireError::new(ErrorKind::Runtime {
-                                message: format!(
-                                    "Incremental cache is missing local load metadata for '{}'",
-                                    path
-                                ),
-                            }));
-                        }
-                    };
+                } if !path.is_empty() && !path[0].starts_with("__") => {
+                    let target = self.resolve_load_path(&path)?;
+
                     let selected = if items.is_some() {
                         items
                     } else if matches!(self.import_mode, ImportMode::Reachable) {
                         self.infer_reachable_import_items(
-                            &imported_path,
+                            &target,
                             None,
                             &imported_symbol_candidates,
                         )?
                     } else {
                         None
                     };
+
                     let imported = if selected.is_some() {
-                        self.load_selected_imports(&imported_path, selected.as_deref())?
+                        self.load_selected_imports(&target, selected.as_deref())?
                     } else {
-                        self.load_file(&imported_path)?
+                        self.load_file(&target)?
                     };
-                    direct_dependencies.push(imported_path.clone());
-                    expanded.extend(select_imported_statements(
-                        &imported,
-                        selected.as_deref(),
-                        &imported_path,
-                    )?);
-                }
-                Statement::Load {
-                    path,
-                    alias: _,
-                    items,
-                    is_local: false,
-                } if path != "kioto"
-                    && !path.starts_with("__")
-                    && !path.starts_with("kiotoall:")
-                    && !path.starts_with("kiotoselect:")
-                    && !path.starts_with("kiotoalias:") =>
-                {
-                    if let Some(submodules) = items {
-                        let module_dir = self.resolve_module_dir(&path)?;
-                        let imported = self.load_all_modules(&path, &module_dir, &submodules)?;
-                        direct_dependencies.extend(imported.iter().map(|e| e.origin.clone()));
+
+                    let prefix = alias.unwrap_or_else(|| {
+                        if path.len() == 1 && path[0] == "kioto" {
+                            return String::new();
+                        }
+                        path.last().cloned().unwrap_or_default()
+                    });
+
+                    if prefix.is_empty() {
+                        if dep_set.insert(target.clone()) {
+                            direct_dependencies.push(target);
+                        }
                         expanded.extend(imported);
                     } else {
-                        let module_path = self.resolve_module_path(&path)?;
-                        let selected = if matches!(self.import_mode, ImportMode::Reachable) {
-                            self.infer_reachable_import_items(
-                                &module_path,
-                                Some(path.as_str()),
-                                &imported_symbol_candidates,
-                            )?
-                        } else {
-                            None
-                        };
-                        let imported = if selected.is_some() {
-                            self.load_module_selected(&path, &module_path, selected.as_deref())?
-                        } else {
-                            self.load_module(&path, &module_path)?
-                        };
-                        direct_dependencies.push(module_path);
+                        let prefixed =
+                            prefix_loaded_statements_scoped(imported, &prefix, &target);
+                        if dep_set.insert(target.clone()) {
+                            direct_dependencies.push(target);
+                        }
+                        expanded.extend(prefixed);
+                    }
+                }
+                Statement::Use { path } => {
+                    // `use <pkg>::...` resolves via TOML chain.
+                    // Module-level: load whole file, prefix with last segment.
+                    // Item-level: last segment is a symbol, inject without prefix.
+                    let (target, items) = self.resolve_use_path(&path)?;
+                    if items.is_empty() {
+                        let prefix = path.last().cloned().unwrap_or_default();
+                        let imported = self.load_file(&target)?;
+                        let prefixed =
+                            prefix_loaded_statements_scoped(imported, &prefix, &target);
+                        if dep_set.insert(target.clone()) {
+                            direct_dependencies.push(target);
+                        }
+                        expanded.extend(prefixed);
+                    } else {
+                        let imported = self.load_selected_imports(&target, Some(&items))?;
+                        if dep_set.insert(target.clone()) {
+                            direct_dependencies.push(target);
+                        }
                         expanded.extend(imported);
                     }
+                }
+                Statement::UseModule { .. } => {
+                    // `use <name>` (single ident). Currently no-op.
+                    // TODO: resolve `name` against known packages.
                 }
                 other => expanded.push(ExpandedStatement {
                     statement: other,
@@ -281,6 +249,159 @@ impl ImportResolver {
         self.expanded_cache
             .insert(canonical.clone(), expanded.clone());
         Ok(expanded)
+    }
+
+    fn resolve_package(&mut self, name: &str) -> Result<(PathBuf, String)> {
+        if let Some(entry) = self.package_registry.get(name) {
+            return Ok((entry.root.clone(), entry.entry.clone()));
+        }
+        let package_root = if let Some(dep) = self.manifest_dependencies.get(name) {
+            match dep {
+                MireDependency::PathOnly { path } | MireDependency::WithPath { path, .. } => {
+                    let p = PathBuf::from(path);
+                    if p.is_absolute() {
+                        p
+                    } else {
+                        self.project_root.join(p)
+                    }
+                }
+                MireDependency::Simple { .. } => owl_home_modules().join(name),
+            }
+        } else if name == "kioto" {
+            let home_path = owl_home_modules().join("kioto");
+            if home_path.exists() {
+                home_path
+            } else {
+                let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+                let dev_path = crate_dir.join("../kioto");
+                if dev_path.exists() {
+                    dev_path
+                } else {
+                    self.project_root.join("../kioto")
+                }
+            }
+        } else {
+            return Err(MireError::new(ErrorKind::Runtime {
+                message: format!(
+                    "Package '{}' not found in [dependencies] of {}",
+                    name,
+                    self.project_root.join("owl.toml").display()
+                ),
+            }));
+        };
+
+        let canonical_root = package_root.canonicalize().map_err(|err| {
+            MireError::new(ErrorKind::Runtime {
+                message: format!(
+                    "Could not resolve package '{}' at '{}': {}",
+                    name,
+                    package_root.display(),
+                    err
+                ),
+            })
+        })?;
+
+        let manifest = load_project_manifest(&canonical_root)?;
+        let entry = manifest
+            .as_ref()
+            .map(|m| m.project.entry.clone())
+            .unwrap_or_else(|| "mod.mire".to_string());
+
+        if let Some(ref m) = manifest {
+            for (dep_name, dep) in &m.dependencies.entries {
+                self.manifest_dependencies.entry(dep_name.clone()).or_insert_with(|| dep.clone());
+            }
+        }
+
+        self.package_registry.insert(
+            name.to_string(),
+            PackageEntry {
+                root: canonical_root.clone(),
+                entry: entry.clone(),
+            },
+        );
+
+        Ok((canonical_root, entry))
+    }
+
+    fn resolve_load_path(&mut self, segments: &[String]) -> Result<PathBuf> {
+        let (mut current_root, entry) = self.resolve_package(&segments[0])?;
+        let mut current_exports = load_exports(&current_root).unwrap_or_default();
+
+        if segments.len() == 1 {
+            let direct = current_root.join(&entry);
+            if direct.exists() {
+                return Ok(direct);
+            }
+            if let Some(export_path) =
+                resolve_export_path(&current_exports, &current_root, &segments[0])
+            {
+                if export_path.exists() {
+                    return Ok(export_path);
+                }
+            }
+            return Ok(direct);
+        }
+
+        for i in 1..segments.len() {
+            let segment = &segments[i];
+            let is_last = i == segments.len() - 1;
+
+            let target = resolve_export_path(&current_exports, &current_root, segment)
+                .ok_or_else(|| {
+                    MireError::new(ErrorKind::Runtime {
+                        message: format!(
+                            "Package '{}' has no export '{}'",
+                            segments[0], segment
+                        ),
+                    })
+                })?;
+
+            if is_last {
+                return Ok(target);
+            }
+
+            let parent = if target.is_dir() {
+                target.clone()
+            } else {
+                target.parent().unwrap_or(&current_root).to_path_buf()
+            };
+
+            if parent.join("owl.toml").exists() {
+                current_exports = load_exports(&parent).unwrap_or_default();
+                current_root = parent;
+            } else {
+                return Err(MireError::new(ErrorKind::Runtime {
+                    message: format!(
+                        "Cannot resolve '{}': '{}' has no sub-exports",
+                        segments[i + 1..].join("::"),
+                        segment
+                    ),
+                }));
+            }
+        }
+
+        unreachable!()
+    }
+
+    fn resolve_use_path(&mut self, segments: &[String]) -> Result<(PathBuf, Vec<String>)> {
+        // Returns (file_path, items_to_extract).
+        // items is empty → module-level import (prefix with last segment).
+        // items non-empty → item-level import (inject bare, no prefix).
+        if let Ok(file) = self.resolve_load_path(segments) {
+            return Ok((file, vec![]));
+        }
+        for split in (1..segments.len()).rev() {
+            if let Ok(file) = self.resolve_load_path(&segments[..split]) {
+                return Ok((file, segments[split..].to_vec()));
+            }
+        }
+        Err(MireError::new(ErrorKind::Runtime {
+            message: format!(
+                "Cannot resolve use path '{}': package or export not found",
+                segments.join("::")
+            ),
+        }))
     }
 
     fn infer_reachable_import_items(
@@ -335,22 +456,7 @@ impl ImportResolver {
             err.with_source(source.clone())
                 .with_filename(path.display().to_string())
         })?;
-        let mut local_imports = Vec::new();
-        for statement in &program.statements {
-            if let Statement::Load {
-                path: import_path,
-                items,
-                is_local: true,
-                ..
-            } = statement
-            {
-                local_imports.push(CachedImport {
-                    raw_path: import_path.clone(),
-                    resolved_path: self.resolve_local_import(import_path, path)?,
-                    items: items.clone(),
-                });
-            }
-        }
+        let local_imports = Vec::new();
         let exports: Vec<String> = program
             .statements
             .iter()
@@ -380,8 +486,12 @@ impl ImportResolver {
         items: Option<&[String]>,
     ) -> Result<Vec<ExpandedStatement>> {
         let parsed = self.load_or_parse_file(path)?;
-        if !parsed.local_imports.is_empty() {
-            return self.load_file(path);
+        let has_loads = parsed.program.statements.iter().any(|stmt| {
+            matches!(stmt, Statement::Load { .. })
+        });
+        if has_loads {
+            let loaded = self.load_file(path)?;
+            return select_imported_statements(&loaded, items, path);
         }
         self.files.insert(
             path.to_path_buf(),
@@ -401,428 +511,11 @@ impl ImportResolver {
             .collect();
         select_imported_statements(&expanded, items, path)
     }
-
-    fn resolve_local_import(&self, raw_path: &str, importer_path: &Path) -> Result<PathBuf> {
-        if !raw_path.starts_with("./") {
-            return Err(MireError::new(ErrorKind::Runtime {
-                message: format!("Local load '{}' must start with './'", raw_path),
-            }));
-        }
-
-        let relative = &raw_path[2..];
-        let importer_dir = importer_path
-            .parent()
-            .unwrap_or(self.project_root.as_path());
-        let bundled_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/modules");
-        let owl_root = self.owl_home_modules();
-        let root_limit = if importer_path.starts_with(&self.project_root) {
-            Some(self.project_root.as_path())
-        } else if importer_path.starts_with(&bundled_root) {
-            Some(bundled_root.as_path())
-        } else if importer_path.starts_with(&owl_root) {
-            Some(owl_root.as_path())
-        } else {
-            None
-        };
-
-        // First try ./<name>.mire
-        let mut candidate = importer_dir.join(relative);
-        if candidate.extension().is_none() {
-            candidate.set_extension("mire");
-        }
-        if let Ok(canonical) = candidate.canonicalize() {
-            if root_limit.map(|root| canonical.starts_with(root)).unwrap_or(true) {
-                return Ok(canonical);
-            }
-        }
-
-        // Then try ./<name>/mod.mire (directory module)
-        let dir_candidate = importer_dir.join(relative).join("mod.mire");
-        let canonical = dir_candidate.canonicalize().map_err(|err| {
-            MireError::new(ErrorKind::Runtime {
-                message: format!("Could not resolve local load '{}': {}", raw_path, err),
-            })
-        })?;
-
-        if let Some(root) = root_limit && !canonical.starts_with(root) {
-            return Err(MireError::new(ErrorKind::Runtime {
-                message: format!(
-                    "Local load '{}' escapes the package root '{}'",
-                    raw_path,
-                    root.display()
-                ),
-            }));
-        }
-
-        Ok(canonical)
-    }
-
-    fn owl_home_modules(&self) -> PathBuf {
-        if let Some(home) = std::env::var_os("MIRE_OWL_HOME") {
-            return PathBuf::from(home);
-        }
-        let home = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
-        PathBuf::from(home).join(".owl").join("modules")
-    }
-
-    fn kioto_package_root(&self) -> Result<PathBuf> {
-        let owl_candidate = self.owl_home_modules().join("kioto");
-        if let Ok(path) = owl_candidate.canonicalize() {
-            return Ok(path);
-        }
-
-        let bundled_candidate = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/modules/kioto");
-        bundled_candidate.canonicalize().map_err(|err| {
-            MireError::new(ErrorKind::Runtime {
-                message: format!(
-                    "Could not resolve kioto package '{}' nor bundled '{}': {}",
-                    owl_candidate.display(),
-                    bundled_candidate.display(),
-                    err
-                ),
-            })
-        })
-    }
-
-    fn resolve_kioto_module_path(&self, name: &str) -> Result<PathBuf> {
-        let package_root = self.kioto_package_root()?;
-        let candidates: Vec<PathBuf> = match name {
-            "std" | "kioto" => vec![package_root.join("mod.mire")],
-            "strings" | "lists" | "dicts" | "time" | "fs" | "env" | "proc" | "async" | "mem"
-            | "cpu" | "gpu" | "term" | "math" => vec![
-                package_root.join("core").join(name).join("mod.mire"),
-                package_root.join("core").join(name).join("lib.mire"),
-            ],
-            "iter" | "maybe" | "result" | "tuple" | "types" => vec![
-                package_root.join("ext").join(name).join("mod.mire"),
-                package_root.join("ext").join(name).join("lib.mire"),
-            ],
-            _ => Vec::new(),
-        };
-
-        for candidate in candidates {
-            if let Ok(path) = candidate.canonicalize() {
-                return Ok(path);
-            }
-        }
-
-        Err(MireError::new(ErrorKind::Runtime {
-            message: format!("Could not resolve kioto module '{}'", name),
-        }))
-    }
-
-    fn resolve_import_from_manifest(&self, name: &str) -> Option<PathBuf> {
-        self.manifest_dependencies.get(name).and_then(|entry| {
-            match entry {
-                MireDependency::Simple { version: _v } => {
-                    // version-based: check owl home
-                    let owl = self.owl_home_modules().join(name).join("lib.mire");
-                    owl.canonicalize().ok()
-                }
-                MireDependency::PathOnly { path } | MireDependency::WithPath { path, .. } => {
-                    let p = PathBuf::from(path);
-                    let candidate = if p.is_absolute() {
-                        p
-                    } else {
-                        self.project_root.join(&p)
-                    };
-                    // Try direct file, then <path>/lib.mire
-                    if candidate.exists() && candidate.extension().is_some() {
-                        candidate.canonicalize().ok()
-                    } else {
-                        let lib = candidate.join("lib.mire");
-                        lib.canonicalize().ok()
-                    }
-                }
-            }
-        })
-    }
-
-    fn resolve_module_path(&self, name: &str) -> Result<PathBuf> {
-        if let Ok(path) = self.resolve_kioto_module_path(name) {
-            return Ok(path);
-        }
-        // 0. Check manifest imports first
-        if let Some(path) = self.resolve_import_from_manifest(name) {
-            return Ok(path);
-        }
-        // 1. Project local: ./<name>.mire
-        let project_file_candidate = self.project_root.join(format!("{name}.mire"));
-        if let Ok(path) = project_file_candidate.canonicalize() {
-            return Ok(path);
-        }
-        // 2. Project local: ./<name>/mod.mire
-        let project_module_candidate = self.project_root.join(name).join("mod.mire");
-        if let Ok(path) = project_module_candidate.canonicalize() {
-            return Ok(path);
-        }
-        // 3. Project local: ./<name>/lib.mire
-        let project_candidate = self.project_root.join(name).join("lib.mire");
-        if let Ok(path) = project_candidate.canonicalize() {
-            return Ok(path);
-        }
-        // 4. Project modules dir: ./modules/<name>.mire
-        let local_modules_file_candidate = self
-            .project_root
-            .join("modules")
-            .join(format!("{name}.mire"));
-        if let Ok(path) = local_modules_file_candidate.canonicalize() {
-            return Ok(path);
-        }
-        // 5. Project modules dir: ./modules/<name>/mod.mire
-        let local_modules_mod_candidate = self
-            .project_root
-            .join("modules")
-            .join(name)
-            .join("mod.mire");
-        if let Ok(path) = local_modules_mod_candidate.canonicalize() {
-            return Ok(path);
-        }
-        // 6. Project modules dir: ./modules/<name>/lib.mire
-        let local_modules_candidate = self
-            .project_root
-            .join("modules")
-            .join(name)
-            .join("lib.mire");
-        if let Ok(path) = local_modules_candidate.canonicalize() {
-            return Ok(path);
-        }
-        // 7. Global owl modules: ~/.owl/modules/<name>.mire
-        let owl_file_candidate = self.owl_home_modules().join(format!("{name}.mire"));
-        if let Ok(path) = owl_file_candidate.canonicalize() {
-            return Ok(path);
-        }
-        // 8. Global owl modules: ~/.owl/modules/<name>/mod.mire
-        let owl_mod_candidate = self.owl_home_modules().join(name).join("mod.mire");
-        if let Ok(path) = owl_mod_candidate.canonicalize() {
-            return Ok(path);
-        }
-        // 9. Global owl modules: ~/.owl/modules/<name>/lib.mire
-        let owl_candidate = self.owl_home_modules().join(name).join("lib.mire");
-        if let Ok(path) = owl_candidate.canonicalize() {
-            return Ok(path);
-        }
-        // 10. Global owl modules with code/: ~/.owl/modules/<name>/code/lib.mire
-        let owl_code_candidate = self
-            .owl_home_modules()
-            .join(name)
-            .join("code")
-            .join("lib.mire");
-        if let Ok(path) = owl_code_candidate.canonicalize() {
-            return Ok(path);
-        }
-        // 11. Bundled with compiler (workspace): <CARGO_MANIFEST_DIR>/<name>.mire
-        let workspace_file_candidate = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join(name)
-            .with_extension("mire");
-        if let Ok(path) = workspace_file_candidate.canonicalize() {
-            return Ok(path);
-        }
-        // 12. Bundled with compiler (workspace): <CARGO_MANIFEST_DIR>/<name>/modules/lib.mire
-        let workspace_project_candidate = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join(name)
-            .join("modules")
-            .join("lib.mire");
-        if let Ok(path) = workspace_project_candidate.canonicalize() {
-            return Ok(path);
-        }
-        // 13. Bundled with compiler (src): <CARGO_MANIFEST_DIR>/src/modules/<name>.mire
-        let bundled_file_candidate = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("src/modules")
-            .join(format!("{name}.mire"));
-        if let Ok(path) = bundled_file_candidate.canonicalize() {
-            return Ok(path);
-        }
-        // 14. Bundled with compiler (src): <CARGO_MANIFEST_DIR>/src/modules/<name>/mod.mire
-        let bundled_mod_candidate = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("src/modules")
-            .join(name)
-            .join("mod.mire");
-        if let Ok(path) = bundled_mod_candidate.canonicalize() {
-            return Ok(path);
-        }
-        // 15. Bundled with compiler (src): <CARGO_MANIFEST_DIR>/src/modules/<name>/lib.mire
-        let bundled_candidate = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("src/modules")
-            .join(name)
-            .join("lib.mire");
-        if let Ok(path) = bundled_candidate.canonicalize() {
-            return Ok(path);
-        }
-        bundled_mod_candidate.canonicalize().map_err(|err| {
-            MireError::new(ErrorKind::Runtime {
-                message: format!("Could not resolve module '{}': {}", name, err),
-            })
-        })
-    }
-
-    fn resolve_module_dir(&self, name: &str) -> Result<PathBuf> {
-        if let Ok(path) = self.resolve_kioto_module_path(name)
-            && let Some(dir) = path.parent()
-        {
-            return Ok(dir.to_path_buf());
-        }
-        // 0. Check manifest imports first
-        if let Some(path) = self.resolve_import_from_manifest(name)
-            && let Some(dir) = path.parent()
-        {
-            return Ok(dir.to_path_buf());
-        }
-        // 1. Project local: ./<name>/
-        let project_candidate = self.project_root.join(name);
-        if let Ok(path) = project_candidate.canonicalize() {
-            return Ok(path);
-        }
-        // 2. Project local: ./<name>.mire (use parent dir)
-        let project_file_candidate = self.project_root.join(format!("{name}.mire"));
-        if let Ok(path) = project_file_candidate.canonicalize()
-            && let Some(dir) = path.parent()
-        {
-            return Ok(dir.to_path_buf());
-        }
-        // 3. Project local: ./<name>/mod.mire
-        let project_module_candidate = self.project_root.join(name).join("mod.mire");
-        if let Ok(path) = project_module_candidate.canonicalize()
-            && let Some(dir) = path.parent()
-        {
-            return Ok(dir.to_path_buf());
-        }
-        // 4. Project modules dir: ./modules/<name>/
-        let local_modules_candidate = self.project_root.join("modules").join(name);
-        if let Ok(path) = local_modules_candidate.canonicalize() {
-            return Ok(path);
-        }
-        // 5. Project modules dir: ./modules/<name>.mire (use parent dir)
-        let local_modules_file_candidate = self
-            .project_root
-            .join("modules")
-            .join(format!("{name}.mire"));
-        if let Ok(path) = local_modules_file_candidate.canonicalize()
-            && let Some(dir) = path.parent()
-        {
-            return Ok(dir.to_path_buf());
-        }
-        // 6. Project modules dir: ./modules/<name>/mod.mire
-        let local_modules_mod_candidate = self
-            .project_root
-            .join("modules")
-            .join(name)
-            .join("mod.mire");
-        if let Ok(path) = local_modules_mod_candidate.canonicalize()
-            && let Some(dir) = path.parent()
-        {
-            return Ok(dir.to_path_buf());
-        }
-        // 7. Global owl modules: ~/.owl/modules/<name>/
-        let owl_candidate = self.owl_home_modules().join(name);
-        if let Ok(path) = owl_candidate.canonicalize() {
-            return Ok(path);
-        }
-        // 8. Global owl modules: ~/.owl/modules/<name>.mire (use parent dir)
-        let owl_file_candidate = self.owl_home_modules().join(format!("{name}.mire"));
-        if let Ok(path) = owl_file_candidate.canonicalize()
-            && let Some(dir) = path.parent()
-        {
-            return Ok(dir.to_path_buf());
-        }
-        // 9. Global owl modules: ~/.owl/modules/<name>/mod.mire
-        let owl_mod_candidate = self.owl_home_modules().join(name).join("mod.mire");
-        if let Ok(path) = owl_mod_candidate.canonicalize()
-            && let Some(dir) = path.parent()
-        {
-            return Ok(dir.to_path_buf());
-        }
-        // 10. Global owl modules with code/: ~/.owl/modules/<name>/code/
-        let owl_code_candidate = self.owl_home_modules().join(name).join("code");
-        if let Ok(path) = owl_code_candidate.canonicalize() {
-            return Ok(path);
-        }
-        // 11. Project local: ./<name>/modules/
-        let project_modules_candidate = self.project_root.join(name).join("modules");
-        if let Ok(path) = project_modules_candidate.canonicalize() {
-            return Ok(path);
-        }
-        // 12. Bundled with compiler (workspace): <CARGO_MANIFEST_DIR>/<name>/modules/
-        let workspace_project_candidate = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join(name)
-            .join("modules");
-        if let Ok(path) = workspace_project_candidate.canonicalize() {
-            return Ok(path);
-        }
-        // 13. Bundled with compiler (src): <CARGO_MANIFEST_DIR>/src/modules/<name>/
-        let bundled_candidate = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("src/modules")
-            .join(name);
-        bundled_candidate.canonicalize().map_err(|err| {
-            MireError::new(ErrorKind::Runtime {
-                message: format!(
-                    "Could not resolve module directory '{}' (tried '{}', '{}', '{}', '{}', '{}', '{}' and '{}'): {}",
-                    name,
-                    project_candidate.display(),
-                    local_modules_candidate.display(),
-                    owl_candidate.display(),
-                    owl_code_candidate.display(),
-                    project_modules_candidate.display(),
-                    workspace_project_candidate.display(),
-                    bundled_candidate.display(),
-                    err
-                ),
-            })
-        })
-    }
-
-    fn load_module(&mut self, module_name: &str, path: &Path) -> Result<Vec<ExpandedStatement>> {
-        let loaded = self.load_file(path)?;
-        Ok(prefix_loaded_statements_scoped(loaded, module_name, path))
-    }
-
-    fn load_module_selected(
-        &mut self,
-        module_name: &str,
-        path: &Path,
-        items: Option<&[String]>,
-    ) -> Result<Vec<ExpandedStatement>> {
-        let loaded = self.load_selected_imports(path, items)?;
-        Ok(prefix_loaded_statements_scoped(loaded, module_name, path))
-    }
-
-    fn load_all_modules(
-        &mut self,
-        module_name: &str,
-        module_dir: &Path,
-        items: &[String],
-    ) -> Result<Vec<ExpandedStatement>> {
-        let mut result = Vec::new();
-        for item in items {
-            let file_path = module_dir.join(format!("{}.mire", item));
-            let file_path = if file_path.exists() {
-                file_path
-            } else {
-                module_dir.join(item).join("mod.mire")
-            };
-            let canonical = file_path.canonicalize().map_err(|err| {
-                MireError::new(ErrorKind::Runtime {
-                    message: format!(
-                        "Could not resolve module file '{}': {}",
-                        file_path.display(),
-                        err
-                    ),
-                })
-            })?;
-            let loaded = self.load_file(&canonical)?;
-            let prefix = if item == "lib" {
-                module_name.to_string()
-            } else {
-                item.to_string()
-            };
-            result.extend(prefix_loaded_statements(loaded, &prefix));
-        }
-        Ok(result)
-    }
 }
 
 fn collect_program_dependency_candidates(program: &Program) -> HashSet<String> {
     let mut candidates = HashSet::new();
+    let mut local_bindings = HashSet::new();
     for statement in &program.statements {
         if matches!(statement, Statement::Load { .. }) {
             continue;
@@ -838,34 +531,17 @@ fn collect_program_dependency_candidates(program: &Program) -> HashSet<String> {
                 candidates.insert(tail.to_string());
             }
         }
+        let mut bindings = Vec::new();
+        collect_statement_bindings(statement, &mut bindings);
+        for b in bindings {
+            local_bindings.insert(b);
+        }
     }
+    // Remove local variable names that would otherwise falsely match
+    // external module exports (e.g. parameter name "min" matching a
+    // function export "min" from another module).
+    candidates.retain(|c| !local_bindings.contains(c));
     candidates
-}
-
-fn collect_module_symbols(statements: &[ExpandedStatement]) -> HashSet<String> {
-    statements
-        .iter()
-        .filter_map(|statement| statement_export_name(&statement.statement))
-        .map(ToString::to_string)
-        .collect()
-}
-
-fn prefix_loaded_statements(
-    statements: Vec<ExpandedStatement>,
-    prefix: &str,
-) -> Vec<ExpandedStatement> {
-    let symbols = collect_module_symbols(&statements);
-    let renamer = ModuleRenamer {
-        prefix,
-        module_symbols: &symbols,
-    };
-    statements
-        .into_iter()
-        .map(|mut statement| {
-            statement.statement = renamer.rename_statement(statement.statement, true);
-            statement
-        })
-        .collect()
 }
 
 fn prefix_loaded_statements_scoped(
@@ -904,6 +580,13 @@ fn prefix_loaded_statements_scoped(
 
 fn statement_prefix(module_name: &str, module_path: &Path, origin: &Path) -> String {
     if origin == module_path {
+        let file_stem = module_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
+        if file_stem.starts_with('_') {
+            return String::new();
+        }
         return module_name.to_string();
     }
 
@@ -1253,16 +936,13 @@ impl<'a> ModuleRenamer<'a> {
                 path,
                 alias,
                 items,
-                is_local,
             } => Statement::Load {
                 path,
                 alias,
                 items,
-                is_local,
             },
-            Statement::Module { name, body } => Statement::Module {
+            Statement::Module { name } => Statement::Module {
                 name: self.rename_decl_name(name, scope_stack, top_level),
-                body: self.rename_statement_block(body, &mut scope_stack.clone()),
             },
             Statement::Drop { value } => Statement::Drop {
                 value: self.rename_expression(value, scope_stack),
@@ -1328,6 +1008,10 @@ impl<'a> ModuleRenamer<'a> {
                 joins,
                 group_by,
             },
+            Statement::Use { path } => Statement::Use { path },
+            Statement::UseModule { name } => Statement::UseModule {
+                name: self.rename_decl_name(name, scope_stack, top_level),
+            },
         }
     }
 
@@ -1386,7 +1070,12 @@ impl<'a> ModuleRenamer<'a> {
     }
 
     fn should_prefix(&self, name: &str, scope_stack: &[HashSet<String>]) -> bool {
-        self.module_symbols.contains(name) && !is_shadowed(scope_stack, name)
+        // Skip names that already contain a prefix (introduced by a prior pass).
+        // Function names in mire are plain identifiers without dots natively,
+        // so a dot means the name was already prefixed by a nested load.
+        self.module_symbols.contains(name)
+            && !is_shadowed(scope_stack, name)
+            && !name.contains('.')
     }
 
     fn rename_data_type(&self, data_type: DataType, scope_stack: &[HashSet<String>]) -> DataType {
@@ -1553,7 +1242,7 @@ impl<'a> ModuleRenamer<'a> {
                 value,
                 data_type,
             } => Expression::NamedArg {
-                name: self.rename_type_name(name, scope_stack),
+                name,
                 value: Box::new(self.rename_expression(*value, scope_stack)),
                 data_type: self.rename_data_type(data_type, scope_stack),
             },
@@ -1956,13 +1645,6 @@ fn select_imported_statements(
         .filter(|statement| statement_export_name(&statement.statement).is_some())
         .cloned()
         .collect())
-}
-
-fn contains_local_import(statements: &[Statement]) -> bool {
-    statements.iter().any(|statement| match statement {
-        Statement::Load { is_local, .. } => *is_local,
-        _ => false,
-    })
 }
 
 fn read_source_file(path: &Path) -> Result<String> {

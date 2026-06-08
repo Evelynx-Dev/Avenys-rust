@@ -1,4 +1,5 @@
 pub mod borrowck;
+pub mod location;
 pub mod semantic;
 pub mod typeck;
 pub mod warnings;
@@ -7,13 +8,14 @@ use crate::error::Result;
 use crate::error::diagnostic::{Diagnostic, DiagnosticCode, WarningFilter};
 use crate::parser::Program;
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub use semantic::{
     BindingInfo, BindingKind, BorrowFact, BorrowKind, MoveFact, ScopeInfo, SemanticModel,
 };
 pub use typeck::check_program_types;
 pub use warnings::check_warnings;
+pub use warnings::check_warnings_with_origins;
 
 #[derive(Debug, Clone, Default)]
 pub struct AnalysisSelection {
@@ -62,6 +64,30 @@ pub fn analyze_program_with_warnings(
         filename,
         warning_config.filter,
         warning_config.deny,
+    );
+    Ok(AnalysisReport {
+        semantic: semantic_model,
+        diagnostics: warnings,
+    })
+}
+
+pub fn analyze_program_with_warnings_and_origins(
+    program: &mut Program,
+    source: &str,
+    filename: Option<&str>,
+    warning_config: WarningConfig,
+    statement_origins: &[PathBuf],
+    entry_path: &Path,
+) -> Result<AnalysisReport> {
+    let semantic_model = semantic::analyze_program(program);
+    let warnings = check_warnings_with_origins(
+        program,
+        source,
+        filename,
+        warning_config.filter,
+        warning_config.deny,
+        statement_origins,
+        entry_path,
     );
     Ok(AnalysisReport {
         semantic: semantic_model,

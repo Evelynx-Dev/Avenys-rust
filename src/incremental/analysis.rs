@@ -1,4 +1,5 @@
 use super::*;
+use hashing::stable_statement_hash_pair;
 
 pub fn analysis_units_for_program(program: &Program) -> Vec<AnalysisUnitMetadata> {
     let mut units = Vec::new();
@@ -29,6 +30,7 @@ pub fn compute_invalidation_report(
         match previous_by_key.get(key) {
             Some(previous) => {
                 if previous.body_hash != current.body_hash
+                    || previous.body_hash2 != current.body_hash2
                     || previous.dependencies != current.dependencies
                     || previous.unit_kind != current.unit_kind
                 {
@@ -138,10 +140,12 @@ fn analysis_unit_for_statement(statement: &Statement) -> AnalysisUnitMetadata {
         ),
     };
 
+    let (body_hash, body_hash2) = stable_statement_hash_pair(statement);
     AnalysisUnitMetadata {
         unit_key,
         unit_kind,
-        body_hash: stable_statement_hash(statement),
+        body_hash,
+        body_hash2,
         dependencies,
         origin: None,
     }
@@ -199,10 +203,12 @@ fn analysis_child_unit_for_statement(
         _ => AnalysisUnitKind::Other,
     };
 
+    let (body_hash, body_hash2) = stable_statement_hash_pair(child);
     AnalysisUnitMetadata {
         unit_key: analysis_child_unit_key(parent_key, child, child_index),
         unit_kind,
-        body_hash: stable_statement_hash(child),
+        body_hash,
+        body_hash2,
         dependencies,
         origin: None,
     }

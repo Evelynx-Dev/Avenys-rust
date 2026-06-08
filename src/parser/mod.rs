@@ -6,7 +6,7 @@ mod statements;
 mod syntax;
 mod types;
 
-use crate::error::Result;
+use crate::error::{MireError, Result};
 use crate::lexer::{Token, TokenType, tokenize};
 use std::collections::{HashMap, HashSet};
 
@@ -18,6 +18,16 @@ pub fn parse(source: &str) -> Result<Program> {
     Parser::new(tokens).parse()
 }
 
+/// Parses source with error recovery: on parse error, skips to the next
+/// statement boundary and continues. Returns the partial program and all
+/// collected errors.
+pub fn parse_with_recovery(source: &str) -> (Program, Vec<MireError>) {
+    match tokenize(source) {
+        Ok(tokens) => Parser::new(tokens).parse_with_recovery(),
+        Err(e) => (Program { statements: Vec::new() }, vec![e]),
+    }
+}
+
 pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
@@ -27,6 +37,8 @@ pub struct Parser {
     nominal_type_names: HashSet<String>,
     method_context: usize,
     type_param_scopes: Vec<HashSet<String>>,
+    function_body_depth: usize,
+    errors: Vec<MireError>,
 }
 
 #[derive(Clone, Copy)]
@@ -48,6 +60,8 @@ impl Parser {
             nominal_type_names,
             method_context: 0,
             type_param_scopes: vec![HashSet::new()],
+            function_body_depth: 0,
+            errors: Vec::new(),
         }
     }
 
@@ -170,16 +184,40 @@ impl Parser {
     }
 
     pub fn parse(&mut self) -> Result<Program> {
+        let (program, errors) = self.parse_with_recovery();
+        if let Some(err) = errors.into_iter().next() {
+            return Err(err);
+        }
+        Ok(program)
+    }
+
+    pub fn parse_with_recovery(&mut self) -> (Program, Vec<MireError>) {
         let mut statements = Vec::new();
         while !self.is_at_end() {
             self.skip_newlines();
             if self.is_at_end() {
                 break;
             }
-            statements.push(self.parse_statement()?);
+            match self.parse_statement() {
+                Ok(stmt) => statements.push(stmt),
+                Err(err) => {
+                    self.errors.push(err);
+                    self.skip_to_statement_boundary();
+                }
+            }
             self.skip_newlines();
         }
-        Ok(Program { statements })
+        (Program { statements }, std::mem::take(&mut self.errors))
+    }
+
+    fn skip_to_statement_boundary(&mut self) {
+        while !self.is_at_end() {
+            let ttype = self.peek().ttype;
+            if matches!(ttype, TokenType::Newline | TokenType::Rbrace | TokenType::Eof) {
+                break;
+            }
+            self.advance();
+        }
     }
 }
 
@@ -275,24 +313,21 @@ mod tests {
         let Statement::Load { path, .. } = &program.statements[0] else {
             panic!("expected load statement");
         };
-        assert_eq!(path, "kioto");
+        assert_eq!(path, &["kioto".to_string()]);
     }
 
     #[test]
-    fn parses_local_load_with_dot_slash() {
+    fn rejects_local_load_with_dot_slash() {
         let source = "load ./utils/helpers\n";
-        let program = parse(source).expect("parse should succeed");
-        let Statement::Load { is_local, .. } = &program.statements[0] else {
-            panic!("expected load statement");
-        };
-        assert!(*is_local);
+        let program = parse(source);
+        assert!(program.is_err(), "local paths should be rejected");
     }
 
     #[test]
-    fn parses_local_load_with_parent_segments() {
+    fn rejects_local_load_with_parent_segments() {
         let source = "load ./../modules/fs_ops\n";
         let program = parse(source);
-        assert!(program.is_ok(), "{program:?}");
+        assert!(program.is_err(), "local paths should be rejected");
     }
 
     #[test]

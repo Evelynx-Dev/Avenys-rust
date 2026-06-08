@@ -73,7 +73,10 @@ pub(super) fn analysis_cache_key(source_path: &Path) -> String {
 }
 
 pub(super) fn normalize_path_key(path: &Path) -> String {
-    path.to_string_lossy().to_string()
+    std::fs::canonicalize(path)
+        .unwrap_or_else(|_| path.to_path_buf())
+        .to_string_lossy()
+        .to_string()
 }
 
 pub fn statement_export_name(statement: &Statement) -> Option<&str> {
@@ -87,9 +90,7 @@ pub fn statement_export_name(statement: &Statement) -> Option<&str> {
         | Statement::ExternLib { name, .. }
         | Statement::ExternFunction { name, .. } => Some(name.as_str()),
         Statement::Load { path, alias, .. } => Some(
-            alias
-                .as_deref()
-                .unwrap_or_else(|| path.rsplit('/').next().unwrap_or(path.as_str())),
+            alias.as_deref().unwrap_or_else(|| path.last().map(|s| s.as_str()).unwrap_or("")),
         ),
         _ => None,
     }

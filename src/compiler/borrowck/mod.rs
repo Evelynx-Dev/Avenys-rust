@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use crate::compiler::location;
 use crate::compiler::AnalysisSelection;
 use crate::compiler::semantic::{BindingInfo, BindingKind, FunctionInfo, SemanticModel};
 use crate::error::mss::MssError;
@@ -470,11 +471,6 @@ impl<'a> BorrowChecker<'a> {
                     self.check_expression(expr)?;
                 }
             }
-            Statement::Module { body, .. } => {
-                self.push_scope();
-                self.check_statements(body)?;
-                self.pop_scope();
-            }
             Statement::Drop { value } => {
                 self.check_expression(value)?;
                 if let Some(name) = Self::identifier_name(value) {
@@ -515,7 +511,10 @@ impl<'a> BorrowChecker<'a> {
             | Statement::ExternLib { .. }
             | Statement::ExternFunction { .. }
             | Statement::Load { .. }
-            | Statement::Enum { .. } => {}
+            | Statement::Enum { .. }
+            | Statement::Module { .. }
+            | Statement::Use { .. }
+            | Statement::UseModule { .. } => {}
         }
 
         Ok(())
@@ -957,32 +956,7 @@ impl<'a> BorrowChecker<'a> {
     }
 
     fn statement_location(statement: &Statement) -> (usize, usize) {
-        match statement {
-            Statement::Let {
-                name_line,
-                name_column,
-                ..
-            } => (*name_line, *name_column),
-            Statement::Assignment { value, .. }
-            | Statement::Expression(value)
-            | Statement::Drop { value }
-            | Statement::New {
-                value: Some(value), ..
-            }
-            | Statement::Own {
-                value: Some(value), ..
-            }
-            | Statement::Move { value, .. } => Self::expression_location(value),
-            Statement::Return(Some(value)) => Self::expression_location(value),
-            Statement::If { condition, .. } | Statement::While { condition, .. } => {
-                Self::expression_location(condition)
-            }
-            Statement::For { iterable, .. } | Statement::Find { iterable, .. } => {
-                Self::expression_location(iterable)
-            }
-            Statement::Match { value, .. } => Self::expression_location(value),
-            _ => (1, 1),
-        }
+        location::statement_location(statement)
     }
 
     fn semantic_binding(&self, name: &str) -> Option<&BindingInfo> {

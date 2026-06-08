@@ -20,6 +20,20 @@ pub(super) fn stable_statement_hash(statement: &Statement) -> u64 {
     hasher.finish()
 }
 
+pub(super) fn stable_statement_hash_pair(statement: &Statement) -> (u64, u64) {
+    let h1 = {
+        let mut hasher = FxHasher::new();
+        hash_statement(statement, &mut hasher);
+        hasher.finish()
+    };
+    let h2 = {
+        let mut hasher = FxHasher::with_seed(0x9e3779b97f4a7c15);
+        hash_statement(statement, &mut hasher);
+        hasher.finish()
+    };
+    (h1, h2)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -566,6 +580,7 @@ mod tests {
             match previous_by_key.get(key) {
                 Some(previous) => {
                     if previous.body_hash != current.body_hash
+                        || previous.body_hash2 != current.body_hash2
                         || previous.dependencies != current.dependencies
                         || previous.unit_kind != current.unit_kind
                     {
@@ -635,6 +650,7 @@ mod tests {
                 unit_key: key.clone(),
                 unit_kind: AnalysisUnitKind::Function,
                 body_hash: (1000 + i) as u64,
+                body_hash2: (1000 + i) as u64,
                 dependencies: vec![dep.clone()],
                 origin: None,
             };
@@ -654,6 +670,7 @@ mod tests {
             unit_key: "TypeExtra.run".to_string(),
             unit_kind: AnalysisUnitKind::Function,
             body_hash: 999_999,
+            body_hash2: 999_999,
             dependencies: vec!["run299".to_string()],
             origin: None,
         });
@@ -683,6 +700,7 @@ mod tests {
                 unit_key: key.clone(),
                 unit_kind: AnalysisUnitKind::Function,
                 body_hash: i as u64,
+                body_hash2: i as u64,
                 dependencies: vec![dep.clone()],
                 origin: None,
             });
@@ -690,6 +708,7 @@ mod tests {
                 unit_key: key,
                 unit_kind: AnalysisUnitKind::Function,
                 body_hash: if i == 0 { 777 } else { i as u64 },
+                body_hash2: if i == 0 { 777 } else { i as u64 },
                 dependencies: vec![dep],
                 origin: None,
             });
