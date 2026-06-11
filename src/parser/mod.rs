@@ -213,7 +213,11 @@ impl Parser {
     fn skip_to_statement_boundary(&mut self) {
         while !self.is_at_end() {
             let ttype = self.peek().ttype;
-            if matches!(ttype, TokenType::Newline | TokenType::Rbrace | TokenType::Eof) {
+            if matches!(ttype, TokenType::Newline | TokenType::Eof) {
+                break;
+            }
+            if ttype == TokenType::Rbrace {
+                self.advance();
                 break;
             }
             self.advance();

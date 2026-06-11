@@ -1,5 +1,6 @@
 pub mod borrowck;
 pub mod location;
+pub mod mir;
 pub mod semantic;
 pub mod typeck;
 pub mod warnings;

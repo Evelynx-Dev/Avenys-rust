@@ -58,8 +58,7 @@ fn statement_contains_self_placeholder(statement: &Statement) -> bool {
             contains_self_placeholder(&target.as_expression()) || contains_self_placeholder(value)
         }
         Statement::Function { body, .. }
-        | Statement::Unsafe { body }
-        | Statement::Module { body, .. } => body.iter().any(statement_contains_self_placeholder),
+        | Statement::Unsafe { body } => body.iter().any(statement_contains_self_placeholder),
         Statement::Return(expr) => expr.as_ref().is_some_and(contains_self_placeholder),
         Statement::If {
             condition,
@@ -110,7 +109,10 @@ fn statement_contains_self_placeholder(statement: &Statement) -> bool {
         | Statement::ExternLib { .. }
         | Statement::ExternFunction { .. }
         | Statement::Load { .. }
-        | Statement::Enum { .. } => false,
+        | Statement::Enum { .. }
+        | Statement::Module { .. }
+        | Statement::Use { .. }
+        | Statement::UseModule { .. } => false,
     }
 }
 

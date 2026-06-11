@@ -13,6 +13,10 @@ impl FxHasher {
             state: FNV_OFFSET_BASIS,
         }
     }
+
+    pub fn with_seed(seed: u64) -> Self {
+        FxHasher { state: seed }
+    }
 }
 
 impl Default for FxHasher {

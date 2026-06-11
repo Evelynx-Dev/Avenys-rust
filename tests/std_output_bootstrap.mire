@@ -1,4 +1,4 @@
-load lists as lists
+load kioto::lists as lists
 
 pub fn main: () {
 set user = "mire"

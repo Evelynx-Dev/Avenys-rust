@@ -10,12 +10,13 @@ pub mod parser;
 pub use avens::{
     BuildMode, BuildOptions, BuildResult, ImportMode, MireCacheConfig, MireDependencies,
     MireDependency, MireLock, MireManifest, MireProject, OptLevel, compile_file_with_avenys,
-    default_output_dir, find_project_root, load_manifest_dependencies, load_project_manifest,
-    project_lock_path, project_manifest_path, write_lock_file, write_manifest,
+    default_output_dir, find_project_root, load_exports, load_manifest_dependencies,
+    load_project_manifest, project_lock_path, project_manifest_path, write_lock_file,
+    write_manifest,
 };
 pub use compiler::{
     AnalysisReport, WarningConfig, analyze_program, analyze_program_with_warnings,
-    check_program_types,
+    analyze_program_with_warnings_and_origins, check_program_types,
 };
 pub use error::mss::MssError;
 pub use error::{ErrorKind, MireError, Result};

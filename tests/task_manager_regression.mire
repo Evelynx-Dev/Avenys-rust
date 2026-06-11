@@ -1,6 +1,6 @@
-load time as time
-load lists as lists
-load math as math
+load kioto::time as time
+load kioto::lists as lists
+load kioto::math as math
 
 pub fn main: () {
 set wall = time.mark() :i64 mut

@@ -1,8 +1,8 @@
 use mire::parser::ast::{DataType, Expression, Statement};
 use mire::{
-    BuildMode, BuildOptions, CacheSettings, ErrorKind, MireError, OptLevel, analyze_program,
-    cache_file_path, check_program_types, compile_file_with_avenys, load_program_from_file,
-    load_program_with_metadata, load_program_with_metadata_with_settings, parse,
+    BuildMode, BuildOptions, ErrorKind, MireError, OptLevel, analyze_program,
+    cache_file_path, check_program_types, compile_file_with_avenys,
+    load_program_with_metadata, parse,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -156,55 +156,90 @@ fn compile_reports_ownership_error_kind_and_filename() {
     assert!(rendered.contains("Ownership Error"), "{rendered}");
 }
 
+// Phase 1: module, use-module, and load path syntax
+// ----------------------------------------------------------------
+
 #[test]
-fn compile_attributes_imported_type_error_to_imported_file() {
-    let root = make_temp_project_root("mire_imported_type_error_filename");
-    let main_path = root.join("code").join("main.mire");
-    let lib_path = root.join("code").join("lib.mire");
-    fs::create_dir_all(main_path.parent().expect("main parent")).expect("mkdir code");
-    fs::write(
-        root.join("owl.toml"),
-        "[project]\nname = \"imported-type-error\"\nversion = \"0.1.0\"\nentry = \"code/main.mire\"\n",
-    )
-    .expect("write project");
-    fs::write(
-        &main_path,
-        "load ./lib\n\npub fn main: () {\n    use fail()\n}\n",
-    )
-    .expect("write main");
-    fs::write(
-        &lib_path,
-        "pub fn fail: () :i64 {\n    set x = 10\n    set y = \"bad\"\n    return x + y\n}\n",
-    )
-    .expect("write lib");
+fn parse_module_declaration_statement() {
+    let source = "module my_package\npub fn main: () {\n    use dasu(\"ok\")\n}\n";
+    let program = parse(source).expect("module declaration should parse");
+    let Statement::Module { name } = &program.statements[0] else {
+        panic!("expected module statement");
+    };
+    assert_eq!(name, "my_package");
+}
 
-    let err = compile_file_with_avenys(
-        &main_path,
-        &BuildOptions {
-            mode: BuildMode::Debug,
-            opt_level: OptLevel::O0,
-            debug_dump: false,
-            output: None,
-            emit_binary: true,
-            persist_ir: false,
-            import_mode: mire::ImportMode::Reachable,
-            cache: Default::default(),
-            warning_filter: mire::error::diagnostic::WarningFilter::Default,
-            deny_warnings: std::collections::HashSet::new(),
-            module_paths: vec![],
-        },
-    )
-    .expect_err("imported file type error should fail compilation");
+#[test]
+fn parse_use_module_statement() {
+    let source = "use strings\npub fn main: () {\n    use dasu(\"ok\")\n}\n";
+    let program = parse(source).expect("use-module should parse");
+    let Statement::UseModule { name } = &program.statements[0] else {
+        panic!("expected use-module statement");
+    };
+    assert_eq!(name, "strings");
+}
 
-    assert!(matches!(err.kind, ErrorKind::Type { .. }));
-    assert!(
-        err.filename()
-            .is_some_and(|name| name.ends_with("code/lib.mire")),
-        "{err:?}"
-    );
-    let rendered = err.to_string();
-    assert!(rendered.contains("code/lib.mire"), "{rendered}");
-    assert!(rendered.contains("Type Error"), "{rendered}");
+#[test]
+fn parse_use_module_vs_use_expression() {
+    let source = "use strings\npub fn main: () {\n    use dasu(\"ok\")\n}\n";
+    let program = parse(source).expect("source should parse");
+    assert!(matches!(&program.statements[0], Statement::UseModule { name } if name == "strings"));
+    assert!(matches!(&program.statements[1], Statement::Function { name, .. } if name == "main"));
+    let source2 = "pub fn main: () {\n    use helper()\n}\n";
+    let program2 = parse(source2).expect("source should parse");
+    let Statement::Function { body, .. } = &program2.statements[0] else {
+        panic!("expected function");
+    };
+    assert!(matches!(&body[0], Statement::Expression(_)));
+}
+
+#[test]
+fn parse_load_with_double_colon_path() {
+    let source = "load kioto::math::basic\npub fn main: () {\n    use dasu(str(pi))\n}\n";
+    let program = parse(source).expect("double-colon load should parse");
+    let Statement::Load { path, .. } = &program.statements[0] else {
+        panic!("expected load statement");
+    };
+    assert_eq!(path.len(), 3);
+    assert_eq!(path[0], "kioto");
+    assert_eq!(path[1], "math");
+    assert_eq!(path[2], "basic");
+}
+
+#[test]
+fn parse_load_with_single_path() {
+    let source = "load kioto\npub fn main: () {\n    use dasu(\"ok\")\n}\n";
+    let program = parse(source).expect("single load should parse");
+    let Statement::Load { path, .. } = &program.statements[0] else {
+        panic!("expected load statement");
+    };
+    assert_eq!(path, &["kioto".to_string()]);
+}
+
+#[test]
+fn reject_dot_slash_load() {
+    let source = "load ./utils\npub fn main: () {\n    use dasu(\"ok\")\n}\n";
+    let result = parse(source);
+    assert!(result.is_err(), "dot-slash loads must be rejected");
+}
+
+#[test]
+fn parse_load_with_alias() {
+    let source = "load kioto as std\npub fn main: () {\n    use dasu(\"ok\")\n}\n";
+    let program = parse(source).expect("load with alias should parse");
+    let Statement::Load { path, alias, .. } = &program.statements[0] else {
+        panic!("expected load statement");
+    };
+    assert_eq!(path, &["kioto".to_string()]);
+    assert_eq!(alias.as_deref(), Some("std"));
+}
+
+#[test]
+fn parse_module_followed_by_load() {
+    let source = "module my_app\nload kioto\npub fn main: () {\n    use dasu(\"ok\")\n}\n";
+    let program = parse(source).expect("module then load should parse");
+    assert!(matches!(&program.statements[0], Statement::Module { .. }));
+    assert!(matches!(&program.statements[1], Statement::Load { .. }));
 }
 
 #[test]
@@ -2100,168 +2135,19 @@ fn impl_method_local_assignment_parses() {
 }
 
 #[test]
-fn parses_local_load_with_selection() {
-    let program = parse("load ./utils: (helper value)\n").expect("source should parse");
+fn parses_load_with_double_colon() {
+    let program = parse("load kioto::math::basic\n").expect("source should parse");
     let Statement::Load {
         path,
         items,
-        is_local,
         ..
     } = &program.statements[0]
     else {
         panic!("expected load statement");
     };
 
-    assert_eq!(path, "./utils");
-    assert_eq!(
-        items.as_ref().expect("selected items"),
-        &vec!["helper".to_string(), "value".to_string()]
-    );
-    assert!(*is_local);
-}
-
-#[test]
-fn local_import_loads_selected_symbols_from_project_root() {
-    let root = make_temp_project_root("mire_local_import");
-    fs::write(
-        root.join("owl.toml"),
-        "[project]\nname = \"local-import\"\nversion = \"0.1.0\"\nentry = \"code/main.mire\"\n",
-    )
-    .expect("write project");
-    fs::create_dir_all(root.join("code")).expect("mkdir code");
-    fs::write(
-        root.join("code").join("helpers.mire"),
-        "pub fn helper: () {\n    use dasu(\"ok\")\n}\n\npub fn ignored: () {\n    use dasu(\"no\")\n}\n",
-    )
-    .expect("write helpers");
-    let main_path = root.join("code").join("main.mire");
-    fs::write(
-        &main_path,
-        "load ./helpers: (helper)\n\npub fn main: () {\n    use helper()\n}\n",
-    )
-    .expect("write main");
-
-    let mut program = load_program_from_file(&main_path).expect("load program");
-    let source = fs::read_to_string(&main_path).expect("read source");
-    analyze_program(&mut program, &source).expect("expanded program should analyze");
-
-    let exported_names: Vec<String> = program
-        .statements
-        .iter()
-        .filter_map(|statement| match statement {
-            Statement::Function { name, .. } => Some(name.clone()),
-            _ => None,
-        })
-        .collect();
-
-    assert!(exported_names.contains(&"helper".to_string()));
-    assert!(exported_names.contains(&"main".to_string()));
-    assert!(!exported_names.contains(&"ignored".to_string()));
-}
-
-#[test]
-fn local_import_selected_symbol_keeps_private_dependencies() {
-    let root = make_temp_project_root("mire_local_import_private_deps");
-    fs::write(
-        root.join("owl.toml"),
-        "[project]\nname = \"local-import-private-deps\"\nversion = \"0.1.0\"\nentry = \"code/main.mire\"\n",
-    )
-    .expect("write project");
-    fs::create_dir_all(root.join("code")).expect("mkdir code");
-    fs::write(
-        root.join("code").join("helpers.mire"),
-        "fn hidden: () :i64 {\n    return 7\n}\n\npub fn helper: () :i64 {\n    return hidden()\n}\n\npub fn ignored: () :i64 {\n    return 0\n}\n",
-    )
-    .expect("write helpers");
-    let main_path = root.join("code").join("main.mire");
-    fs::write(
-        &main_path,
-        "load ./helpers: (helper)\n\npub fn main: () {\n    use dasu(helper())\n}\n",
-    )
-    .expect("write main");
-
-    let mut program = load_program_from_file(&main_path).expect("load program");
-    let source = fs::read_to_string(&main_path).expect("read source");
-    analyze_program(&mut program, &source).expect("expanded program should analyze");
-
-    let function_names: Vec<String> = program
-        .statements
-        .iter()
-        .filter_map(|statement| match statement {
-            Statement::Function { name, .. } => Some(name.clone()),
-            _ => None,
-        })
-        .collect();
-    assert!(function_names.contains(&"hidden".to_string()));
-    assert!(function_names.contains(&"helper".to_string()));
-    assert!(function_names.contains(&"main".to_string()));
-    assert!(!function_names.contains(&"ignored".to_string()));
-}
-
-#[test]
-fn global_local_import_reachable_mode_loads_only_used_symbols() {
-    let root = make_temp_project_root("mire_global_import_reachable");
-    fs::write(
-        root.join("owl.toml"),
-        "[project]\nname = \"global-import-reachable\"\nversion = \"0.1.0\"\nentry = \"code/main.mire\"\n",
-    )
-    .expect("write project");
-    fs::create_dir_all(root.join("code")).expect("mkdir code");
-    fs::write(
-        root.join("code").join("helpers.mire"),
-        "fn hidden: () :i64 { return 7 }\n\npub fn helper: () :i64 { return hidden() }\n\npub fn ignored: () :i64 { return 0 }\n",
-    )
-    .expect("write helpers");
-    let main_path = root.join("code").join("main.mire");
-    fs::write(
-        &main_path,
-        "load ./helpers\n\npub fn main: () {\n    use dasu(helper())\n}\n",
-    )
-    .expect("write main");
-
-    let reachable = load_program_with_metadata_with_settings(
-        &main_path,
-        CacheSettings::defaults(),
-        mire::ImportMode::Reachable,
-    )
-    .expect("reachable load");
-
-    let reachable_names: Vec<String> = reachable
-        .program
-        .statements
-        .iter()
-        .filter_map(|statement| match statement {
-            Statement::Function { name, .. } => Some(name.clone()),
-            _ => None,
-        })
-        .collect();
-
-    assert!(reachable_names.contains(&"helper".to_string()));
-    assert!(reachable_names.contains(&"hidden".to_string()));
-    assert!(!reachable_names.contains(&"ignored".to_string()));
-}
-
-#[test]
-fn local_import_requires_project_root() {
-    let root = unique_temp_dir("mire_local_import_no_root");
-    fs::create_dir_all(&root).expect("mkdir root");
-    let main_path = root.join("main.mire");
-    fs::write(
-        &main_path,
-        "load ./helpers: (helper)\n\npub fn main: () {\n    use helper()\n}\n",
-    )
-    .expect("write main");
-    fs::write(
-        root.join("helpers.mire"),
-        "pub fn helper: () {\n    use dasu(\"ok\")\n}\n",
-    )
-    .expect("write helper");
-
-    let err = load_program_from_file(&main_path).expect_err("must require project root");
-    assert!(
-        err.to_string().contains("require a Mire project root"),
-        "{err}"
-    );
+    assert_eq!(path, &["kioto".to_string(), "math".to_string(), "basic".to_string()]);
+    assert!(items.is_none());
 }
 
 #[test]
@@ -2647,12 +2533,17 @@ fn incremental_loader_tracks_hashes_for_local_dependencies() {
     let root = make_temp_project_root("mire_incremental_loader");
     fs::write(
         root.join("owl.toml"),
-        "[project]\nname = \"incremental-loader\"\nversion = \"0.1.0\"\nentry = \"code/main.mire\"\n",
+        "[project]\nname = \"incremental-loader\"\nversion = \"0.1.0\"\nentry = \"code/main.mire\"\n[dependencies]\nhelper = { path = \"code/helper\" }\n",
     )
     .expect("write project");
-    fs::create_dir_all(root.join("code")).expect("mkdir code");
+    fs::create_dir_all(root.join("code/helper")).expect("mkdir code/helper");
 
-    let helper_path = root.join("code").join("helper.mire");
+    fs::write(
+        root.join("code/helper/owl.toml"),
+        "[project]\nname = \"helper\"\nversion = \"0.1.0\"\nentry = \"mod.mire\"\n",
+    )
+    .expect("write helper owl");
+    let helper_path = root.join("code/helper").join("mod.mire");
     fs::write(
         &helper_path,
         "pub fn helper: () {\n    use dasu(\"one\")\n}\n",
@@ -2661,7 +2552,7 @@ fn incremental_loader_tracks_hashes_for_local_dependencies() {
     let main_path = root.join("code").join("main.mire");
     fs::write(
         &main_path,
-        "load ./helper: (helper)\n\npub fn main: () {\n    use helper()\n}\n",
+        "load helper\n\npub fn main: () {\n    use helper()\n}\n",
     )
     .expect("write main");
 
@@ -2788,12 +2679,17 @@ fn incremental_build_invalidates_on_local_import_change() {
     let root = make_temp_project_root("mire_incremental_build_invalidate");
     fs::write(
         root.join("owl.toml"),
-        "[project]\nname = \"incremental-invalidate\"\nversion = \"0.1.0\"\nentry = \"code/main.mire\"\n",
+        "[project]\nname = \"incremental-invalidate\"\nversion = \"0.1.0\"\nentry = \"code/main.mire\"\n[dependencies]\nhelper = { path = \"code/helper\" }\n",
     )
     .expect("write project");
-    fs::create_dir_all(root.join("code")).expect("mkdir code");
+    fs::create_dir_all(root.join("code/helper")).expect("mkdir code/helper");
 
-    let helper_path = root.join("code").join("helper.mire");
+    fs::write(
+        root.join("code/helper/owl.toml"),
+        "[project]\nname = \"helper\"\nversion = \"0.1.0\"\nentry = \"mod.mire\"\n",
+    )
+    .expect("write helper owl");
+    let helper_path = root.join("code/helper").join("mod.mire");
     fs::write(
         &helper_path,
         "pub fn helper: () {\n    use dasu(\"one\")\n}\n",
@@ -2802,7 +2698,7 @@ fn incremental_build_invalidates_on_local_import_change() {
     let main_path = root.join("code").join("main.mire");
     fs::write(
         &main_path,
-        "load ./helper: (helper)\n\npub fn main: () {\n    use helper()\n}\n",
+        "load helper\n\npub fn main: () {\n    use helper.helper()\n}\n",
     )
     .expect("write main");
 
@@ -3512,15 +3408,20 @@ fn borrowck_loop_moves_are_tracked() {
 #[test]
 fn local_import_restructured_module_dir() {
     let root = make_temp_project_root("mire_local_import_restructured");
-    fs::create_dir_all(root.join("code/helpers")).expect("mkdir helpers");
+    fs::create_dir_all(root.join("code/helpers/calc")).expect("mkdir helpers/calc");
     fs::write(
         root.join("owl.toml"),
-        "[project]\nname = \"restructured-modules\"\nversion = \"0.1.0\"\nentry = \"code/main.mire\"\n",
+        "[project]\nname = \"restructured-modules\"\nversion = \"0.1.0\"\nentry = \"code/main.mire\"\n[dependencies]\ncalc = { path = \"code/helpers/calc\" }\n",
     )
     .expect("write project");
 
     fs::write(
-        root.join("code/helpers/calc.mire"),
+        root.join("code/helpers/calc/owl.toml"),
+        "[project]\nname = \"calc\"\nversion = \"0.1.0\"\nentry = \"mod.mire\"\n",
+    )
+    .expect("write calc owl");
+    fs::write(
+        root.join("code/helpers/calc/mod.mire"),
         "pub fn mul: (a :i64 b :i64) :i64 {\n    return a * b\n}\n",
     )
     .expect("write calc");
@@ -3528,7 +3429,7 @@ fn local_import_restructured_module_dir() {
     let main_path = root.join("code/main.mire");
     fs::write(
         &main_path,
-        "load ./helpers/calc: (mul)\n\npub fn main: () {\n    use dasu(str(mul(6 7)))\n}\n",
+        "load calc\n\npub fn main: () {\n    use dasu(str(calc.mul(6 7)))\n}\n",
     )
     .expect("write main");
 
@@ -3680,34 +3581,38 @@ fn math_sum_lowers_to_runtime_math_abi() {
 fn owl_home_overrides_kioto_package_resolution() {
     let root = make_temp_project_root("mire_owl_home_resolution");
     let source_path = root.join("owl_home_resolution.mire");
-    let owl_home = root.join("owl-home");
-    let kioto_strings = owl_home.join("kioto").join("core").join("strings");
+    let fake_kioto = root.join("fake-kioto");
 
-    fs::create_dir_all(&kioto_strings).expect("create owl home package");
+    fs::create_dir_all(fake_kioto.join("core/strings")).expect("create fake kioto");
     fs::write(
-        kioto_strings.join("mod.mire"),
+        fake_kioto.join("core/strings/mod.mire"),
         "pub fn marker: () :str { return \"owl-home\" }\n",
     )
     .expect("write kioto strings module");
     fs::write(
+        fake_kioto.join("owl.toml"),
+        "[project]\nname = \"kioto\"\nversion = \"0.1.0\"\nentry = \"mod.mire\"\n[exports]\nstrings = \"core/strings/mod.mire\"\n",
+    )
+    .expect("write fake kioto owl");
+    fs::write(
+        fake_kioto.join("mod.mire"),
+        "use strings\n",
+    )
+    .expect("write fake kioto mod");
+    fs::write(
         root.join("owl.toml"),
-        "[project]\nname = \"owl-home-resolution\"\nversion = \"0.1.0\"\nentry = \"owl_home_resolution.mire\"\n",
+        "[project]\nname = \"owl-home-resolution\"\nversion = \"0.1.0\"\nentry = \"owl_home_resolution.mire\"\n[dependencies]\nkioto = { path = \"fake-kioto\" }\n",
     )
     .expect("write project");
     fs::write(
         &source_path,
-        "load strings\n\npub fn main: () {\n    use dasu(strings.marker())\n}\n",
+        "load kioto::strings\n\npub fn main: () {\n    use dasu(strings.marker())\n}\n",
     )
     .expect("write source");
 
     let output = Command::new(env!("CARGO_BIN_EXE_mire"))
         .current_dir(&root)
-        .args([
-            "run",
-            "--owl-home",
-            owl_home.to_str().expect("owl home path"),
-            source_path.to_str().expect("source path"),
-        ])
+        .args(["run", source_path.to_str().expect("source path")])
         .output()
         .expect("run mire");
 
@@ -3720,13 +3625,19 @@ fn owl_home_overrides_kioto_package_resolution() {
 fn load_keyword_discovers_root_level_modules() {
     let root = make_temp_project_root("mire_load_root_discovery");
     let source_path = root.join("load_root_discovery.mire");
+    fs::create_dir_all(root.join("helper_pkg")).expect("mkdir helper_pkg");
     fs::write(
         root.join("owl.toml"),
-        "[project]\nname = \"load-root-discovery\"\nversion = \"0.1.0\"\nentry = \"load_root_discovery.mire\"\n",
+        "[project]\nname = \"load-root-discovery\"\nversion = \"0.1.0\"\nentry = \"load_root_discovery.mire\"\n[dependencies]\nhelper = { path = \"helper_pkg\" }\n",
     )
     .expect("write project");
     fs::write(
-        root.join("helper.mire"),
+        root.join("helper_pkg/owl.toml"),
+        "[project]\nname = \"helper\"\nversion = \"0.1.0\"\nentry = \"mod.mire\"\n[exports]\nmarker = \"mod.mire\"\n",
+    )
+    .expect("write helper owl");
+    fs::write(
+        root.join("helper_pkg/mod.mire"),
         "pub fn marker: () :str { return \"root-load\" }\n",
     )
     .expect("write helper");
@@ -3751,13 +3662,19 @@ fn load_keyword_discovers_root_level_modules() {
 fn load_module_recursion_preserves_internal_references() {
     let root = make_temp_project_root("mire_load_module_recursion");
     let source_path = root.join("module_recursion.mire");
+    fs::create_dir_all(root.join("helpers_pkg")).expect("mkdir helpers_pkg");
     fs::write(
         root.join("owl.toml"),
-        "[project]\nname = \"load-module-recursion\"\nversion = \"0.1.0\"\nentry = \"module_recursion.mire\"\n",
+        "[project]\nname = \"load-module-recursion\"\nversion = \"0.1.0\"\nentry = \"module_recursion.mire\"\n[dependencies]\nhelpers = { path = \"helpers_pkg\" }\n",
     )
     .expect("write project");
     fs::write(
-        root.join("helpers.mire"),
+        root.join("helpers_pkg/owl.toml"),
+        "[project]\nname = \"helpers\"\nversion = \"0.1.0\"\nentry = \"mod.mire\"\n[exports]\nfibonacci = \"mod.mire\"\n",
+    )
+    .expect("write helpers owl");
+    fs::write(
+        root.join("helpers_pkg/mod.mire"),
         "pub fn fibonacci: (n :i64) :i64 {\n    if n <= 1 {\n        return n\n    }\n    return fibonacci(n - 1) + fibonacci(n - 2)\n}\n",
     )
     .expect("write helpers");
@@ -3779,27 +3696,14 @@ fn load_module_recursion_preserves_internal_references() {
 }
 
 #[test]
-fn local_load_emits_warning_under_warn_all() {
-    let source = "load ./helpers\n\npub fn main: () {\n    use dasu(\"ok\")\n}\n";
-    let mut program = parse(source).expect("source should parse");
-    let report = mire::analyze_program_with_warnings(
-        &mut program,
-        source,
-        Some("local_load_warning.mire"),
-        mire::WarningConfig {
-            filter: mire::error::diagnostic::WarningFilter::All,
-            deny: std::collections::HashSet::new(),
-        },
-    )
-    .expect("warnings analysis should succeed");
-
+fn dot_slash_load_rejected_at_parse_time() {
+    let result = parse("load ./helpers\n\npub fn main: () {\n    use dasu(\"ok\")\n}\n");
+    assert!(result.is_err(), "dot-slash loads must be parse errors");
+    let err = result.expect_err("should error");
+    let err_str = err.to_string();
     assert!(
-        report
-            .diagnostics
-            .iter()
-            .any(|diag| diag.code == mire::error::diagnostic::DiagnosticCode::W0010),
-        "{:?}",
-        report.diagnostics
+        err_str.contains("Local paths are not allowed"),
+        "error should mention local paths: {err_str}"
     );
 }
 

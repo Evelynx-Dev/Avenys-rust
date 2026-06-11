@@ -1,14 +1,4 @@
-[owl]
-version = "1.0.0"
-
 [project]
 name = "loads"
 version = "0.1.0"
 entry = "code/main.mire"
-description = ""
-
-[dependencies]
-
-[build]
-default_profile = "debug"
-default_opt_level = "0"

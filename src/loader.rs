@@ -4,9 +4,9 @@ use crate::avens::{
 };
 use crate::error::{ErrorKind, MireError, Result};
 use crate::incremental::{
-    collect_statement_bindings, collect_statement_dependencies, source_hash,
-    statement_export_name, CacheSettings, CachedImport, CachedParsedFile, IncrementalCache,
-    LoadedFile, LoadedProgram,
+    collect_statement_bindings, collect_statement_dependencies, source_hash, source_hash2,
+    statement_export_name, CacheSettings, CachedParsedFile, IncrementalCache, LoadedFile,
+    LoadedProgram,
 };
 use crate::parser::ast::{
     AssignmentTarget, DataType, EnumVariantDef, Expression, Identifier, Literal, Statement,
@@ -448,7 +448,8 @@ impl ImportResolver {
         let source = read_source_file(path)?;
         self.sources.insert(path.to_path_buf(), source.clone());
         let hash = source_hash(&source);
-        if let Some(cached) = self.cache.cached_file(path, hash) {
+        let hash2 = source_hash2(&source);
+        if let Some(cached) = self.cache.cached_file(path, hash, hash2) {
             return Ok(ResolvedFile::from_cached(cached, source));
         }
 
@@ -456,7 +457,6 @@ impl ImportResolver {
             err.with_source(source.clone())
                 .with_filename(path.display().to_string())
         })?;
-        let local_imports = Vec::new();
         let exports: Vec<String> = program
             .statements
             .iter()
@@ -467,8 +467,9 @@ impl ImportResolver {
             path,
             CachedParsedFile {
                 hash,
+                hash2,
                 exports: exports.clone(),
-                local_imports: local_imports.clone(),
+                local_imports: Vec::new(),
                 program: program.clone(),
             },
         )?;
@@ -476,7 +477,6 @@ impl ImportResolver {
             hash,
             program,
             exports,
-            local_imports,
         })
     }
 
@@ -1659,7 +1659,6 @@ struct ResolvedFile {
     hash: u64,
     program: Program,
     exports: Vec<String>,
-    local_imports: Vec<CachedImport>,
 }
 
 #[derive(Clone)]
@@ -1675,7 +1674,6 @@ impl ResolvedFile {
             hash: cached.hash,
             program: cached.program,
             exports: cached.exports,
-            local_imports: cached.local_imports,
         }
     }
 }

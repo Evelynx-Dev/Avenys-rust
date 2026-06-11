@@ -2,22 +2,73 @@
 
 All notable changes to Mire are documented in this file.
 
-## [3.11.11] - 2026-06-04
+## [3.11.12] - 2026-06-04
 
-### Removed
-- `import` keyword removed entirely from lexer, parser, AST, and CLI. `load`
-  is now the only way to import modules. Legacy `import` will fail to parse
-  with an "unexpected token" error.
-- `--allow-legacy-imports` flag, `allow_legacy_imports` warning config, and
-  `MIRE_ALLOW_LEGACY_IMPORTS` env var removed.
-- `mire import` CLI command removed. Dependencies must be managed by editing
-  `owl.toml` directly.
+### Fixed
+- MIR codegen: struct constructor functions (`@Stack`, `@str`, etc.) are
+  generated automatically from `Statement::Type` definitions, enabling struct
+  field initialization in the MIR pipeline.
+- MIR codegen: `__if_expr` builtin expanded to proper MIR control flow
+  (Alloca + BrCond + Store/Load across then/else/end blocks), fixing
+  `if`-expression codegen in the MIR path.
+- MIR codegen: `@main` entry-point wrapper (`define i32 @main(i32, ptr)`)
+  emitted when `@fn_main` is defined, so the MIR pipeline produces runnable
+  binaries instead of linker errors.
+- MIR codegen: runtime declarations (`@dasu`, `@.fmt_*` globals, `@.argc`,
+  `@.argv`) auto-inserted when absent, fixing "use of undefined value" errors
+  for built-in I/O.
+- MIR codegen: `@dasu` declaration check uses `"declare @"` prefix instead of
+  bare `"@dasu"` to distinguish declarations from call sites.
+- MIR lowerer: `new_block()` now uses `self.func.blocks.len()` instead of
+  `self.next_block`, fixing block ID mismatch that caused `__if_expr` blocks
+  to alias the entry block and be eliminated by the optimizer.
+- `compile_binary_from_ir` in toolchain: pass object files before `-x ir -`
+  so clang auto-detects `.o` files instead of trying to parse them as LLVM IR.
+
+### Added
+- Hierarchical load paths: `load kioto::math::basic` resolves through
+  `owl.toml [exports]` recursively. `Statement::Load.path` is now `Vec<String>`.
+- `module <name>` declaration for intra-package identity (block-style body
+  removed — was dead code).
+- `use <name>` (bare identifier, no parens) for linking submodules within a
+  package via `[exports]`.
+- `owl.toml [exports]` section maps export names to `.mire` files or
+  sub-directories with their own `owl.toml` for hierarchical resolution.
+- `owl.toml [bootstrap]` section with `BootstrapConfig { std_package, std_entry }`,
+  defaulting to `kioto` / `"mod.mire"`.
+- `MireProject` fields `name`, `version`, `entry` made `#[serde(default)]`
+  for minimal manifests. `#[serde(alias = "owl")]` on `project` field for
+  backward compat.
+- `mire validate` command: validates `owl.toml` dependencies + exports.
+- `mire owl add <name> --path <p>|--version <v>`: adds a dependency entry.
+- `mire owl remove <name>`: removes a dependency entry.
+- `load_exports()` / `resolve_export_path()` in manifest module.
+- `resolve_package(name)` in loader: resolves solely through manifest
+  `[dependencies]` — no filesystem probing.
+- `resolve_load_path(&[segments])` chains through `[exports]` recursively.
+- Kioto unbundled: `src/modules/kioto/` deleted; code lives in standalone
+  `../mire-kioto/` package with its own `owl.toml` and per-submodule `owl.toml`
+  files.
+- 10 new parser tests for hierarchical load, `module`, `use` disambiguation.
 
 ### Changed
-- `load std` standardized to `load kioto` everywhere — Kioto is the standard
-  library; `std` was never a real name.
-- Local `load ./path` now warns: declare the module in `owl.toml`
-  `[dependencies]` instead.
+- Module loading is now purely package-based: `load` only resolves through
+  `owl.toml [dependencies]`. No heuristic filesystem resolution, no OWL_HOME
+  probing, no relative paths.
+- `Statement::Load.is_local` removed from AST — one resolve path only.
+- `Statement::Module { name, body }` simplified to `Statement::Module { name }`.
+- `import` keyword removed entirely from lexer, parser, AST, and CLI.
+  Legacy `import` fails to parse with "unexpected token" error.
+- `--allow-legacy-imports` flag, `allow_legacy_imports` warning config, and
+  `MIRE_ALLOW_LEGACY_IMPORTS` env var removed.
+- `mire import` CLI command removed. Use `owl add` / `owl remove` instead.
+- `load std` standardized to `load kioto` everywhere.
+- `load ./path` is invalid syntax (removed completely, not just warned).
+- `owl.toml` manifests normalized to `[project]` section (no duplicate `[owl]`).
+- Loader reduced from 1920 to 1561 lines: 7 heuristic functions removed,
+  3 new resolution functions added.
+- `mire-kioto/` submodules converted to `module <name>` + `use <name>`.
+- `mire/owl.toml` created with `kioto = { path = "../mire-kioto" }`.
 
 ### Fixed
 - Module loading now rewrites internal references inside prefixed modules, so

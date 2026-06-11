@@ -1,8 +1,8 @@
 // Test: multiple module imports compose
 load kioto
-load math
-load lists
-load strings
+load kioto::math
+load kioto::lists
+load kioto::strings
 
 pub fn main: () {
     // Build a list of squares

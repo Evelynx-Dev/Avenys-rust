@@ -1,6 +1,6 @@
 load kioto
-load strings
-load math
+load kioto::strings
+load kioto::math
 
 pub fn main: () {
     set name = "mire" :str

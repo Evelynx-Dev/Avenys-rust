@@ -19,14 +19,16 @@ Complete language syntax derived from test files and working examples.
 11. [Pipeline Operator](#11-pipeline-operator)
 12. [I/O: dasu and ireru](#12-io-dasu-and-ireru)
 13. [String Interpolation](#13-string-interpolation)
-14. [Module Loading (load)](#14-module-loading-load)
+14. [Module System](#14-module-system)
 15. [Kioto Standard Library](#15-kioto-standard-library)
 16. [Traits/Skills](#16-traitsskills)
 17. [Operators](#17-operators)
 18. [Ownership and References](#18-ownership-and-references)
 19. [Types](#19-types)
-20. [Stability](#20-stability)
-21. [Tests](#21-tests)
+20. [Manifest (owl.toml)](#20-manifest-owltoml)
+21. [CLI Reference](#21-cli-reference)
+22. [Stability](#22-stability)
+23. [Tests](#23-tests)
 
 ---
 
@@ -566,94 +568,221 @@ Interpolation calls `str()` on the inner expression and concatenates at compile 
 
 ---
 
-## 14. Module Loading (load)
+## 14. Module System
 
-Modules are loaded with the `load` keyword (the `import` keyword was removed — `load` is the only way to import modules):
+Mire's module system is package-based. You declare dependencies in `owl.toml`.
+Two keywords control visibility:
+
+| Keyword | Rol |
+|---------|-----|
+| `load`  | Declara que se usará un paquete. Debe estar a nivel top-level. |
+| `use`   | Navega `[exports]` vía `::` e inyecta símbolos en scope. |
+
+### `load` — registrar un paquete
 
 ```mire
-load kioto                            # load the Kioto standard library
-load strings                           # load a bundled module by name
-load ./utils                           # local load (warns; prefer owl.toml dependency names)
-load fs as fs                          # alias a module
-load strings: (split replace trim)     # selective item loading
+load kioto                        # registra el paquete kioto
+load kioto::math                  # registra kioto + navega a math
+load kioto::math::basic           # registra kioto → math → basic
+load kioto::strings as str        # alias: str.len() en vez de strings.len()
 ```
 
-### Module Resolution
+`load` resuelve el primer segmento contra `[dependencies]` en `owl.toml`,
+registra el paquete en `PackageRegistry`, y carga los archivos `.mire`.
 
-The compiler resolves module names in this order:
+**Regla crítica**: `load` solo funciona a nivel top-level del archivo.
+Dentro de una función, el parser lo rechaza con un error:
 
-1. **Bundled modules** — `src/modules/kioto/` (the Kioto standard library)
-2. **OWL_HOME modules** — `$OWL_HOME/modules/` (user-installed packages)
-3. **Project-local modules** — named modules in the project root or `modules/`
-4. **Relative local loads** — paths starting with `./` (supported, but warned)
+```mire
+// ✅ Correcto
+load kioto
 
-Local loads should be replaced with owl.toml dependencies when possible. Relative
-`./` paths require a project root with `owl.toml`:
+pub fn main: () { ... }
+
+// ❌ Error
+pub fn main: () {
+    load kioto::math    // "`load` must be at the top level"
+}
+```
+
+### `use` — importar símbolos
+
+`use` con rutas `::` navega la cadena de `[exports]` (TOML chain) para
+encontrar el archivo destino e inyecta los símbolos en el scope actual.
+
+Dos modos:
+
+**Módulo** (con prefijo):
+```mire
+use kioto::math::basic
+// → basic.hypot(), basic.pi(), basic.sqrt(), ...
+// el último segmento (basic) se usa como prefijo.
+```
+
+**Ítem** (sin prefijo):
+```mire
+use kioto::math::basic::hypot
+// → hypot() directamente.
+// hypot no es un export TOML → el sistema retrocede,
+// encuentra basic.mire, extrae hypot como ítem.
+```
+
+El parser disambigua automáticamente:
+
+| Código | Interpretación |
+|--------|----------------|
+| `use kioto::math\n` | Import de módulo |
+| `use kioto::math::basic::hypot\n` | Import de ítem |
+| `use dasu("text")\n` | Output expression |
+| `use kioto::math::sum(nums)\n` | Output expression (namespace call) |
+
+La regla: si después de la cadena `::` viene `(`, es una expresión call.
+Si viene newline/eof, es un import.
+
+### `module` — identidad del archivo
+
+Cada archivo `.mire` puede declarar su identidad:
+
+```mire
+module basic
+
+pub fn greet: () :str {
+    return "hola desde basic"
+}
+```
+
+### Cómo se arma un paquete
 
 ```toml
 [project]
-name = "my-app"
+name = "mylib"
 version = "0.1.0"
-entry = "src/main.mire"
+entry = "mod.mire"
+
+[exports]
+utils   = "utils.mire"
+parsing = "parsing/mod.mire"
 ```
 
-### Module Manifest (owl.toml)
+Cada export apunta a un `.mire` o a un directorio con su propio `owl.toml`
+y más `[exports]`. Las rutas jerárquicas navegan esta cadena:
 
-Third-party dependencies are declared in `owl.toml` under `[dependencies]`:
+- `load mylib::utils` → `utils.mire`
+- `load mylib::parsing::tokens` → `parsing/mod.mire` → busca `owl.toml`
+  en `parsing/` → resuelve `tokens` en sus exports
+
+### Sin atajos, sin magia
+
+- `load kioto::math` es válido. `load math` no (a menos que `math` esté en `[dependencies]`).
+- No existe `load ./path` ni `load ../relative`. Usá `{ path = "./lib/algo" }` en `owl.toml`.
+- `import` fue eliminado. Solo existen `load` y `use`.
+
+### Ejemplo completo
 
 ```toml
+# owl.toml
+[project]
+name = "mi-app"
+version = "0.1.0"
+entry = "main.mire"
+
 [dependencies]
-kioto = "3.11.10"
-my-lib = { path = "./lib/my-lib" }
+kioto = { path = "../kioto" }
+midic = { path = "./lib/midic" }
 ```
 
-Dependencies in `owl.toml` are resolved by name — edit the file directly to add or update them.
+```mire
+# main.mire
+load kioto
 
-### Selective Loading
+pub fn main: () {
+    // Importación de módulo (con prefijo)
+    use kioto::math::basic
+    set x = basic.sqrt(16.0)
 
-Load only specific items from a module:
+    // Importación de ítem (sin prefijo)
+    use kioto::math::basic::hypot
+    set y = hypot(3.0, 4.0)
+
+    // Módulos cargados por load kioto (strings, lists, etc.)
+    set s = strings.upper("hola")
+
+    use dasu("x={x} y={y} s={s}")
+}
+```
+
+### Ejemplo completo
+
+```toml
+# owl.toml
+[project]
+name = "mi-app"
+version = "0.1.0"
+entry = "main.mire"
+
+[dependencies]
+kioto = { path = "../kioto" }
+utilidades = { path = "./lib/utils" }
+```
 
 ```mire
-load strings: (split replace trim)
+# main.mire
+load kioto
+load utilidades::strings
 
-# then use without the module prefix:
-use dasu(split("a,b,c" ","))
+pub fn main: () {
+    use dasu(utilidades.strings.reverse("Hola"))
+}
 ```
 
 ---
 
 ## 15. Kioto Standard Library
 
-Kioto is the standard library for Mire. It lives at `src/modules/kioto/` and is bundled with the compiler. Use `load kioto` to pull in the full library.
+Kioto (antes conocido como `std`) es la librería estándar de Mire. Vive como un paquete separado en `../kioto/` y se declara como dependencia en `owl.toml`:
 
-### Module Tree
+```toml
+[dependencies]
+kioto = { path = "../kioto" }
+```
+
+(El compilador lo inyecta automáticamente si no está en `[dependencies]`, así que no te preocupes si olvidás declararlo.)
+
+### Árbol de módulos
 
 ```
 kioto/
-  mod.mire          # entry point — loads all submodules
+  mod.mire              # entry point — carga todo
   core/
-    strings/        # split, join, replace, trim, contains, starts_with, ends_with, pad, substr
-    lists/          # push, pop, get, slice, map, filter, fold, concat
-    dicts/          # get, set, keys, values
-    time/           # now, sleep, format
-    fs/             # read, write, exists, copy, move, delete, mkdir, list
-    env/            # get, set, all, cwd, chdir
-    proc/           # run, exec, shell, spawn, wait, kill, exit
-    async/          # concurrency primitives
-    mem/            # memory introspection
-    cpu/            # CPU info, load, frequency
-    gpu/            # GPU snapshot
-    term/           # terminal styling, clear
-    math/           # basic, stats, random, complex, decimal
+    strings/            # split, join, replace, trim, contains, starts_with, ends_with, pad, substr
+    lists/              # push, pop, get, slice, map, filter, fold, concat, contains, index_of
+    dicts/              # get, set, keys, values, has, remove, entries, merge
+    time/               # now, sleep, format, elapsed, mark
+    fs/                 # read, write, exists, copy, move, delete, mkdir, list
+    env/                # get, set, all, args, cwd, chdir
+    proc/               # run, exec, shell, spawn, wait, kill, exit
+    async/              # task helpers, spawn/join
+    mem/                # used, total, free, available, percent, snapshot
+    cpu/                # count, freq, loadavg, time, snapshot
+    gpu/                # available, snapshot
+    term/               # style, hr, clear
+    math/               # basic, stats, random, complex, decimal
+      basic.mire        # add, sub, mul, div, abs, min, max
+      stats.mire        # mean, median, stddev, variance
+      random.mire       # int, float, shuffle
+      complex.mire      # new, add, sub, mul, conj, mag
+      decimal.mire      # new, add, sub, mul, round, to_str
   ext/
-    types/          # type utilities
-    maybe/          # Maybe[T] type
-    result/         # Result[T] type
-    tuple/          # Tuple type
-    iter/           # Iterator utilities
+    types/              # type utilities, type_name
+    maybe/              # Maybe[T] con map, unwrap, unwrap_or
+    result/             # Result[T] con map, unwrap, unwrap_or, is_ok, is_err
+    tuple/              # first, second, swap, to_list
+    iter/               # Iterator utilities: map, filter, fold, collect
 ```
 
-### Usage
+### Uso
+
+Cargá todo Kioto de una:
 
 ```mire
 load kioto
@@ -663,16 +792,30 @@ pub fn main: () {
 }
 ```
 
-Or load individual modules without pulling in everything:
+O cargá solo lo que necesitás con rutas jerárquicas:
 
 ```mire
-load strings
-load lists
+load kioto::math::basic
 
 pub fn main: () {
-    set items = [] :vec[i64] mut
-    set items = lists.push(items 42)
-    use dasu(lists.get(items 0))
+    // Importación de módulo (prefijo basic.)
+    use kioto::math::basic
+    use dasu(str(basic.pi()))
+
+    // Importación de ítem (sin prefijo)
+    use kioto::math::basic::hypot
+    set h = hypot(3.0, 4.0)
+    use dasu("hypot={h}")
+}
+```
+
+O con alias:
+
+```mire
+load kioto::strings as str
+
+pub fn main: () {
+    use dasu(str.upper("hola"))
 }
 ```
 
@@ -859,9 +1002,138 @@ set p = (Point x: 1, y: 2) :Point
 
 ---
 
-## 20. Stability
+## 20. Manifest (owl.toml)
 
-Compiler version: `3.11.10`.
+El archivo `owl.toml` es el corazón de cada proyecto Mire. Declara quién sos, qué versión tenés, cuál es tu entry point, qué paquetes externos usás, y qué exportás.
+
+### Estructura básica
+
+```toml
+[project]
+name = "mi-app"
+version = "0.1.0"
+entry = "main.mire"
+
+[dependencies]
+kioto = { path = "../kioto" }
+utilidades = { path = "./lib/utilidades" }
+
+[exports]
+utils = "src/utils.mire"
+parsing = "src/parsing/mod.mire"
+```
+
+### `[project]` — identidad
+
+- `name` (opcional, default vacío): nombre del paquete
+- `version` (opcional, default vacío): versión semver
+- `entry` (opcional, default `"mod.mire"`): archivo de entrada
+
+Backward compat: también acepta `[owl]` como alias de `[project]`.
+
+### `[dependencies]` — ¿de quién dependés?
+
+Cada entrada es un nombre y una forma de resolverlo:
+
+```toml
+[dependencies]
+# Por path (recomendado para desarrollo local):
+kioto = { path = "../kioto" }
+milib = { path = "./lib/milib" }
+
+# Por versión (busca en OWL_HOME o cache):
+kioto = "3.11.10"
+
+# Ambos (path + version metadata):
+milib = { version = "0.2.0", path = "./lib/milib" }
+```
+
+Backward compat: también acepta `[imports]` como alias de `[dependencies]`.
+
+### `[exports]` — qué ofrecés al mundo
+
+```toml
+[exports]
+utils   = "src/utils.mire"
+parsing = "src/parsing/mod.mire"
+math    = "src/math"
+```
+
+Cada export mapea un nombre a un archivo `.mire` o a un directorio con su propio `owl.toml`. Los directorios permiten jerarquías:
+
+```toml
+# kioto/owl.toml
+[exports]
+math = "core/math/mod.mire"
+
+# core/math/owl.toml
+[exports]
+basic   = "basic.mire"
+stats   = "stats.mire"
+complex = "complex.mire"
+random  = "random.mire"
+decimal = "decimal.mire"
+```
+
+Así `load kioto::math::basic` resuelve: kioto → `../kioto/` → math → `core/math/mod.mire` → basic → `core/math/basic.mire`.
+
+### Comandos útiles
+
+```bash
+# Validar que el owl.toml esté bien
+mire validate
+
+# Agregar una dependencia
+mire owl add mi-lib --path ./lib/mi-lib
+
+# Agregar con versión
+mire owl add kioto --version 3.11.10
+
+# Agregar path + version
+mire owl add mi-lib --path ./lib/mi-lib --version 0.1.0
+
+# Sacar una dependencia
+mire owl remove mi-lib
+```
+
+---
+
+## 21. CLI Reference
+
+```bash
+mire run [file] [options] [-- args]      # Compilar y ejecutar
+mire build [file] [options]               # Compilar a binario
+mire check [file] [options]               # Type-check sin codegen
+mire debug [file] [options]               # Compilación debug con IR
+mire test [paths...] [options]            # Compilar/ejecutar tests .mire
+
+# Comandos de manifiesto
+mire validate                             # Validar owl.toml
+mire owl add <name> [--path] [--version]  # Agregar dependencia
+mire owl remove <name>                    # Eliminar dependencia
+```
+
+Default profile es `debug` (`-O0`). Usá `--release` o `-O2` para builds optimizados.
+
+### Opciones
+
+| Flag | Descripción |
+|------|-------------|
+| `--debug` | Build debug (default) |
+| `--release` | Build release |
+| `-O, --opt-level <n>` | 0\|1\|2\|3\|s\|z |
+| `--owl-home <path>` | Override OWL_HOME |
+| `-W <code>` | Habilitar warning específico |
+| `--deny <code>` | Elevar warning a error |
+| `--warn-all` | Todos los warnings |
+| `--no-run` (test) | Solo compilar, no ejecutar |
+| `--verbose, -v` (test) | Mostrar resultado por test |
+
+---
+
+## 22. Stability
+
+Compiler version: `3.11.11`.
 
 **Stable:**
 - `struct`, field access, construction
@@ -883,9 +1155,8 @@ Compiler version: `3.11.10`.
 - Character literals (`char`)
 - Prefixed integer literals (`0b`, `0o`, `0x`)
 - Raw strings (`r"..."`, `r#"..."#`)
-- Module loading (`load`) — bundled modules use names, local `./` loads are warned
-- Selective loading (`load strings: (split join)`)
-
+- Module loading (`load`) — package-based via `owl.toml [dependencies]`
+- Hierarchical exports (`load kioto::math::basic`)
 - Generic functions, structs, enums
 - Incremental compilation
 - Pipeline `|>` and safe pipeline `|?>`
@@ -896,7 +1167,9 @@ Compiler version: `3.11.10`.
 - Field-level constructor validation
 - WASM backend (PAL stubs)
 
-## 21. Tests
+---
+
+## 23. Tests
 
 The test suite lives in `tests/` and covers the full compiler pipeline.
 
@@ -930,8 +1203,6 @@ cargo run -- run tests/error/01_lexer_unexpected_char.mire
 | `tests/type/` | Type system edge cases |
 | `tests/warnings/` | Compiler warning tests |
 | `tests/security/` | Security-related tests |
-| `tests/modules/` | Module resolution tests |
-| `tests/edge/` | Edge case testing |
 | `tests/stress/` | Stress and performance tests |
 | `tests/performance/` | Performance benchmarks |
 

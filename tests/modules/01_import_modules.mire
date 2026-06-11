@@ -1,6 +1,6 @@
 load kioto
-load strings
-load math
+load kioto::strings
+load kioto::math
 
 fn greet: (name :str) :str {
     set upper = strings.to_upper(name)

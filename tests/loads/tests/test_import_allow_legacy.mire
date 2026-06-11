@@ -1,6 +1,0 @@
-load helpers
-
-pub fn main: () {
-    set x = helpers::add(1 2)
-    use dasu(x)
-}

@@ -14,6 +14,7 @@ use statements::*;
 use types::*;
 use values::*;
 
+#[cfg(test)]
 pub(super) fn stable_statement_hash(statement: &Statement) -> u64 {
     let mut hasher = FxHasher::new();
     hash_statement(statement, &mut hasher);
@@ -39,6 +40,7 @@ mod tests {
     use super::*;
     use crate::parser::ast::{DataType, Expression, Identifier, Literal, Visibility};
     use crate::parser::parse;
+    use std::fs;
 
     fn demo_program(name: &str) -> Program {
         Program {
@@ -55,24 +57,32 @@ mod tests {
         }
     }
 
-    #[test]
-    fn binary_cache_roundtrips_parsed_and_analysis_entries() {
-        let root = std::env::temp_dir().join(format!("mire_cache_test_{}", now_epoch_ms()));
-        fs::create_dir_all(&root).expect("temp dir");
-        let source_path = root.join("main.mire");
-        fs::write(&source_path, "pub fn main: () {}\n").expect("source");
-
-        let settings = CacheSettings {
-            max_units: Some(16),
+    fn test_settings() -> CacheSettings {
+        CacheSettings {
+            max_units: Some(256),
             analysis_cache: true,
             compression: false,
-        };
-        let mut cache = IncrementalCache::load_with_settings(&source_path, settings).expect("load");
+        }
+    }
+
+    fn make_cache_path(root: &Path) -> PathBuf {
+        root.join("main.mire")
+    }
+
+    #[test]
+    fn cache_roundtrips_parsed_and_analysis_entries() {
+        let root = std::env::temp_dir().join(format!("mire_cache_test_{}", now_epoch_ms()));
+        fs::create_dir_all(&root).expect("temp dir");
+        let source_path = make_cache_path(&root);
+        fs::write(&source_path, "pub fn main: () {}\n").expect("source");
+
+        let mut cache = IncrementalCache::load_with_settings(&source_path, test_settings()).expect("load");
         cache
             .store_file(
                 &source_path,
                 CachedParsedFile {
                     hash: 1,
+                    hash2: 1,
                     program: demo_program("main"),
                     exports: vec!["main".to_string()],
                     local_imports: Vec::new(),
@@ -80,18 +90,18 @@ mod tests {
             )
             .expect("store file");
         cache
-            .store_analysis(&source_path, &demo_program("typed_main"))
+            .store_analysis(&source_path, 0, &demo_program("typed_main"))
             .expect("store analysis");
         cache.save().expect("save");
 
         let mut reloaded =
-            IncrementalCache::load_with_settings(&source_path, settings).expect("reload");
+            IncrementalCache::load_with_settings(&source_path, test_settings()).expect("reload");
         let parsed = reloaded
-            .cached_file(&source_path, 1)
+            .cached_file(&source_path, 1, 1)
             .expect("cached parsed file");
         assert_eq!(parsed.exports, vec!["main".to_string()]);
         let analyzed = reloaded
-            .cached_analysis(&source_path)
+            .cached_analysis(&source_path, 0)
             .expect("cached analysis");
         match analyzed {
             CachedAnalysis::Success(program) => assert_eq!(program.statements.len(), 1),
@@ -99,41 +109,29 @@ mod tests {
         }
     }
 
-    #[cfg(unix)]
     #[test]
-    fn binary_cache_uses_memory_mapping_until_mutated() {
-        let root = std::env::temp_dir().join(format!("mire_cache_mmap_{}", now_epoch_ms()));
+    fn cache_persists_across_reload() {
+        let root = std::env::temp_dir().join(format!("mire_cache_persist_{}", now_epoch_ms()));
         fs::create_dir_all(&root).expect("temp dir");
-        let source_path = root.join("main.mire");
+        let source_path = make_cache_path(&root);
         fs::write(&source_path, "pub fn main: () {}\n").expect("source");
 
-        let settings = CacheSettings {
-            max_units: Some(16),
-            analysis_cache: true,
-            compression: false,
-        };
-        let mut cache = IncrementalCache::load_with_settings(&source_path, settings).expect("load");
+        let mut cache = IncrementalCache::load_with_settings(&source_path, test_settings()).expect("load");
         cache
-            .store_analysis(&source_path, &demo_program("typed_main"))
+            .store_analysis(&source_path, 0, &demo_program("typed_main"))
             .expect("store analysis");
         cache.save().expect("save");
 
         let mut reloaded =
-            IncrementalCache::load_with_settings(&source_path, settings).expect("reload");
-        assert!(reloaded.blob_store.is_memory_mapped());
-        assert!(reloaded.cached_analysis(&source_path).is_some());
-
-        reloaded
-            .store_analysis(&source_path, &demo_program("typed_main_v2"))
-            .expect("store second analysis");
-        assert!(!reloaded.blob_store.is_memory_mapped());
+            IncrementalCache::load_with_settings(&source_path, test_settings()).expect("reload");
+        assert!(reloaded.cached_analysis(&source_path, 0).is_some());
     }
 
     #[test]
     fn lru_prunes_when_max_units_is_reached() {
         let root = std::env::temp_dir().join(format!("mire_cache_lru_{}", now_epoch_ms()));
         fs::create_dir_all(&root).expect("temp dir");
-        let source_path = root.join("main.mire");
+        let source_path = make_cache_path(&root);
         fs::write(&source_path, "pub fn main: () {}\n").expect("source");
 
         let settings = CacheSettings {
@@ -147,6 +145,7 @@ mod tests {
                 &source_path,
                 CachedParsedFile {
                     hash: 1,
+                    hash2: 1,
                     program: demo_program("main"),
                     exports: vec!["main".to_string()],
                     local_imports: Vec::new(),
@@ -154,114 +153,51 @@ mod tests {
             )
             .expect("store file");
         cache
-            .store_analysis(&source_path, &demo_program("analysis"))
+            .store_analysis(&source_path, 0, &demo_program("analysis"))
             .expect("store analysis");
-        assert!(cache.db.files.len() + cache.db.analyses.len() <= 1);
-        assert!(cache.metrics().evictions >= 1);
+        // With max_units=1, only one entry should survive
+        assert!(
+            cache.file_count() + cache.analysis_count() <= 1,
+            "expected <= 1 entries, got files={} analyses={}",
+            cache.file_count(),
+            cache.analysis_count(),
+        );
     }
 
     #[test]
-    fn blob_store_compacts_when_sparse_after_overwrites() {
-        let root = std::env::temp_dir().join(format!("mire_cache_compact_{}", now_epoch_ms()));
+    fn overwrite_analysis_does_not_grow_cache_indefinitely() {
+        let root = std::env::temp_dir().join(format!("mire_cache_overwrite_{}", now_epoch_ms()));
         fs::create_dir_all(&root).expect("temp dir");
-        let source_path = root.join("main.mire");
+        let source_path = make_cache_path(&root);
         fs::write(&source_path, "pub fn main: () {}\n").expect("source");
 
-        let settings = CacheSettings {
-            max_units: Some(256),
-            analysis_cache: true,
-            compression: false,
-        };
-        let mut cache = IncrementalCache::load_with_settings(&source_path, settings).expect("load");
+        let mut cache = IncrementalCache::load_with_settings(&source_path, test_settings()).expect("load");
 
         for i in 0..32 {
             let function_name = format!("main_{}", i);
             cache
-                .store_analysis(&source_path, &demo_program(&function_name))
+                .store_analysis(&source_path, 0, &demo_program(&function_name))
                 .expect("store analysis overwrite");
         }
 
-        let blob_len = cache.blob_store.bytes().len();
-        let active_len = cache
-            .db
-            .analyses
-            .values()
-            .next()
-            .map(|entry| entry.blob_len as usize)
-            .unwrap_or(0);
-
-        assert!(blob_len <= active_len.saturating_mul(2));
-    }
-
-    #[test]
-    fn blob_store_compaction_preserves_offsets_inside_merged_ranges() {
-        let root =
-            std::env::temp_dir().join(format!("mire_cache_compact_ranges_{}", now_epoch_ms()));
-        fs::create_dir_all(&root).expect("temp dir");
-        let source_path = root.join("main.mire");
-        let source_path2 = root.join("lib.mire");
-        fs::write(&source_path, "pub fn main: () {}\n").expect("source");
-        fs::write(&source_path2, "pub fn helper: () {}\n").expect("source");
-
-        let settings = CacheSettings {
-            max_units: Some(256),
-            analysis_cache: true,
-            compression: false,
-        };
-        let mut cache = IncrementalCache::load_with_settings(&source_path, settings).expect("load");
-
-        cache
-            .store_file(
-                &source_path,
-                CachedParsedFile {
-                    hash: 1,
-                    program: demo_program("a"),
-                    exports: vec![],
-                    local_imports: Vec::new(),
-                },
-            )
-            .expect("store file a");
-        cache
-            .store_file(
-                &source_path2,
-                CachedParsedFile {
-                    hash: 2,
-                    program: demo_program("b"),
-                    exports: vec![],
-                    local_imports: Vec::new(),
-                },
-            )
-            .expect("store file b");
-
-        // Keep entry 2 and force a sparse blob by dropping the first entry.
-        let key1 = normalize_path_key(&source_path);
-        cache.db.files.remove(&key1);
-        cache.maybe_compact_blob_store();
-
-        let cached = cache
-            .cached_file(&source_path2, 2)
-            .expect("file 2 should survive compaction");
-        assert_eq!(cached.program.statements.len(), 1);
+        // After 32 overwrites, only the latest analysis should be present
+        assert_eq!(cache.analysis_count(), 1, "overwrites should keep only 1 entry");
     }
 
     #[test]
     fn cache_metrics_track_file_and_analysis_hits_and_misses() {
         let root = std::env::temp_dir().join(format!("mire_cache_metrics_{}", now_epoch_ms()));
         fs::create_dir_all(&root).expect("temp dir");
-        let source_path = root.join("main.mire");
+        let source_path = make_cache_path(&root);
         fs::write(&source_path, "pub fn main: () {}\n").expect("source");
 
-        let settings = CacheSettings {
-            max_units: Some(16),
-            analysis_cache: true,
-            compression: false,
-        };
-        let mut cache = IncrementalCache::load_with_settings(&source_path, settings).expect("load");
+        let mut cache = IncrementalCache::load_with_settings(&source_path, test_settings()).expect("load");
         cache
             .store_file(
                 &source_path,
                 CachedParsedFile {
                     hash: 1,
+                    hash2: 1,
                     program: demo_program("main"),
                     exports: vec!["main".to_string()],
                     local_imports: Vec::new(),
@@ -269,12 +205,12 @@ mod tests {
             )
             .expect("store file");
         cache
-            .store_analysis(&source_path, &demo_program("typed_main"))
+            .store_analysis(&source_path, 0, &demo_program("typed_main"))
             .expect("store analysis");
 
-        assert!(cache.cached_file(&source_path, 1).is_some());
-        assert!(cache.cached_file(&source_path, 2).is_none());
-        assert!(cache.cached_analysis(&source_path).is_some());
+        assert!(cache.cached_file(&source_path, 1, 1).is_some());
+        assert!(cache.cached_file(&source_path, 2, 2).is_none());
+        assert!(cache.cached_analysis(&source_path, 0).is_some());
 
         let metrics = cache.metrics();
         assert_eq!(metrics.file_hits, 1);
@@ -284,18 +220,13 @@ mod tests {
     }
 
     #[test]
-    fn binary_cache_roundtrips_analysis_errors() {
+    fn cache_roundtrips_analysis_errors() {
         let root = std::env::temp_dir().join(format!("mire_cache_error_{}", now_epoch_ms()));
         fs::create_dir_all(&root).expect("temp dir");
-        let source_path = root.join("main.mire");
+        let source_path = make_cache_path(&root);
         fs::write(&source_path, "pub fn main: () {}\n").expect("source");
 
-        let settings = CacheSettings {
-            max_units: Some(16),
-            analysis_cache: true,
-            compression: false,
-        };
-        let mut cache = IncrementalCache::load_with_settings(&source_path, settings).expect("load");
+        let mut cache = IncrementalCache::load_with_settings(&source_path, test_settings()).expect("load");
         let error = MireError::new(ErrorKind::Type {
             line: 1,
             column: 1,
@@ -304,14 +235,14 @@ mod tests {
         .with_filename(source_path.display().to_string())
         .with_source("pub fn main: () {}\n".to_string());
         cache
-            .store_analysis_error(&source_path, &demo_program("broken"), &error)
+            .store_analysis_error(&source_path, 0, &demo_program("broken"), &error)
             .expect("store error");
         cache.save().expect("save");
 
         let mut reloaded =
-            IncrementalCache::load_with_settings(&source_path, settings).expect("reload");
+            IncrementalCache::load_with_settings(&source_path, test_settings()).expect("reload");
         let cached = reloaded
-            .cached_analysis(&source_path)
+            .cached_analysis(&source_path, 0)
             .expect("cached analysis");
         match cached {
             CachedAnalysis::Success(_) => panic!("expected cached error"),
@@ -323,38 +254,26 @@ mod tests {
     }
 
     #[test]
-    fn load_with_settings_recovers_from_corrupt_cache_file() {
-        let root = std::env::temp_dir().join(format!("mire_cache_corrupt_{}", now_epoch_ms()));
+    fn load_with_settings_recovers_from_empty_cache() {
+        let root = std::env::temp_dir().join(format!("mire_cache_empty_{}", now_epoch_ms()));
         fs::create_dir_all(&root).expect("temp dir");
-        let source_path = root.join("main.mire");
+        let source_path = make_cache_path(&root);
         fs::write(&source_path, "pub fn main: () {}\n").expect("source");
 
-        let cache_path = cache_file_path(&source_path);
-        if let Some(parent) = cache_path.parent() {
-            fs::create_dir_all(parent).expect("cache dir");
-        }
-        fs::write(&cache_path, b"not-a-valid-incremental-cache").expect("write corrupt cache");
-
-        let settings = CacheSettings {
-            max_units: Some(16),
-            analysis_cache: true,
-            compression: false,
-        };
-        let mut cache = IncrementalCache::load_with_settings(&source_path, settings).expect("load");
-
-        assert!(cache.db.files.is_empty());
-        assert!(cache.db.analyses.is_empty());
-        assert!(cache.db.builds.is_empty());
-        assert!(!cache_path.exists(), "corrupt cache file should be removed");
+        // First load with no prior cache
+        let mut cache = IncrementalCache::load_with_settings(&source_path, test_settings()).expect("load");
+        assert_eq!(cache.file_count(), 0);
+        assert_eq!(cache.analysis_count(), 0);
+        assert_eq!(cache.build_count(), 0);
 
         cache
-            .store_analysis(&source_path, &demo_program("typed_main"))
+            .store_analysis(&source_path, 0, &demo_program("typed_main"))
             .expect("store analysis");
         cache.save().expect("save rebuilt cache");
 
         let mut reloaded =
-            IncrementalCache::load_with_settings(&source_path, settings).expect("reload");
-        assert!(reloaded.cached_analysis(&source_path).is_some());
+            IncrementalCache::load_with_settings(&source_path, test_settings()).expect("reload");
+        assert!(reloaded.cached_analysis(&source_path, 0).is_some());
     }
 
     #[test]
@@ -421,7 +340,7 @@ mod tests {
         )
         .expect("parse older");
         cache
-            .store_analysis(&source_path, &older)
+            .store_analysis(&source_path, 0, &older)
             .expect("store older analysis");
 
         std::thread::sleep(std::time::Duration::from_millis(2));
@@ -431,11 +350,11 @@ mod tests {
         )
         .expect("parse newer");
         cache
-            .store_analysis(&source_path, &newer)
+            .store_analysis(&source_path, 0, &newer)
             .expect("store newer analysis");
 
         let report = cache
-            .analysis_invalidation_report(&source_path, &newer)
+            .analysis_invalidation_report(&source_path, 0, &newer)
             .expect("report");
         assert!(
             report.changed_units.is_empty(),

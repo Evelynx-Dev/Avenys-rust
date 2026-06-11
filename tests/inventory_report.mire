@@ -1,6 +1,6 @@
-load lists as lists
-load math as math
-load strings as strings
+load kioto::lists as lists
+load kioto::math as math
+load kioto::strings as strings
 
 pub fn main: () {
 set counts = [] :vec[i64] mut

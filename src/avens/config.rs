@@ -77,12 +77,43 @@ pub struct BuildResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MireManifest {
     #[serde(alias = "package")]
+    #[serde(alias = "owl")]
     pub project: MireProject,
     #[serde(default)]
     pub cache: Option<MireCacheConfig>,
     #[serde(default)]
     #[serde(alias = "imports")]
     pub dependencies: MireDependencies,
+    #[serde(default)]
+    pub exports: Option<ExportsSection>,
+    #[serde(default)]
+    pub bootstrap: Option<BootstrapConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ExportsSection {
+    #[serde(flatten)]
+    pub entries: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BootstrapConfig {
+    #[serde(default = "default_std_package")]
+    pub std_package: String,
+    pub std_entry: Option<String>,
+}
+
+fn default_std_package() -> String {
+    "kioto".to_string()
+}
+
+impl Default for BootstrapConfig {
+    fn default() -> Self {
+        Self {
+            std_package: default_std_package(),
+            std_entry: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -101,9 +132,26 @@ pub enum MireDependency {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MireProject {
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub version: String,
+    #[serde(default = "default_entry")]
     pub entry: String,
+}
+
+fn default_entry() -> String {
+    "mod.mire".to_string()
+}
+
+impl Default for MireProject {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            version: String::new(),
+            entry: default_entry(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

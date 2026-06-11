@@ -1,4 +1,4 @@
-load lists
+load kioto::lists
 
 set arr = [] :vec[i64] mut
 set i = 0 :i64 mut

@@ -1,5 +1,5 @@
-load lists as lists
-load time as time
+load kioto::lists as lists
+load kioto::time as time
 
 pub fn main: () {
 set started = time.mark() :i64 mut

@@ -179,18 +179,23 @@ pub(super) fn hash_statement(statement: &Statement, hasher: &mut FxHasher) {
             path,
             alias,
             items,
-            is_local,
         } => {
             hasher.write_u8(23);
             path.hash(hasher);
             alias.hash(hasher);
             items.hash(hasher);
-            is_local.hash(hasher);
         }
-        Statement::Module { name, body } => {
+        Statement::Module { name } => {
             hasher.write_u8(24);
             name.hash(hasher);
-            hash_statements(body, hasher);
+        }
+        Statement::Use { path } => {
+            hasher.write_u8(22);
+            path.hash(hasher);
+        }
+        Statement::UseModule { name } => {
+            hasher.write_u8(33);
+            name.hash(hasher);
         }
         Statement::Drop { value } => {
             hasher.write_u8(25);

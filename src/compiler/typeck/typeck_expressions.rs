@@ -169,9 +169,21 @@ impl TypeChecker {
         data_type: &mut DataType,
     ) -> Result<Option<DataType>> {
         if let Some(sig) = self.functions.get(name).cloned() {
-            let resolved = self.resolve_function_call(name, &sig, arg_types, type_args)?;
-            *data_type = resolved.clone();
-            return Ok(Some(resolved));
+            match self.resolve_function_call(name, &sig, arg_types, type_args) {
+                Ok(resolved) => {
+                    *data_type = resolved.clone();
+                    return Ok(Some(resolved));
+                }
+                Err(err) => {
+                    if self.builtin_returns.contains_key(name) {
+                        // User-defined function signature didn't match but a
+                        // builtin exists (e.g. lists.len). Fall through to try
+                        // the builtin return type, which may be more permissive.
+                    } else {
+                        return Err(err);
+                    }
+                }
+            }
         }
 
         {
@@ -182,10 +194,17 @@ impl TypeChecker {
                         break;
                     }
                     if let Some(sig) = self.functions.get(&next).cloned() {
-                        let resolved =
-                            self.resolve_function_call(&next, &sig, arg_types, type_args)?;
-                        *data_type = resolved.clone();
-                        return Ok(Some(resolved));
+                        match self.resolve_function_call(&next, &sig, arg_types, type_args) {
+                            Ok(resolved) => {
+                                *data_type = resolved.clone();
+                                return Ok(Some(resolved));
+                            }
+                            Err(err) => {
+                                if !self.builtin_returns.contains_key(&next) {
+                                    return Err(err);
+                                }
+                            }
+                        }
                     }
                     stripped = next;
                 } else {

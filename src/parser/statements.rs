@@ -20,8 +20,27 @@ impl Parser {
 
         match self.peek().ttype {
             TokenType::Load => self.parse_load_statement(),
+            TokenType::Module => self.parse_module_statement(),
             TokenType::Set => self.parse_set_statement(),
-            TokenType::Use => Ok(Statement::Expression(self.parse_use_expr()?)),
+            TokenType::Use => {
+                if self.peek_n(1).ttype == TokenType::Ident {
+                    let is_plain = matches!(
+                        self.peek_n(2).ttype,
+                        TokenType::Newline | TokenType::Eof
+                    );
+                    let after_path = self.peek_after_double_colon_chain(1);
+                    let is_path = after_path.is_some() && after_path != Some(TokenType::Lparen);
+                    if is_path {
+                        Ok(Statement::Use { path: self.parse_use_path()? })
+                    } else if is_plain {
+                        Ok(Statement::UseModule { name: self.parse_use_module_name()? })
+                    } else {
+                        Ok(Statement::Expression(self.parse_use_expr()?))
+                    }
+                } else {
+                    Ok(Statement::Expression(self.parse_use_expr()?))
+                }
+            }
             TokenType::Pub | TokenType::Priv => {
                 let visibility = self.parse_visibility()?;
                 match self.peek().ttype {
@@ -239,7 +258,9 @@ impl Parser {
         for (param_name, _) in &params {
             self.declare(param_name);
         }
+        self.function_body_depth += 1;
         let body = self.parse_block()?;
+        self.function_body_depth -= 1;
         self.pop_scope();
         self.expect_block_close()?;
         self.pop_type_param_scope();
@@ -780,6 +801,17 @@ impl Parser {
         }
         let expr = self.parse_expression()?;
         Ok(Statement::Return(Some(expr)))
+    }
+
+    fn parse_module_statement(&mut self) -> Result<Statement> {
+        self.expect(TokenType::Module)?;
+        let name = self.expect_ident()?;
+        Ok(Statement::Module { name })
+    }
+
+    fn parse_use_module_name(&mut self) -> Result<String> {
+        self.expect(TokenType::Use)?;
+        self.expect_ident()
     }
 
     fn parse_block(&mut self) -> Result<Vec<Statement>> {

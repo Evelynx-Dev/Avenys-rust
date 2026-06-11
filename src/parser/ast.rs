@@ -579,14 +579,18 @@ pub enum Statement {
         instructions: Vec<(String, Expression)>,
     },
     Load {
-        path: String,
+        path: Vec<String>,
         alias: Option<String>,
         items: Option<Vec<String>>,
-        is_local: bool,
+    },
+    UseModule {
+        name: String,
+    },
+    Use {
+        path: Vec<String>,
     },
     Module {
         name: String,
-        body: Vec<Statement>,
     },
     Drop {
         value: Expression,

@@ -383,9 +383,6 @@ impl SemanticModelBuilder {
                     self.visit_expression(expr);
                 }
             }
-            Statement::Module { body, .. } => {
-                self.with_scope(|builder| builder.visit_statements(body));
-            }
             Statement::Query { bindings, ops, .. } => {
                 self.with_scope(|builder| {
                     for binding in bindings {
@@ -437,7 +434,10 @@ impl SemanticModelBuilder {
             | Statement::ExternLib { .. }
             | Statement::ExternFunction { .. }
             | Statement::Load { .. }
-            | Statement::Enum { .. } => {}
+            | Statement::Enum { .. }
+            | Statement::Module { .. }
+            | Statement::Use { .. }
+            | Statement::UseModule { .. } => {}
         }
     }
 

@@ -1,13 +1,8 @@
-load helpers
-load math_utils
-load nested
+load kioto::math::basic
+load kioto::strings
 
 pub fn main: () {
-    set a = helpers::add(3 4)
-    set b = math_utils::square(a)
-    set c = nested::deep_value()
-    use dasu(a + b + c)
-
-    set msg = nested::from_nested()
-    use dasu(msg)
+    set a = math.basic.add(3 4)
+    set b = math.basic.mul(a a)
+    use dasu(a + b)
 }
