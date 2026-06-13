@@ -10,6 +10,23 @@ struct MirLower {
     next_temp: usize,
     vars: HashMap<String, usize>,
     var_types: HashMap<String, DataType>,
+    struct_types: HashMap<String, Vec<(String, DataType)>>,
+}
+
+fn extract_struct_types(program: &Program) -> HashMap<String, Vec<(String, DataType)>> {
+    let mut struct_types = HashMap::new();
+    for stmt in &program.statements {
+        if let Statement::Type { name, fields, .. } = stmt {
+            let mut field_list = Vec::new();
+            for f in fields {
+                if let Statement::Let { name, data_type, .. } = f {
+                    field_list.push((name.clone(), data_type.clone()));
+                }
+            }
+            struct_types.insert(name.clone(), field_list);
+        }
+    }
+    struct_types
 }
 
 pub fn lower_program(program: &Program) -> MirProgram {
@@ -17,6 +34,7 @@ pub fn lower_program(program: &Program) -> MirProgram {
     let mut entry_point = None;
     let mut extern_functions = Vec::new();
     let mut seen_functions = HashSet::new();
+    let struct_types = extract_struct_types(program);
 
     for stmt in &program.statements {
         if let Statement::ExternFunction { name, params, return_type, .. } = stmt {
@@ -53,6 +71,7 @@ pub fn lower_program(program: &Program) -> MirProgram {
                     next_temp: 0,
                     vars: HashMap::new(),
                     var_types: HashMap::new(),
+                    struct_types: struct_types.clone(),
                 };
 
                 lower.lower_function_body(body);
@@ -97,6 +116,7 @@ pub fn lower_program(program: &Program) -> MirProgram {
                             next_temp: 0,
                             vars: HashMap::new(),
                             var_types: HashMap::new(),
+                            struct_types: struct_types.clone(),
                         };
 
                         lower.lower_function_body(body);
@@ -114,6 +134,7 @@ pub fn lower_program(program: &Program) -> MirProgram {
 
     let mut mp = MirProgram::new(functions, entry_point);
     mp.extern_functions = extern_functions;
+    mp.struct_types = struct_types;
     mp
 }
 
@@ -338,6 +359,8 @@ impl MirLower {
                     "<=" => MirOp::ICmp(MirCmp::Le, l, r),
                     ">" => MirOp::ICmp(MirCmp::Gt, l, r),
                     ">=" => MirOp::ICmp(MirCmp::Ge, l, r),
+                    "&&" => MirOp::And(l, r),
+                    "||" => MirOp::Or(l, r),
                     _ => MirOp::Add(l, r),
                 };
                 let last = self.func.blocks.len() - 1;
@@ -390,6 +413,13 @@ impl MirLower {
                     loc,
                 );
                 MirValue::temp(loaded)
+            }
+            Expression::Call {
+                name,
+                args,
+                ..
+            } if name == "__type_matches" => {
+                MirValue::Const(MirConst::Bool(true))
             }
             Expression::Call {
                 name,
@@ -466,6 +496,75 @@ impl MirLower {
                 );
                 MirValue::temp(loaded)
             }
+            Expression::NamedArg { value, .. } => {
+                self.lower_expression(value)
+            }
+            Expression::MemberAccess { target, member, data_type } => {
+                let struct_name = self.get_struct_name(target);
+                if let Some(struct_name) = struct_name {
+                    let norm_name = struct_name
+                        .split_once('[')
+                        .map(|(base, _)| base.to_string())
+                        .unwrap_or_else(|| struct_name.clone());
+                    if let Some(fields) = self.struct_types.get(&norm_name) {
+                        if let Some(field_index) =
+                            fields.iter().position(|(name, _)| name == member)
+                        {
+                            let target_val = self.lower_expression(target);
+                            let last = self.func.blocks.len() - 1;
+                            let gep_result = self.new_temp();
+                            self.func.blocks[last].push(
+                                Some(gep_result),
+                                MirOp::Gep(
+                                    target_val,
+                                    vec![
+                                        MirValue::Const(MirConst::Int(0)),
+                                        MirValue::Const(MirConst::Int(field_index as i64)),
+                                    ],
+                                    norm_name.clone(),
+                                ),
+                                loc,
+                            );
+                            let load_result = self.new_temp();
+                            self.func.blocks[last].push(
+                                Some(load_result),
+                                MirOp::Load(
+                                    MirValue::temp(gep_result),
+                                    MirType {
+                                        data_type: data_type.clone(),
+                                    },
+                                ),
+                                loc,
+                            );
+                            return MirValue::temp(load_result);
+                        }
+                    }
+                }
+                MirValue::Const(MirConst::None)
+            }
+            Expression::Tuple { elements, data_type } => {
+                match data_type {
+                    DataType::StructNamed(name) => {
+                        let mir_args: Vec<MirValue> =
+                            elements.iter().map(|e| self.lower_expression(e)).collect();
+                        let result = self.new_temp();
+                        let last = self.func.blocks.len() - 1;
+                        self.func.blocks[last].push(
+                            Some(result),
+                            MirOp::Call(
+                                name.clone(),
+                                mir_args,
+                                MirType {
+                                    data_type: data_type.clone(),
+                                },
+                            ),
+                            loc,
+                        );
+                        MirValue::temp(result)
+                    }
+                    _ => MirValue::Const(MirConst::None),
+                }
+            }
             Expression::EnumVariantPath { .. } | Expression::EnumVariant { .. } => {
                 MirValue::Const(MirConst::Int(0))
             }
@@ -480,6 +579,18 @@ impl MirLower {
             }
         }
         expr
+    }
+
+    fn get_struct_name(&self, expr: &Expression) -> Option<String> {
+        match expr {
+            Expression::Identifier(id) => {
+                self.var_types.get(&id.name).and_then(|t| match t {
+                    DataType::StructNamed(name) => Some(name.clone()),
+                    _ => None,
+                })
+            }
+            _ => None,
+        }
     }
 
     fn lower_literal(&self, lit: &Literal) -> MirValue {

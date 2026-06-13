@@ -4,6 +4,7 @@ pub mod lower;
 pub mod optimize;
 
 use crate::parser::ast::DataType;
+use std::collections::HashMap;
 
 const FNV_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
 const FNV_PRIME: u64 = 0x100000001b3;
@@ -21,6 +22,7 @@ pub struct MirProgram {
     pub functions: Vec<MirFunction>,
     pub entry_point: Option<String>,
     pub extern_functions: Vec<MirExternFunction>,
+    pub struct_types: HashMap<String, Vec<(String, DataType)>>,
 }
 
 #[derive(Debug, Clone)]
@@ -93,10 +95,12 @@ pub enum MirOp {
     Mul(MirValue, MirValue),
     SDiv(MirValue, MirValue),
     Shl(MirValue, MirValue),
+    And(MirValue, MirValue),
+    Or(MirValue, MirValue),
     ICmp(MirCmp, MirValue, MirValue),
     FCmp(MirCmp, MirValue, MirValue),
     Call(String, Vec<MirValue>, MirType),
-    Gep(MirValue, Vec<MirValue>),
+    Gep(MirValue, Vec<MirValue>, String),
     PtrToInt(MirValue, MirType),
     IntToPtr(MirValue, MirType),
     BitCast(MirValue, MirType),
@@ -131,6 +135,7 @@ impl MirProgram {
             functions,
             entry_point,
             extern_functions: Vec::new(),
+            struct_types: HashMap::new(),
         }
     }
 }

@@ -27,6 +27,8 @@ fn max_temp_in_op(op: &MirOp, max: &mut usize) {
         | MirOp::Mul(d, s)
         | MirOp::SDiv(d, s)
         | MirOp::Shl(d, s)
+        | MirOp::And(d, s)
+        | MirOp::Or(d, s)
         | MirOp::ICmp(_, d, s)
         | MirOp::FCmp(_, d, s) => {
             max_temp_in_value(d, max);
@@ -37,7 +39,7 @@ fn max_temp_in_op(op: &MirOp, max: &mut usize) {
                 max_temp_in_value(arg, max);
             }
         }
-        MirOp::Gep(base, args) => {
+        MirOp::Gep(base, args, _name) => {
             max_temp_in_value(base, max);
             for arg in args {
                 max_temp_in_value(arg, max);
@@ -227,9 +229,11 @@ fn remap_op(op: &MirOp, temp_offset: usize, callee: &MirFunction) -> MirOp {
         MirOp::Mul(l, r) => MirOp::Mul(map(l), map(r)),
         MirOp::SDiv(l, r) => MirOp::SDiv(map(l), map(r)),
         MirOp::Shl(l, r) => MirOp::Shl(map(l), map(r)),
+        MirOp::And(l, r) => MirOp::And(map(l), map(r)),
+        MirOp::Or(l, r) => MirOp::Or(map(l), map(r)),
         MirOp::ICmp(c, l, r) => MirOp::ICmp(c.clone(), map(l), map(r)),
         MirOp::FCmp(c, l, r) => MirOp::FCmp(c.clone(), map(l), map(r)),
-        MirOp::Gep(v, i) => MirOp::Gep(map(v), i.iter().map(|x| map(x)).collect()),
+        MirOp::Gep(v, i, n) => MirOp::Gep(map(v), i.iter().map(|x| map(x)).collect(), n.clone()),
         MirOp::PtrToInt(v, t) => MirOp::PtrToInt(map(v), t.clone()),
         MirOp::IntToPtr(v, t) => MirOp::IntToPtr(map(v), t.clone()),
         MirOp::BitCast(v, t) => MirOp::BitCast(map(v), t.clone()),

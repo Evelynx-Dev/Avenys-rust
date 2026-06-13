@@ -316,6 +316,8 @@ fn replace_value_in_op(op: &mut MirOp, copies: &HashMap<usize, MirValue>) -> usi
         | MirOp::Mul(l, r)
         | MirOp::SDiv(l, r)
         | MirOp::Shl(l, r)
+        | MirOp::And(l, r)
+        | MirOp::Or(l, r)
         | MirOp::ICmp(_, l, r)
         | MirOp::FCmp(_, l, r) => {
             replace(l, copies, &mut count);
@@ -326,7 +328,7 @@ fn replace_value_in_op(op: &mut MirOp, copies: &HashMap<usize, MirValue>) -> usi
                 replace(a, copies, &mut count);
             }
         }
-        MirOp::Gep(base, indices) => {
+        MirOp::Gep(base, indices, _name) => {
             replace(base, copies, &mut count);
             for i in indices {
                 replace(i, copies, &mut count);
@@ -414,6 +416,8 @@ fn collect_uses(op: &MirOp, used: &mut HashSet<usize>) {
         | MirOp::Mul(l, r)
         | MirOp::SDiv(l, r)
         | MirOp::Shl(l, r)
+        | MirOp::And(l, r)
+        | MirOp::Or(l, r)
         | MirOp::ICmp(_, l, r)
         | MirOp::FCmp(_, l, r) => {
             collect_val(l, used);
@@ -424,7 +428,7 @@ fn collect_uses(op: &MirOp, used: &mut HashSet<usize>) {
                 collect_val(a, used);
             }
         }
-        MirOp::Gep(base, indices) => {
+        MirOp::Gep(base, indices, _name) => {
             collect_val(base, used);
             for i in indices {
                 collect_val(i, used);

@@ -19,7 +19,6 @@ fn struct_field_llvm_type(dt: &DataType) -> &'static str {
 
 fn generate_runtime_declarations(ir: &str) -> String {
     let mut out = String::new();
-    // For function declarations, check for "declare @" prefix to distinguish from "call @"
     let needed: &[(&str, &str)] = &[
         ("declare ptr @dasu(", "declare ptr @dasu(i64)"),
         ("@.fmt_str =", "@.fmt_str = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\""),
@@ -29,6 +28,11 @@ fn generate_runtime_declarations(ir: &str) -> String {
         ("@.fmt_bool_true =", "@.fmt_bool_true = private unnamed_addr constant [5 x i8] c\"true\\00\""),
         ("@.fmt_bool_false =", "@.fmt_bool_false = private unnamed_addr constant [6 x i8] c\"false\\00\""),
         ("@.fmt_i32 =", "@.fmt_i32 = private unnamed_addr constant [4 x i8] c\"%d\\0A\\00\""),
+        ("declare ptr @rt_i64_to_string(", "declare ptr @rt_i64_to_string(i64)"),
+        ("declare ptr @rt_f64_to_string(", "declare ptr @rt_f64_to_string(double)"),
+        ("declare ptr @rt_bool_to_string(", "declare ptr @rt_bool_to_string(i64)"),
+        ("declare i32 @printf(", "declare i32 @printf(ptr, ...)"),
+        ("declare ptr @rt_string_concat(", "declare ptr @rt_string_concat(ptr, ptr)"),
         ("@.argc =", "@.argc = global i32 0"),
         ("@.argv =", "@.argv = global ptr null"),
     ];
@@ -431,6 +435,18 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
             let opt_count = optimize(&mut mir);
             if options.debug_dump && opt_count > 0 {
                 eprintln!("[MIR] applied {} optimizations", opt_count);
+            }
+            if options.debug_dump && mir.functions.iter().any(|f| f.name.contains("complex")) {
+                for f in &mir.functions {
+                    eprintln!("[MIR] function: {} ({} blocks)", f.name, f.blocks.len());
+                    for b in &f.blocks {
+                        eprintln!("  block {} ({}):", b.id, b.label);
+                        for inst in &b.insts {
+                            eprintln!("    {:?} -> {:?}", inst.result, inst.op);
+                        }
+                        eprintln!("    term: {:?}", b.terminator);
+                    }
+                }
             }
             let ir = mir_to_llvm(&mir).0;
             if let Err(e) = cache.store_cached_mir_fn(
