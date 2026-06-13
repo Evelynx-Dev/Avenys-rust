@@ -129,6 +129,10 @@ fn llvm_type_str(dt: &DataType) -> String {
         DataType::F64 => "double".to_string(),
         DataType::Bool => "i1".to_string(),
         DataType::None => "i64".to_string(),
+        DataType::Array { element_type, size } => {
+            format!("[{} x {}]", size, llvm_type_str(element_type))
+        }
+        DataType::Slice { element_type } => llvm_type_str(element_type),
         _ => "ptr".to_string(),
     }
 }
@@ -515,11 +519,17 @@ fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
                     format!("i32 {}", v)
                 })
                 .collect();
-            let struct_ty = ctx
-                .struct_types
-                .get(struct_name)
-                .map(|fields| render_struct_llvm_type(fields))
-                .unwrap_or_else(|| "ptr".to_string());
+            let struct_ty = if struct_name.starts_with("struct:") {
+                let name = &struct_name[7..];
+                ctx.struct_types
+                    .get(name)
+                    .map(|fields| render_struct_llvm_type(fields))
+                    .unwrap_or_else(|| "ptr".to_string())
+            } else if ctx.struct_types.contains_key(struct_name) {
+                render_struct_llvm_type(ctx.struct_types.get(struct_name).unwrap())
+            } else {
+                struct_name.clone()
+            };
             format!(
                 "%t{} = getelementptr inbounds {}, ptr {}, {}",
                 result,
@@ -533,6 +543,12 @@ fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
             let llty = llvm_type_str(&ty.data_type);
             let result = tmp_result(ctx, &llty, inst.result);
             format!("%t{} = zext i1 {} to {}", result, v, llty)
+        }
+        MirOp::Trunc(val, ty) => {
+            let (v, src_t) = resolve_typed(val, ctx);
+            let dst_t = llvm_type_str(&ty.data_type);
+            let result = tmp_result(ctx, &dst_t, inst.result);
+            format!("%t{} = trunc {} {} to {}", result, src_t, v, dst_t)
         }
         MirOp::Copy(v) => {
             let (src, ty) = resolve_typed(v, ctx);

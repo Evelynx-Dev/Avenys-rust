@@ -363,7 +363,14 @@ impl TypeChecker {
         match expr {
             Expression::Identifier(Identifier { name, .. }) => self
                 .lookup_ref_type(name)
-                .or_else(|| self.lookup_var(name).map(|(data_type, _)| data_type)),
+                .or_else(|| {
+                    self.lookup_var(name).and_then(|(data_type, _)| match &data_type {
+                        DataType::Ref { inner } | DataType::RefMut { inner } => {
+                            Some(*inner.clone())
+                        }
+                        _ => Some(data_type),
+                    })
+                }),
             Expression::Reference { expr, .. } => self.referenced_type_for_expr(expr),
             Expression::Dereference { expr, .. } => self.referenced_type_for_expr(expr),
             _ => Some(self.expression_type_hint(expr)),
