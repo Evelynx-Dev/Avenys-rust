@@ -2,6 +2,53 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.11.13] - 2026-06-13
+
+### Fixed
+- MIR codegen: temp ID space collision — `tmp_extra` (`%e` prefix) and
+  `tmp_result` (`%t{mir_id}`) now use separate counters, preventing MIR
+  result temps from aliasing LLVM extra temps.
+- MIR codegen: struct metadata pipeline — `struct_types` collected from
+  `Statement::Type` during lowering and threaded through `MirProgram` /
+  `MirLower` / `LlvmCtx` so field lookup works in codegen.
+- MIR codegen: GEP fallback now uses `struct_name` directly as LLVM type
+  (instead of hardcoded `"ptr"`), plus `struct:` prefix for explicit struct
+  types, enabling array element GEP via element-type strings.
+- MIR codegen: `Trunc` op now emits `trunc <src> <val> to <dst>` instead of
+  falling through to the no-op catch-all.
+- MIR codegen: `Array` and `Slice` data types mapped to `[N x T]` / element
+  type in `llvm_type_str`, enabling stack-allocated arrays of the correct size.
+- MIR codegen: `And`, `Or` on `i1` values now work correctly (no `icmp ne`
+  double-negation).
+- Type checker: `referenced_type_for_expr` now unwraps `Ref { inner }` /
+  `RefMut { inner }` when falling back to `lookup_var`, fixing `*value`
+  returning the reference type instead of the referenced type for function
+  parameters of `&T` type.
+
+### Added
+- MIR lowerer: `Expression::Index` lowered as GEP + Load (array reads).
+- MIR lowerer: `Expression::Reference` lowered as pointer return (skips Load).
+- MIR lowerer: `Expression::Dereference` lowered as Load from pointer.
+- MIR lowerer: `Expression::UnaryOp` lowered (negation `-` as `Sub(0, x)`,
+  logical not `!` as `ICmp(Eq, x, false)`).
+- MIR lowerer: `Expression::List` for `Array` data type — stack-allocates the
+  array and initializes each element (used in `let x = [a b c] :arr[T N]`).
+- MIR lowerer: `Statement::For` lowered as while-loop with iterator alloca,
+  index counter, `rt_list_len` call, GEP + Load for element access, and index
+  variable registration.
+- MIR lowerer: `Statement::Unsafe` lowered by forwarding body statements.
+- MIR lowerer: `AssignmentTarget::Index` — GEP + Store for array writes
+  (e.g. `arr at i = val`).
+- MIR lowerer: `AssignmentTarget::Field` — load struct heap pointer, GEP +
+  Store for struct field writes (e.g. `obj.field = val`).
+- MIR lowerer: `get_target_elem_type()` helper to extract the LLVM element
+  type from a variable's `Array`/`Vector`/`Slice` data type.
+- MIR lowerer: `llvm_elem_type_str()` standalone function for LLVM type
+  strings from `DataType`.
+- Struct metadata: `MirProgram.struct_types` field (`HashMap<String,
+  Vec<(String, DataType)>>`), extracted from `Statement::Type` in
+  `extract_struct_types()` and passed to both lowerer and codegen.
+
 ## [3.11.12] - 2026-06-04
 
 ### Fixed

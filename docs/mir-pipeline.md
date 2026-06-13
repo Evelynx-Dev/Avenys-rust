@@ -20,7 +20,7 @@ Core data structures — all derive `Debug, Clone`:
 | `MirInst` | `result: Option<usize>`, `op: MirOp`, `loc` |
 | `MirValue` | `Const(MirConst)`, `Temp(usize)`, `Param(String)`, `Global(String)` |
 | `MirConst` | `Int(i64)`, `Float(f64)`, `Bool(bool)`, `Char(char)`, `Str(String)`, `None` |
-| `MirOp` | Alloca, Load, Store, Add, Sub, Mul, SDiv, Shl, ICmp, FCmp, Call, Gep, PtrToInt, IntToPtr, BitCast, ZExt, Trunc, Phi, Select, Copy |
+| `MirOp` | Alloca, Load, Store, Add, Sub, Mul, SDiv, Shl, And, Or, ICmp, FCmp, Call, Gep, PtrToInt, IntToPtr, BitCast, ZExt, Trunc, Phi, Select, Copy |
 | `MirCmp` | Eq, Ne, Lt, Le, Gt, Ge |
 | `MirTerminator` | `Br(usize)`, `BrCond(MirValue, usize, usize)`, `Ret(Option<MirValue>)`, `Unreachable` |
 | `MirExternFunction` | External function signatures (name, params, return type) |
@@ -38,22 +38,33 @@ Core data structures — all derive `Debug, Clone`:
 | Return | ✅ |
 | If/else | ✅ |
 | While loops | ✅ |
-| Binary ops (+, -, *, /, ==, !=, <, <=, >, >=) | ✅ |
-| Unary ops | ❌ |
+| For loops (with optional index variable) | ✅ (lowered to while-loop with counter) |
+| Binary ops (+, -, *, /, ==, !=, <, <=, >, >=, &&, \|\|) | ✅ |
+| Unary ops (-, !) | ✅ |
 | Function calls (user + builtins) | ✅ (builtins emit as regular calls) |
 | Match expressions | ✅ (alloca + store per case + load) |
+| If-expressions (`__if_expr`) | ✅ (BrCond + phi-like store/load) |
 | Literals (int, float, bool, char, str) | ✅ |
-| Variable references | ✅ |
+| Variable references | ✅ (type-aware Load via `var_types`) |
 | Extern functions | ✅ (collected as `MirExternFunction`) |
-| Member access | ❌ |
-| Index expressions | ❌ |
+| Index expressions (array/map read) | ✅ (GEP + Load) |
+| Index assignment (array/map write) | ✅ (GEP + Store) |
+| Member access (struct field read) | ✅ (GEP + Load via struct metadata) |
+| Member assignment (struct field write) | ✅ (load heap ptr + GEP + Store) |
+| Struct construction via Tuple expr | ✅ (emitted as `Call(struct_name, args)`) |
+| Reference (`&expr`) | ✅ (returns alloca ptr, skips Load) |
+| Dereference (`*expr`) | ✅ (Load from pointer) |
+| Unsafe blocks | ✅ (forwards body) |
 | Closures | ❌ |
-| Reference/Dereference | ❌ |
 | Pipeline (`|>`) | ❌ |
 | Enum variants | ⚠️ Returns dummy `Const(Int(0))` |
 | Try/Ok/Err | ❌ |
+| Dict/Map literals | ❌ (returns `Const(None)`) |
 
 Var types tracked via `var_types: HashMap<String, DataType>` during lowering.
+Struct metadata collected by `extract_struct_types()` and passed as
+`struct_types: HashMap<String, Vec<(String, DataType)>>` through `MirProgram` /
+`MirLower` / `LlvmCtx`.
 
 ### Phase 3: Codegen (`src/compiler/mir/codegen.rs`)
 
@@ -68,17 +79,24 @@ Returns LLVM IR text + extern libs (currently always empty).
 | Load/Store with correct types | ✅ |
 | Integer arithmetic (add, sub, mul, sdiv, shl) | ✅ |
 | Float arithmetic (fadd, fsub, fmul, fdiv) | ✅ |
+| Mixed-type arithmetic (coerce i64→double via sitofp) | ✅ |
 | Integer comparison (icmp) | ✅ |
 | Float comparison (fcmp) | ✅ |
+| Boolean And/Or | ✅ (emits `and i1` / `or i1`) |
 | Branch / conditional branch | ✅ |
 | Return | ✅ |
 | Function calls (typed args) | ✅ |
 | ZExt bool→i64 | ✅ |
+| Trunc i64→i32 | ✅ |
 | Extern declarations from `ExternFunction` AST | ✅ |
+| Extern function name resolution (strip root namespace) | ✅ (via `split_once('.')`) |
 | SSA temp type tracking | ✅ (`temp_types`, `param_types`, `resolve_typed`) |
 | Float hex encoding | ✅ (`to_bits()` for exact bit representation) |
 | String constants | ⚠️ Returns `ptr null` |
-| GEP, Phi, Select, PtrToInt, IntToPtr, BitCast | ⚠️ Declared but not emitted for all cases |
+| GEP (struct fields, array elements) | ✅ (2-index for structs, 1-index for arrays/pointers) |
+| Phi, Select, PtrToInt, IntToPtr, BitCast | ✅ |
+| Temporary ID separation: `%e{n}` for extras, `%t{mir_id}` for results | ✅ |
+| Struct constructor calls via `Call(struct_name, ...)` | ✅ |
 | Builtins (dasu, ireru, etc.) | ❌ Not expanded inline |
 
 ### Phase 4: Optimizations (`src/compiler/mir/optimize.rs`)
@@ -141,7 +159,7 @@ Returns total number of applied transformations.
 
 3. **String constants**: `MirConst::Str` emits `ptr null` instead of `@.str = constant [N x i8] c"..."`.
 
-4. **Member access, closures, complex types**: Not lowered. Structs, enums with payloads, tuples, closures, refs are not handled.
+4. **Closures, dicts, enums with payloads**: Not fully lowered. Dict/map literals return `Const(None)`. Enum variants return `Const(Int(0))`.
 
 5. **Memory pressure**: Full `build` (compile + link via clang) can use ~4GB RAM — a pre-existing issue from clang runtime compilation, not specific to MIR.
 
