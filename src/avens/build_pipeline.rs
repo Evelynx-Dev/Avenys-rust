@@ -47,6 +47,8 @@ fn generate_runtime_declarations(ir: &str) -> String {
     let needed: &[(&str, &str)] = &[
         ("declare ptr @dasu(", "declare ptr @dasu(i64)"),
         ("declare i64 @rt_list_len(", "declare i64 @rt_list_len(ptr)"),
+        ("declare i64 @rt_strings_len(", "declare i64 @rt_strings_len(ptr)"),
+        ("declare i64 @rt_dicts_len(", "declare i64 @rt_dicts_len(ptr)"),
         ("declare ptr @rt_list_create(", "declare ptr @rt_list_create(i64, i64)"),
         ("declare ptr @rt_list_push_i64(", "declare ptr @rt_list_push_i64(ptr, i64)"),
         ("declare ptr @rt_list_push_ptr(", "declare ptr @rt_list_push_ptr(ptr, ptr)"),

@@ -968,6 +968,32 @@ impl MirLower {
             Expression::Call {
                 name,
                 args,
+                ..
+            } if name == "len" && !args.is_empty() => {
+                let arg_val = self.lower_expression(&args[0]);
+                let arg_type = extract_data_type(&args[0]);
+                let rt_name = match arg_type {
+                    DataType::Str | DataType::Ref { .. } | DataType::RefMut { .. } => "rt_strings_len",
+                    DataType::Vector { .. } | DataType::List => "rt_list_len",
+                    DataType::Map { .. } | DataType::Dict => "rt_dicts_len",
+                    _ => "rt_list_len",
+                };
+                let result = self.new_temp();
+                let last = self.current_block;
+                self.func.blocks[last].push(
+                    Some(result),
+                    MirOp::Call(
+                        rt_name.to_string(),
+                        vec![arg_val],
+                        MirType { data_type: DataType::I64 },
+                    ),
+                    loc,
+                );
+                MirValue::temp(result)
+            }
+            Expression::Call {
+                name,
+                args,
                 data_type,
                 ..
             } => {

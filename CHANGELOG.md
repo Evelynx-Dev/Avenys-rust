@@ -2,6 +2,17 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.11.22] - 2026-06-15
+
+### Fixed
+- MIR lowerer: bare `len(...)` is now dispatched to the correct runtime length
+  helper based on the argument type (`rt_strings_len`, `rt_list_len`, or
+  `rt_dicts_len`) instead of relying on ambiguous bare-name resolution that
+  could pick `strings.len` for a list. (Fixes
+  `borrowck_moves_in_if_else_are_tracked_per_branch`.)
+- Build pipeline: added LLVM declarations for `rt_strings_len()` and
+  `rt_dicts_len()`.
+
 ## [3.11.21] - 2026-06-15
 
 ### Fixed
