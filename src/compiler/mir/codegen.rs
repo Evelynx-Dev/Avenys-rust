@@ -229,10 +229,11 @@ fn tmp_extra(ctx: &mut LlvmCtx, _ty: &str) -> String {
 }
 
 fn tmp_result(ctx: &mut LlvmCtx, ty: &str, mir_id: Option<usize>) -> usize {
+    const EXTRA_TMP_OFFSET: usize = 100_000;
     let id = mir_id.unwrap_or_else(|| {
         let eid = ctx.next_extra;
         ctx.next_extra += 1;
-        eid
+        EXTRA_TMP_OFFSET + eid
     });
     let name = format!("%t{}", id);
     ctx.vars.insert(id, name);
@@ -341,21 +342,30 @@ fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
         MirOp::SDiv(l, r) => {
             let (l_str, lt) = resolve_typed(l, ctx);
             let (r_str, rt) = resolve_typed(r, ctx);
-            let ty = if lt == "double" || rt == "double" { "double" } else { "i64" };
+            let is_double = lt == "double" || rt == "double";
+            let ty = if is_double { "double" } else { "i64" };
             let result = tmp_result(ctx, ty, inst.result);
-            let op = if ty == "double" { "fdiv" } else { "sdiv" };
             let l_final = coerce_to(&l_str, &lt, &ty, ctx, &mut extra);
             let r_final = coerce_to(&r_str, &rt, &ty, ctx, &mut extra);
-            format!("%t{} = {} {} {}, {}", result, op, ty, l_final, r_final)
+            if is_double {
+                format!("%t{} = fdiv double {}, {}", result, l_final, r_final)
+            } else {
+                format!("%t{} = call i64 @rt_div_i64(i64 {}, i64 {})", result, l_final, r_final)
+            }
         }
         MirOp::SRem(l, r) => {
             let (l_str, lt) = resolve_typed(l, ctx);
             let (r_str, rt) = resolve_typed(r, ctx);
-            let ty = if lt == "double" || rt == "double" { "double" } else { "i64" };
+            let is_double = lt == "double" || rt == "double";
+            let ty = if is_double { "double" } else { "i64" };
             let result = tmp_result(ctx, ty, inst.result);
             let l_final = coerce_to(&l_str, &lt, &ty, ctx, &mut extra);
             let r_final = coerce_to(&r_str, &rt, &ty, ctx, &mut extra);
-            format!("%t{} = srem {} {}, {}", result, ty, l_final, r_final)
+            if is_double {
+                format!("%t{} = frem double {}, {}", result, l_final, r_final)
+            } else {
+                format!("%t{} = call i64 @rt_rem_i64(i64 {}, i64 {})", result, l_final, r_final)
+            }
         }
         MirOp::Shl(l, r) => {
             let (l, _lt) = resolve_typed(l, ctx);
@@ -549,8 +559,8 @@ fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
                 }
             } else {
                 // Regular function call — prefix user-defined functions with @fn_
-                let ll_ret = llvm_type_str(&ret_ty.data_type);
-                let result = tmp_result(ctx, &ll_ret, inst.result);
+                let is_void = matches!(ret_ty.data_type, DataType::None);
+                let ll_ret: String = if is_void { "void".to_string() } else { llvm_type_str(&ret_ty.data_type) };
                 let mut arg_strs = Vec::new();
                 for a in args {
                     let (v, t) = resolve_typed(a, ctx);
@@ -579,10 +589,15 @@ fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
                     });
                     stripped.unwrap_or_else(|| format!("@{}", name))
                 };
-                format!(
-                    "%t{} = call {} {}({})",
-                    result, ll_ret, fn_name, arg_strs.join(", ")
-                )
+                if is_void {
+                    format!("call void {}({})", fn_name, arg_strs.join(", "))
+                } else {
+                    let result = tmp_result(ctx, &ll_ret, inst.result);
+                    format!(
+                        "%t{} = call {} {}({})",
+                        result, ll_ret, fn_name, arg_strs.join(", ")
+                    )
+                }
             }
         }
         MirOp::Gep(base, indices, struct_name) => {

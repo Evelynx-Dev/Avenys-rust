@@ -2,6 +2,29 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.11.19] - 2026-06-15
+
+### Fixed
+- MIR lowerer: void calls no longer allocate a result temp. A call whose
+  return type is `()` now emits a `None`-result `Call` instruction and yields
+  `Const(None)`. This prevents undefined-value errors when a void call is used
+  in a return expression (e.g. `return rt_dicts_get(...)` in kioto wrappers).
+- MIR codegen: result temps allocated for instructions without an explicit MIR
+  result are now offset into a high-ID space (`%t100000+`) so they can never
+  collide with MIR-defined temps like `%t0..%tN`.
+- Runtime safety: integer division and modulo now call `rt_div_i64()` /
+  `rt_rem_i64()`, which panic with "division by zero" on zero divisors. (Fixes
+  `runtime_division_by_zero_exits_with_error`.)
+- Runtime safety: array/list indexing now calls `rt_check_bounds_i64()` before
+  the access, which panics with "index out of bounds" when the index is outside
+  `[0, len)`. (Fixes `runtime_out_of_bounds_exits_with_error`.)
+
+### Added
+- Runtime: `src/runtime/safety.c` with `rt_panic_division_by_zero()`,
+  `rt_panic_out_of_bounds()`, `rt_div_i64()`, `rt_rem_i64()`, and
+  `rt_check_bounds_i64()`.
+- Build pipeline: LLVM declarations for the new runtime safety helpers.
+
 ## [3.11.18] - 2026-06-15
 
 ### Fixed

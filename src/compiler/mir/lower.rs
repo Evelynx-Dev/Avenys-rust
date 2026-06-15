@@ -448,7 +448,49 @@ impl MirLower {
                     AssignmentTarget::Index { target, index } => {
                         let target_val = self.lower_expression(target);
                         let index_val = self.lower_expression(index);
+                        let target_type = extract_data_type(target);
                         let last = self.current_block;
+
+                        // Runtime bounds check before indexing.
+                        match &target_type {
+                            DataType::Array { size, .. } => {
+                                self.func.blocks[last].push(
+                                    None,
+                                    MirOp::Call(
+                                        "rt_check_bounds_i64".to_string(),
+                                        vec![
+                                            index_val.clone(),
+                                            MirValue::Const(MirConst::Int(*size as i64)),
+                                        ],
+                                        MirType { data_type: DataType::None },
+                                    ),
+                                    loc,
+                                );
+                            }
+                            DataType::Vector { .. } | DataType::List => {
+                                let len_val = self.new_temp();
+                                self.func.blocks[last].push(
+                                    Some(len_val),
+                                    MirOp::Call(
+                                        "rt_list_len".to_string(),
+                                        vec![target_val.clone()],
+                                        MirType { data_type: DataType::I64 },
+                                    ),
+                                    loc,
+                                );
+                                self.func.blocks[last].push(
+                                    None,
+                                    MirOp::Call(
+                                        "rt_check_bounds_i64".to_string(),
+                                        vec![index_val.clone(), MirValue::temp(len_val)],
+                                        MirType { data_type: DataType::None },
+                                    ),
+                                    loc,
+                                );
+                            }
+                            _ => {}
+                        }
+
                         let gep = self.new_temp();
                         let elem_ty = self.get_target_elem_type(target);
                         self.func.blocks[last].push(
@@ -981,20 +1023,35 @@ impl MirLower {
                         .unwrap_or_else(|| name.clone());
                     (resolved, mir_args)
                 };
-                let result = self.new_temp();
                 let last = self.current_block;
-                self.func.blocks[last].push(
-                    Some(result),
-                    MirOp::Call(
-                        resolved_name,
-                        mir_args,
-                        MirType {
-                            data_type: data_type.clone(),
-                        },
-                    ),
-                    loc,
-                );
-                MirValue::temp(result)
+                if matches!(data_type, DataType::None) {
+                    self.func.blocks[last].push(
+                        None,
+                        MirOp::Call(
+                            resolved_name,
+                            mir_args,
+                            MirType {
+                                data_type: data_type.clone(),
+                            },
+                        ),
+                        loc,
+                    );
+                    MirValue::Const(MirConst::None)
+                } else {
+                    let result = self.new_temp();
+                    self.func.blocks[last].push(
+                        Some(result),
+                        MirOp::Call(
+                            resolved_name,
+                            mir_args,
+                            MirType {
+                                data_type: data_type.clone(),
+                            },
+                        ),
+                        loc,
+                    );
+                    MirValue::temp(result)
+                }
             }
             Expression::Match {
                 value,
@@ -1196,10 +1253,53 @@ impl MirLower {
                     _ => MirValue::Const(MirConst::None),
                 }
             }
+
             Expression::Index { target, index, data_type } => {
                 let target_val = self.lower_expression(target);
                 let index_val = self.lower_expression(index);
+                let target_type = extract_data_type(target);
                 let last = self.current_block;
+
+                // Runtime bounds check before indexing.
+                match &target_type {
+                    DataType::Array { size, .. } => {
+                        self.func.blocks[last].push(
+                            None,
+                            MirOp::Call(
+                                "rt_check_bounds_i64".to_string(),
+                                vec![
+                                    index_val.clone(),
+                                    MirValue::Const(MirConst::Int(*size as i64)),
+                                ],
+                                MirType { data_type: DataType::None },
+                            ),
+                            loc,
+                        );
+                    }
+                    DataType::Vector { .. } | DataType::List => {
+                        let len_val = self.new_temp();
+                        self.func.blocks[last].push(
+                            Some(len_val),
+                            MirOp::Call(
+                                "rt_list_len".to_string(),
+                                vec![target_val.clone()],
+                                MirType { data_type: DataType::I64 },
+                            ),
+                            loc,
+                        );
+                        self.func.blocks[last].push(
+                            None,
+                            MirOp::Call(
+                                "rt_check_bounds_i64".to_string(),
+                                vec![index_val.clone(), MirValue::temp(len_val)],
+                                MirType { data_type: DataType::None },
+                            ),
+                            loc,
+                        );
+                    }
+                    _ => {}
+                }
+
                 let gep = self.new_temp();
                 let elem_llvm = llvm_elem_type_str(data_type);
                 self.func.blocks[last].push(
