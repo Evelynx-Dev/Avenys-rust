@@ -306,6 +306,8 @@ fn replace_value_in_op(op: &mut MirOp, copies: &HashMap<usize, MirValue>) -> usi
         | MirOp::BitCast(v, _)
         | MirOp::ZExt(v, _)
         | MirOp::Trunc(v, _)
+        | MirOp::Sitofp(v, _)
+        | MirOp::Fptosi(v, _)
         | MirOp::Copy(v) => replace(v, copies, &mut count),
         MirOp::Store(dst, src) => {
             replace(dst, copies, &mut count);
@@ -406,7 +408,9 @@ fn collect_uses(op: &MirOp, used: &mut HashSet<usize>) {
         | MirOp::IntToPtr(v, _)
         | MirOp::BitCast(v, _)
         | MirOp::ZExt(v, _)
-        | MirOp::Trunc(v, _) => collect_val(v, used),
+        | MirOp::Trunc(v, _)
+        | MirOp::Sitofp(v, _)
+        | MirOp::Fptosi(v, _) => collect_val(v, used),
         MirOp::Store(dst, src) => {
             collect_val(dst, used);
             collect_val(src, used);

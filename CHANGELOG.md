@@ -2,6 +2,68 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.11.17] - 2026-06-14
+
+### Fixed
+- MIR lowerer: `self` parameter type in impl methods — `self` was parsed with
+  `DataType::Unknown` but the lowerer needs `StructNamed(type_name)` for
+  `get_struct_name` to resolve field accesses. Now overridden during method
+  lowering. (Fixes `impl_method_can_mutate_self_field_and_run`,
+  `implicit_self_method_return_still_runs`.)
+- MIR lowerer: instance method dispatch — `Expression::Call` with dot-qualified
+  names (e.g. `p.distance()`) now resolves the receiver variable's type, looks
+  up the method in `method_map`, rewrites the call target to the qualified
+  function name (`Point.distance`), and prepends the receiver as the first
+  argument. (Fixes `instance_method_call_resolves_and_compiles`.)
+
+### Added
+- MIR program metadata: `MirProgram.method_map` field (`HashMap<String,
+  HashMap<String, String>>`), extracted from `Statement::Impl` in
+  `extract_method_map()` and passed to `MirLower` for instance method dispatch.
+
+### Changed
+- MIR lowerer: match arm pattern handling — `EnumVariantPath` patterns now
+  match against discriminant (previously fell through to `_ => Br(cs)` which
+  always selected the first arm). (Fixes
+  `enum_match_without_default_returns_second_variant_string`.)
+- MIR codegen: `EnumNamed` data type maps to `i64` in LLVM IR instead of `ptr`,
+  fixing return type mismatch when functions return enum types.
+
+## [3.11.16] - 2026-06-14
+
+### Fixed
+- MIR codegen: enum type mapping — `EnumNamed` data types now map to `i64` in
+  LLVM IR, matching the discriminant representation, eliminating type mismatch
+  errors (`ret i64` vs `ptr`) when functions return enum types.
+
+### Added
+- MIR program metadata: `MirProgram.enum_types` field (`HashMap<String,
+  Vec<(String, usize)>>`), extracted from `Statement::Enum` in
+  `extract_enum_types()` and passed to both lowerer and codegen.
+- MIR program metadata: `MirProgram.bare_to_qualified` field (`HashMap<String,
+  String>`), extracted from IR qualified name map in `extract_bare_name_map()`,
+  enabling bare-name to IR-qualified name resolution.
+
+### Changed
+- MIR lowerer: `Expression::EnumVariantPath` now returns the correct integer
+  discriminant instead of `Const(Int(0))`, and match arm patterns for both
+  `EnumVariant` and `EnumVariantPath` compare against the real discriminant.
+  (Fixes `enum_match_without_default_returns_second_variant_string`,
+  test count 118/140.)
+- MIR lowerer: bare-name resolution — `Expression::Call` resolves unqualified
+  function names (`main`) to their IR-qualified symbols (`fn_main`) via the
+  `bare_to_qualified` map before emitting the `Call` op.
+
+## [3.11.15] - 2026-06-14
+
+### Fixed
+- MIR lowerer: `Expression::Match` lowering rewritten — pattern literals now
+  use `BrCond` with `ICmp (Eq, match_val, literal)` branching to the matching
+  case block or the next check block, and case bodies are lowered into their
+  own blocks (not the default block). Dead code / infinite loop eliminated.
+  (Fixes `match_expression_with_default_infers_string_branch_type_and_compiles`,
+  test count 111/140.)
+
 ## [3.11.13] - 2026-06-13
 
 ### Fixed

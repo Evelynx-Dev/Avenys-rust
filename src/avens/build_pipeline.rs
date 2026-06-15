@@ -21,6 +21,8 @@ fn generate_runtime_declarations(ir: &str) -> String {
     let mut out = String::new();
     let needed: &[(&str, &str)] = &[
         ("declare ptr @dasu(", "declare ptr @dasu(i64)"),
+        ("declare i64 @rt_list_len(", "declare i64 @rt_list_len(ptr)"),
+        ("declare ptr @rt_math_range_i64(", "declare ptr @rt_math_range_i64(i64)"),
         ("@.fmt_str =", "@.fmt_str = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\""),
         ("@.fmt_i64 =", "@.fmt_i64 = private unnamed_addr constant [5 x i8] c\"%ld\\0A\\00\""),
         ("@.fmt_f64 =", "@.fmt_f64 = private unnamed_addr constant [6 x i8] c\"%.6g\\0A\\00\""),

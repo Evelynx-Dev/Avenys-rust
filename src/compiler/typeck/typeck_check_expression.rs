@@ -15,8 +15,11 @@ impl TypeChecker {
             Expression::Literal(lit) => Ok(Self::literal_type(lit)),
             Expression::Identifier(ident) => {
                 if let Some((resolved, _)) = self.lookup_var(&ident.name) {
-                    ident.data_type = resolved.clone();
-                    return Ok(resolved);
+                    if ident.data_type == DataType::Unknown {
+                        ident.data_type = resolved.clone();
+                        return Ok(resolved);
+                    }
+                    return Ok(ident.data_type.clone());
                 }
                 if self.functions.contains_key(&ident.name) || {
                     let mut stripped = ident.name.clone();
@@ -514,8 +517,11 @@ impl TypeChecker {
                             {
                                 let resolved_field =
                                     self.substitute_generics(&field.data_type, &bindings);
-                                *data_type = resolved_field.clone();
-                                return Ok(resolved_field);
+                                if *data_type == DataType::Unknown {
+                                    *data_type = resolved_field.clone();
+                                    return Ok(resolved_field);
+                                }
+                                return Ok((*data_type).clone());
                             }
                         }
                         if let Some(fn_sig) =

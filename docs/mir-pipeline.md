@@ -32,7 +32,7 @@ Core data structures — all derive `Debug, Clone`:
 | AST Construct | Status |
 |---|---|
 | Function definitions | ✅ |
-| Impl blocks (methods) | ✅ |
+| Impl blocks (methods) | ✅ (including instance method dispatch) |
 | Let/set declarations | ✅ |
 | Assignment | ✅ |
 | Return | ✅ |
@@ -42,7 +42,8 @@ Core data structures — all derive `Debug, Clone`:
 | Binary ops (+, -, *, /, ==, !=, <, <=, >, >=, &&, \|\|) | ✅ |
 | Unary ops (-, !) | ✅ |
 | Function calls (user + builtins) | ✅ (builtins emit as regular calls) |
-| Match expressions | ✅ (alloca + store per case + load) |
+| Method calls (instance dispatch) | ✅ (resolves via `method_map`, prepends receiver) |
+| Match expressions | ✅ (BrCond per case with literal/enum discriminant comparison, case blocks) |
 | If-expressions (`__if_expr`) | ✅ (BrCond + phi-like store/load) |
 | Literals (int, float, bool, char, str) | ✅ |
 | Variable references | ✅ (type-aware Load via `var_types`) |
@@ -57,13 +58,26 @@ Core data structures — all derive `Debug, Clone`:
 | Unsafe blocks | ✅ (forwards body) |
 | Closures | ❌ |
 | Pipeline (`|>`) | ❌ |
-| Enum variants | ⚠️ Returns dummy `Const(Int(0))` |
+| Enum variants (bare path) | ✅ Resolves to real discriminant |
+| Enum variants (with payload) | ⚠️ Returns discriminant only (payloads not bound yet) |
 | Try/Ok/Err | ❌ |
 | Dict/Map literals | ❌ (returns `Const(None)`) |
 
 Var types tracked via `var_types: HashMap<String, DataType>` during lowering.
 Struct metadata collected by `extract_struct_types()` and passed as
 `struct_types: HashMap<String, Vec<(String, DataType)>>` through `MirProgram` /
+`MirLower` / `LlvmCtx`.
+
+Enum metadata collected by `extract_enum_types()` and passed as
+`enum_types: HashMap<String, Vec<(String, usize)>>` through `MirProgram` /
+`MirLower` / `LlvmCtx`.
+
+Bare-name resolution collected by `extract_bare_name_map()` and passed as
+`bare_to_qualified: HashMap<String, String>` through `MirProgram` /
+`MirLower` / `LlvmCtx`.
+
+Method dispatch metadata collected by `extract_method_map()` and passed as
+`method_map: HashMap<String, HashMap<String, String>>` through `MirProgram` /
 `MirLower` / `LlvmCtx`.
 
 ### Phase 3: Codegen (`src/compiler/mir/codegen.rs`)
@@ -159,7 +173,7 @@ Returns total number of applied transformations.
 
 3. **String constants**: `MirConst::Str` emits `ptr null` instead of `@.str = constant [N x i8] c"..."`.
 
-4. **Closures, dicts, enums with payloads**: Not fully lowered. Dict/map literals return `Const(None)`. Enum variants return `Const(Int(0))`.
+4. **Closures, dicts, enums with payloads**: Not fully lowered. Dict/map literals return `Const(None)`. Enum variants with payloads return discriminant only (payload data not bound/marshalled). Enum payload bindings in match patterns are not extracted. Instance methods now resolve and dispatch correctly (Phases 1–4 complete).
 
 5. **Memory pressure**: Full `build` (compile + link via clang) can use ~4GB RAM — a pre-existing issue from clang runtime compilation, not specific to MIR.
 

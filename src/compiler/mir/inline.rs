@@ -18,7 +18,7 @@ fn max_temp_in_value(value: &MirValue, max: &mut usize) {
 fn max_temp_in_op(op: &MirOp, max: &mut usize) {
     match op {
         MirOp::Alloca(_) => {}
-        MirOp::Load(v, _) | MirOp::PtrToInt(v, _) | MirOp::IntToPtr(v, _) | MirOp::BitCast(v, _) | MirOp::ZExt(v, _) | MirOp::Trunc(v, _) | MirOp::Copy(v) => {
+        MirOp::Load(v, _) | MirOp::PtrToInt(v, _) | MirOp::IntToPtr(v, _) | MirOp::BitCast(v, _) | MirOp::ZExt(v, _) | MirOp::Trunc(v, _) | MirOp::Sitofp(v, _) | MirOp::Fptosi(v, _) | MirOp::Copy(v) => {
             max_temp_in_value(v, max);
         }
         MirOp::Store(d, s)
@@ -239,6 +239,8 @@ fn remap_op(op: &MirOp, temp_offset: usize, callee: &MirFunction) -> MirOp {
         MirOp::BitCast(v, t) => MirOp::BitCast(map(v), t.clone()),
         MirOp::ZExt(v, t) => MirOp::ZExt(map(v), t.clone()),
         MirOp::Trunc(v, t) => MirOp::Trunc(map(v), t.clone()),
+        MirOp::Sitofp(v, t) => MirOp::Sitofp(map(v), t.clone()),
+        MirOp::Fptosi(v, t) => MirOp::Fptosi(map(v), t.clone()),
         MirOp::Phi(p, t) => MirOp::Phi(p.iter().map(|(v, b)| (map(v), *b)).collect(), t.clone()),
         MirOp::Select(c, t, f) => MirOp::Select(map(c), map(t), map(f)),
         MirOp::Copy(v) => MirOp::Copy(map(v)),

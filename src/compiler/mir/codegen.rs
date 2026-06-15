@@ -133,6 +133,7 @@ fn llvm_type_str(dt: &DataType) -> String {
             format!("[{} x {}]", size, llvm_type_str(element_type))
         }
         DataType::Slice { element_type } => llvm_type_str(element_type),
+        DataType::EnumNamed(_) => "i64".to_string(),
         _ => "ptr".to_string(),
     }
 }
@@ -197,7 +198,14 @@ fn resolve_typed(val: &MirValue, ctx: &mut LlvmCtx) -> (String, String) {
             (format!("%arg_{}", name), t)
         }
         MirValue::Global(name) => {
-            (format!("@{}", name), "ptr".to_string())
+            let llvm_name = if ctx.defined_fn_names.contains(name) {
+                format!("@fn_{}", name)
+            } else if ctx.extern_fn_names.contains(name) {
+                format!("@{}", name)
+            } else {
+                format!("@{}", name)
+            };
+            (llvm_name, "ptr".to_string())
         }
     }
 }
@@ -471,6 +479,53 @@ fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
                 extra.push(format!("%t{} = inttoptr i64 0 to ptr", result));
                 line
                 // result is the ptr returned by dasu (dummy null pointer)
+            } else if name == "call" {
+                // Indirect call via function pointer
+                if args.len() < 1 {
+                    return vec![];
+                }
+                let ll_ret = llvm_type_str(&ret_ty.data_type);
+                let result = if ll_ret == "void" {
+                    None
+                } else {
+                    Some(tmp_result(ctx, &ll_ret, inst.result))
+                };
+                let (fn_ptr, fn_ptr_ty) = resolve_typed(&args[0], ctx);
+                // Ensure fn_ptr is ptr-typed for the bitcast
+                let fn_ptr_final: String = if fn_ptr_ty != "ptr" {
+                    let tmp = tmp_extra(ctx, "ptr");
+                    extra.push(format!("{} = inttoptr {} {} to ptr", tmp, fn_ptr_ty, fn_ptr));
+                    tmp
+                } else {
+                    fn_ptr.clone()
+                };
+                let mut arg_strs = Vec::new();
+                let mut param_tys = Vec::new();
+                for a in &args[1..] {
+                    let (v, t) = resolve_typed(a, ctx);
+                    if t == "i1" {
+                        let zext = tmp_extra(ctx, "i64");
+                        extra.push(format!("{} = zext i1 {} to i64", zext, v));
+                        arg_strs.push(format!("i64 {}", zext));
+                        param_tys.push("i64".to_string());
+                    } else {
+                        arg_strs.push(format!("{} {}", t, v));
+                        param_tys.push(t.clone());
+                    }
+                }
+                let fn_sig = format!("{} ({})*", ll_ret, param_tys.join(", "));
+                let fn_cast = tmp_extra(ctx, "ptr");
+                extra.push(format!("{} = bitcast ptr {} to {}", fn_cast, fn_ptr_final, fn_sig));
+                match result {
+                    Some(r) => format!(
+                        "%t{} = call {} {}({})",
+                        r, ll_ret, fn_cast, arg_strs.join(", ")
+                    ),
+                    None => format!(
+                        "call {} {}({})",
+                        ll_ret, fn_cast, arg_strs.join(", ")
+                    ),
+                }
             } else {
                 // Regular function call — prefix user-defined functions with @fn_
                 let ll_ret = llvm_type_str(&ret_ty.data_type);
@@ -554,6 +609,18 @@ fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
             let (src, ty) = resolve_typed(v, ctx);
             let result = tmp_result(ctx, &ty, inst.result);
             format!("%t{} = select i1 true, {} {}, {} {}", result, ty, src, ty, src)
+        }
+        MirOp::Sitofp(val, ty) => {
+            let (v, src_t) = resolve_typed(val, ctx);
+            let dst_t = llvm_type_str(&ty.data_type);
+            let result = tmp_result(ctx, &dst_t, inst.result);
+            format!("%t{} = sitofp {} {} to {}", result, src_t, v, dst_t)
+        }
+        MirOp::Fptosi(val, ty) => {
+            let (v, src_t) = resolve_typed(val, ctx);
+            let dst_t = llvm_type_str(&ty.data_type);
+            let result = tmp_result(ctx, &dst_t, inst.result);
+            format!("%t{} = fptosi {} {} to {}", result, src_t, v, dst_t)
         }
         _ => return vec![],
     };

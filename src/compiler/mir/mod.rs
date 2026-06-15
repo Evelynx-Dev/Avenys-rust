@@ -106,6 +106,8 @@ pub enum MirOp {
     BitCast(MirValue, MirType),
     ZExt(MirValue, MirType),
     Trunc(MirValue, MirType),
+    Sitofp(MirValue, MirType),
+    Fptosi(MirValue, MirType),
     Phi(Vec<(MirValue, usize)>, MirType),
     Select(MirValue, MirValue, MirValue),
     Copy(MirValue),
