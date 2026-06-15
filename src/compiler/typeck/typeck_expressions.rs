@@ -1,4 +1,4 @@
-use crate::error::Result;
+use crate::error::{ErrorKind, MireError, Result};
 use crate::parser::ast::{DataType, Expression, Literal, Statement};
 
 use crate::compiler::typeck::{FunctionSig, TypeChecker, type_error};
@@ -53,6 +53,17 @@ impl TypeChecker {
             };
             *data_type = resolved.clone();
             return Ok(Some(resolved));
+        }
+
+        if name == "contains" || name == "strings.contains" {
+            let haystack_type = arg_types.first().cloned().unwrap_or(DataType::Unknown);
+            if !matches!(haystack_type, DataType::Str | DataType::Unknown | DataType::Anything) {
+                return Err(MireError::new(ErrorKind::Backend {
+                    message: "contains(...) is currently lowered for strings only".to_string(),
+                }));
+            }
+            *data_type = DataType::Bool;
+            return Ok(Some(DataType::Bool));
         }
 
         if name == "lists.push" {

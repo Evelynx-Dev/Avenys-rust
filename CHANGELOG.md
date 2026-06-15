@@ -2,6 +2,14 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.11.20] - 2026-06-15
+
+### Fixed
+- Type checker: `contains(...)` and `strings.contains(...)` on non-string
+  collections now emit a `Backend` error instead of silently compiling to an
+  unimplemented call. (Fixes
+  `backend_rejects_unimplemented_contains_instead_of_returning_silent_false`.)
+
 ## [3.11.19] - 2026-06-15
 
 ### Fixed
