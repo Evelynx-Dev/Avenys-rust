@@ -17,6 +17,193 @@ fn fnv_hash(bytes: &[u8]) -> u64 {
     state
 }
 
+fn hash_data_type(dt: &DataType, buf: &mut Vec<u8>) {
+    buf.extend_from_slice(format!("{:?}", dt).as_bytes());
+}
+
+fn hash_value(value: &MirValue, buf: &mut Vec<u8>) {
+    match value {
+        MirValue::Const(c) => {
+            buf.push(0);
+            match c {
+                MirConst::Int(v) => {
+                    buf.push(0);
+                    buf.extend_from_slice(&v.to_le_bytes());
+                }
+                MirConst::Float(v) => {
+                    buf.push(1);
+                    buf.extend_from_slice(&v.to_bits().to_le_bytes());
+                }
+                MirConst::Bool(v) => {
+                    buf.push(2);
+                    buf.push(*v as u8);
+                }
+                MirConst::Char(v) => {
+                    buf.push(3);
+                    buf.extend_from_slice(&(*v as u32).to_le_bytes());
+                }
+                MirConst::Str(v) => {
+                    buf.push(4);
+                    buf.extend_from_slice(v.as_bytes());
+                }
+                MirConst::None => buf.push(5),
+            }
+        }
+        MirValue::Temp(id) => {
+            buf.push(1);
+            buf.extend_from_slice(&id.to_le_bytes());
+        }
+        MirValue::Param(name) => {
+            buf.push(2);
+            buf.extend_from_slice(name.as_bytes());
+        }
+        MirValue::Global(name) => {
+            buf.push(3);
+            buf.extend_from_slice(name.as_bytes());
+        }
+    }
+}
+
+fn hash_op(op: &MirOp, buf: &mut Vec<u8>) {
+    match op {
+        MirOp::Alloca(ty) => {
+            buf.push(0);
+            hash_data_type(&ty.data_type, buf);
+        }
+        MirOp::Load(v, ty) => {
+            buf.push(1);
+            hash_value(v, buf);
+            hash_data_type(&ty.data_type, buf);
+        }
+        MirOp::Store(d, s) => {
+            buf.push(2);
+            hash_value(d, buf);
+            hash_value(s, buf);
+        }
+        MirOp::Add(l, r) => {
+            buf.push(3);
+            hash_value(l, buf);
+            hash_value(r, buf);
+        }
+        MirOp::Sub(l, r) => {
+            buf.push(4);
+            hash_value(l, buf);
+            hash_value(r, buf);
+        }
+        MirOp::Mul(l, r) => {
+            buf.push(5);
+            hash_value(l, buf);
+            hash_value(r, buf);
+        }
+        MirOp::SDiv(l, r) => {
+            buf.push(6);
+            hash_value(l, buf);
+            hash_value(r, buf);
+        }
+        MirOp::SRem(l, r) => {
+            buf.push(7);
+            hash_value(l, buf);
+            hash_value(r, buf);
+        }
+        MirOp::Shl(l, r) => {
+            buf.push(8);
+            hash_value(l, buf);
+            hash_value(r, buf);
+        }
+        MirOp::And(l, r) => {
+            buf.push(9);
+            hash_value(l, buf);
+            hash_value(r, buf);
+        }
+        MirOp::Or(l, r) => {
+            buf.push(10);
+            hash_value(l, buf);
+            hash_value(r, buf);
+        }
+        MirOp::ICmp(cmp, l, r) => {
+            buf.push(11);
+            buf.push(cmp.discriminant());
+            hash_value(l, buf);
+            hash_value(r, buf);
+        }
+        MirOp::FCmp(cmp, l, r) => {
+            buf.push(12);
+            buf.push(cmp.discriminant());
+            hash_value(l, buf);
+            hash_value(r, buf);
+        }
+        MirOp::Call(name, args, ret) => {
+            buf.push(13);
+            buf.extend_from_slice(name.as_bytes());
+            for a in args {
+                hash_value(a, buf);
+            }
+            hash_data_type(&ret.data_type, buf);
+        }
+        MirOp::Gep(base, indices, name) => {
+            buf.push(14);
+            hash_value(base, buf);
+            for i in indices {
+                hash_value(i, buf);
+            }
+            buf.extend_from_slice(name.as_bytes());
+        }
+        MirOp::PtrToInt(v, ty) => {
+            buf.push(15);
+            hash_value(v, buf);
+            hash_data_type(&ty.data_type, buf);
+        }
+        MirOp::IntToPtr(v, ty) => {
+            buf.push(16);
+            hash_value(v, buf);
+            hash_data_type(&ty.data_type, buf);
+        }
+        MirOp::BitCast(v, ty) => {
+            buf.push(17);
+            hash_value(v, buf);
+            hash_data_type(&ty.data_type, buf);
+        }
+        MirOp::ZExt(v, ty) => {
+            buf.push(18);
+            hash_value(v, buf);
+            hash_data_type(&ty.data_type, buf);
+        }
+        MirOp::Trunc(v, ty) => {
+            buf.push(19);
+            hash_value(v, buf);
+            hash_data_type(&ty.data_type, buf);
+        }
+        MirOp::Sitofp(v, ty) => {
+            buf.push(20);
+            hash_value(v, buf);
+            hash_data_type(&ty.data_type, buf);
+        }
+        MirOp::Fptosi(v, ty) => {
+            buf.push(21);
+            hash_value(v, buf);
+            hash_data_type(&ty.data_type, buf);
+        }
+        MirOp::Phi(pairs, ty) => {
+            buf.push(22);
+            for (v, bb) in pairs {
+                hash_value(v, buf);
+                buf.extend_from_slice(&bb.to_le_bytes());
+            }
+            hash_data_type(&ty.data_type, buf);
+        }
+        MirOp::Select(c, t, f) => {
+            buf.push(23);
+            hash_value(c, buf);
+            hash_value(t, buf);
+            hash_value(f, buf);
+        }
+        MirOp::Copy(v) => {
+            buf.push(24);
+            hash_value(v, buf);
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MirProgram {
     pub functions: Vec<MirFunction>,
@@ -124,6 +311,19 @@ pub enum MirCmp {
     Ge,
 }
 
+impl MirCmp {
+    fn discriminant(&self) -> u8 {
+        match self {
+            MirCmp::Eq => 0,
+            MirCmp::Ne => 1,
+            MirCmp::Lt => 2,
+            MirCmp::Le => 3,
+            MirCmp::Gt => 4,
+            MirCmp::Ge => 5,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum MirTerminator {
     Br(usize),
@@ -166,23 +366,36 @@ impl MirFunction {
 
     pub fn compute_hash(&self) -> u64 {
         let mut buf = Vec::new();
+        buf.extend_from_slice(self.name.as_bytes());
+        for param in &self.params {
+            buf.extend_from_slice(param.name.as_bytes());
+            hash_data_type(&param.data_type, &mut buf);
+        }
+        hash_data_type(&self.ret_type, &mut buf);
         for block in &self.blocks {
+            buf.extend_from_slice(block.label.as_bytes());
             buf.extend_from_slice(&block.id.to_le_bytes());
             for inst in &block.insts {
                 buf.push(inst.result.unwrap_or(255) as u8);
+                hash_op(&inst.op, &mut buf);
             }
             match &block.terminator {
                 MirTerminator::Br(t) => {
                     buf.extend_from_slice(&(*t as u64).to_le_bytes());
                     buf.push(0);
                 }
-                MirTerminator::BrCond(_, t, f) => {
+                MirTerminator::BrCond(v, t, f) => {
+                    hash_value(v, &mut buf);
                     buf.extend_from_slice(&(*t as u64).to_le_bytes());
                     buf.extend_from_slice(&(*f as u64).to_le_bytes());
                     buf.push(1);
                 }
-                MirTerminator::Ret(_) => buf.push(2),
-                MirTerminator::Unreachable => buf.push(3),
+                MirTerminator::Ret(Some(v)) => {
+                    buf.push(2);
+                    hash_value(v, &mut buf);
+                }
+                MirTerminator::Ret(None) => buf.push(3),
+                MirTerminator::Unreachable => buf.push(4),
             }
         }
         fnv_hash(&buf)

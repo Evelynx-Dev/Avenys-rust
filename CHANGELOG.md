@@ -2,6 +2,16 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.11.21] - 2026-06-15
+
+### Fixed
+- MIR caching: `MirFunction::compute_hash()` now hashes function signature, all
+  instruction opcodes, operands, constants, types, and terminator values. The
+  previous implementation only hashed block IDs and result-temp IDs, causing
+  the MIR program cache to return stale IR when source changes altered only
+  literals or constants. (Fixes
+  `incremental_recompile_keeps_enum_match_string_result_consistent`.)
+
 ## [3.11.20] - 2026-06-15
 
 ### Fixed
