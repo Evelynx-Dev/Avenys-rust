@@ -26,6 +26,7 @@ fn max_temp_in_op(op: &MirOp, max: &mut usize) {
         | MirOp::Sub(d, s)
         | MirOp::Mul(d, s)
         | MirOp::SDiv(d, s)
+        | MirOp::SRem(d, s)
         | MirOp::Shl(d, s)
         | MirOp::And(d, s)
         | MirOp::Or(d, s)
@@ -228,6 +229,7 @@ fn remap_op(op: &MirOp, temp_offset: usize, callee: &MirFunction) -> MirOp {
         MirOp::Sub(l, r) => MirOp::Sub(map(l), map(r)),
         MirOp::Mul(l, r) => MirOp::Mul(map(l), map(r)),
         MirOp::SDiv(l, r) => MirOp::SDiv(map(l), map(r)),
+        MirOp::SRem(l, r) => MirOp::SRem(map(l), map(r)),
         MirOp::Shl(l, r) => MirOp::Shl(map(l), map(r)),
         MirOp::And(l, r) => MirOp::And(map(l), map(r)),
         MirOp::Or(l, r) => MirOp::Or(map(l), map(r)),
@@ -295,7 +297,7 @@ mod tests {
         let caller = make_func("main", vec![
             block(0, vec![inst(0, MirOp::Call("add42".into(), vec![], MirType { data_type: DataType::I64 }))], MirTerminator::Ret(Some(MirValue::Temp(0)))),
         ]);
-        let mut prog = MirProgram { functions: vec![caller, callee], entry_point: None, extern_functions: vec![] };
+        let mut prog = MirProgram { functions: vec![caller, callee], entry_point: None, extern_functions: vec![], struct_types: HashMap::new() };
         let count = inlining(&mut prog);
         assert_eq!(count, 1, "should have inlined add42");
         assert_eq!(prog.functions.len(), 1, "callee should be removed");
@@ -312,7 +314,7 @@ mod tests {
         let caller = make_func("main", vec![
             block(0, vec![], MirTerminator::Ret(Some(MirValue::Const(MirConst::Int(0))))),
         ]);
-        let mut prog = MirProgram { functions: vec![caller, callee], entry_point: None, extern_functions: vec![] };
+        let mut prog = MirProgram { functions: vec![caller, callee], entry_point: None, extern_functions: vec![], struct_types: HashMap::new() };
         let count = inlining(&mut prog);
         assert_eq!(count, 0, "no inlining should happen");
         assert_eq!(prog.functions.len(), 2, "both functions remain");
@@ -334,7 +336,7 @@ mod tests {
         let caller = make_func("main", vec![
             block(0, vec![inst(0, MirOp::Call("big".into(), vec![], MirType { data_type: DataType::I64 }))], MirTerminator::Ret(Some(MirValue::Temp(0)))),
         ]);
-        let mut prog = MirProgram { functions: vec![caller, callee], entry_point: None, extern_functions: vec![] };
+        let mut prog = MirProgram { functions: vec![caller, callee], entry_point: None, extern_functions: vec![], struct_types: HashMap::new() };
         let count = inlining(&mut prog);
         assert_eq!(count, 0, "big function should not be inlined");
         assert_eq!(prog.functions.len(), 2);

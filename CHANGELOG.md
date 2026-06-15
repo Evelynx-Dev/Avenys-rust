@@ -2,6 +2,48 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.11.18] - 2026-06-15
+
+### Fixed
+- MIR lowerer: dict literal rendering — `dasu()` / `str()` / `print()` now wrap
+  map/dict arguments with `rt_dict_to_string()` so nested maps print as strings
+  instead of raw struct bytes. (Fixes `nested_map_string_render_executes_-
+  without_runtime_errors`, `syntax_reference_prototype_compiles_and_runs`.)
+- MIR lowerer: nested map `value_kind` — dict literals with map values now call
+  the new runtime helper `rt_dicts_set_with_kind()` so the runtime knows the
+  value is a map and can recursively stringify it.
+- MIR lowerer: signed integer modulo — `%` was falling through to `Add` because
+  `SRem` was missing from the MIR op set. Added `MirOp::SRem`, lowered `%` to
+  it, and wired it through codegen, inlining, and optimization passes. (Fixes
+  `signed_integer_division_and_remainder_match_runtime_expectations`.)
+- MIR lowerer: `for` loop list element indexing — list layout is `[len, elem0,
+  elem1, ...]`, but the loop used the raw index as the GEP index, reading the
+  length field as the first element. The index is now offset by 1. (Fixes
+  `secondary_for_loop_binding_compiles_and_uses_index`.)
+- Runtime: `rt_strings_split()` rewrote empty-segment handling; it no longer
+  uses `strtok()` (which drops empties) and now appends a trailing empty
+  segment when the input ends with the separator. (Fixes
+  `strings_split_preserves_empty_segments`.)
+- MIR lowerer: inline closure calls — `call((x) => ..., ...)` with a closure
+  literal callee now lowers the closure body inline in the caller, binding
+  parameters and preserving captured variables. (Fixes
+  `callback_call_closure_with_capture_runs_end_to_end`.)
+- Type checker: generic nominal type argument parsing — `Box[T]` now parses `T`
+  as `DataType::Generic("T")` instead of `Unknown`, so instance method dispatch
+  can bind generic parameters to concrete types. (Fixes
+  `generic_impl_method_codegen_builds_for_concrete_type`.)
+- MIR codegen / build pipeline: `DataType::Generic` now maps to `i64` in LLVM IR
+  so generic struct fields and method returns use a concrete scalar type.
+
+### Added
+- Runtime: `rt_dict_to_string()` and `rt_dicts_set_with_kind()` helpers.
+- MIR op: `SRem` for signed remainder.
+
+### Changed
+- Test suite: added `struct_types: HashMap::new()` to `MirProgram` initializers
+  in unit tests so the test target compiles.
+- Compiler is now warning-free (unused `program`/`method` parameters fixed).
+
 ## [3.11.17] - 2026-06-14
 
 ### Fixed

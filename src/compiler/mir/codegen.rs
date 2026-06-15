@@ -62,8 +62,19 @@ pub fn mir_to_llvm(program: &MirProgram) -> (String, Vec<(String, String)>) {
     (out.join("\n"), Vec::new())
 }
 
+fn sanitize_fn_name(name: &str) -> String {
+    name.split_once('[').map(|(base, rest)| {
+        // base = "Box", rest = "T].get" → "Box.get"
+        if let Some((_, after_bracket)) = rest.split_once(']') {
+            format!("{}{}", base, after_bracket)
+        } else {
+            base.to_string()
+        }
+    }).unwrap_or_else(|| name.to_string())
+}
+
 pub(crate) fn compile_function_to_llvm(func: &MirFunction, ctx: &mut LlvmCtx) -> String {
-    let llvm_name = format!("@fn_{}", func.name);
+    let llvm_name = format!("@fn_{}", sanitize_fn_name(&func.name));
     let ret_type = llvm_type_str(&func.ret_type);
     let saved_vars = std::mem::take(&mut ctx.vars);
     let saved_temp_types = std::mem::take(&mut ctx.temp_types);
@@ -134,6 +145,7 @@ fn llvm_type_str(dt: &DataType) -> String {
         }
         DataType::Slice { element_type } => llvm_type_str(element_type),
         DataType::EnumNamed(_) => "i64".to_string(),
+        DataType::Generic(_) => "i64".to_string(),
         _ => "ptr".to_string(),
     }
 }
@@ -335,6 +347,15 @@ fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
             let l_final = coerce_to(&l_str, &lt, &ty, ctx, &mut extra);
             let r_final = coerce_to(&r_str, &rt, &ty, ctx, &mut extra);
             format!("%t{} = {} {} {}, {}", result, op, ty, l_final, r_final)
+        }
+        MirOp::SRem(l, r) => {
+            let (l_str, lt) = resolve_typed(l, ctx);
+            let (r_str, rt) = resolve_typed(r, ctx);
+            let ty = if lt == "double" || rt == "double" { "double" } else { "i64" };
+            let result = tmp_result(ctx, ty, inst.result);
+            let l_final = coerce_to(&l_str, &lt, &ty, ctx, &mut extra);
+            let r_final = coerce_to(&r_str, &rt, &ty, ctx, &mut extra);
+            format!("%t{} = srem {} {}, {}", result, ty, l_final, r_final)
         }
         MirOp::Shl(l, r) => {
             let (l, _lt) = resolve_typed(l, ctx);
@@ -542,14 +563,14 @@ fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
                     }
                 }
                 let fn_name = if ctx.defined_fn_names.contains(name) {
-                    format!("@fn_{}", name)
+                    format!("@fn_{}", sanitize_fn_name(name))
                 } else if ctx.extern_fn_names.contains(name) {
                     format!("@{}", name)
                 } else {
                     // Try stripping root namespace (e.g. "async.pal_proc_exists" -> "pal_proc_exists")
                     let stripped = name.split_once('.').and_then(|(_, rest)| {
                         if ctx.defined_fn_names.contains(rest) {
-                            Some(format!("@fn_{}", rest))
+                            Some(format!("@fn_{}", sanitize_fn_name(rest)))
                         } else if ctx.extern_fn_names.contains(rest) {
                             Some(format!("@{}", rest))
                         } else {
@@ -570,8 +591,14 @@ fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
             let idx_strs: Vec<String> = indices
                 .iter()
                 .map(|i| {
-                    let (v, _t) = resolve_typed(i, ctx);
-                    format!("i32 {}", v)
+                    let (v, t) = resolve_typed(i, ctx);
+                    if t == "i64" && v.starts_with("%t") {
+                        let trunc = tmp_extra(ctx, "i32");
+                        extra.push(format!("{} = trunc i64 {} to i32", trunc, v));
+                        format!("i32 {}", trunc)
+                    } else {
+                        format!("i32 {}", v)
+                    }
                 })
                 .collect();
             let struct_ty = if struct_name.starts_with("struct:") {
@@ -614,13 +641,25 @@ fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
             let (v, src_t) = resolve_typed(val, ctx);
             let dst_t = llvm_type_str(&ty.data_type);
             let result = tmp_result(ctx, &dst_t, inst.result);
-            format!("%t{} = sitofp {} {} to {}", result, src_t, v, dst_t)
+            if src_t == dst_t {
+                format!("%t{} = select i1 true, {} {}, {} {}", result, src_t, v, src_t, v)
+            } else if src_t == "ptr" && dst_t == "i64" {
+                format!("%t{} = ptrtoint {} {} to {}", result, src_t, v, dst_t)
+            } else if src_t == "i64" && dst_t == "ptr" {
+                format!("%t{} = inttoptr {} {} to {}", result, src_t, v, dst_t)
+            } else {
+                format!("%t{} = sitofp {} {} to {}", result, src_t, v, dst_t)
+            }
         }
         MirOp::Fptosi(val, ty) => {
             let (v, src_t) = resolve_typed(val, ctx);
             let dst_t = llvm_type_str(&ty.data_type);
             let result = tmp_result(ctx, &dst_t, inst.result);
-            format!("%t{} = fptosi {} {} to {}", result, src_t, v, dst_t)
+            if src_t == dst_t {
+                format!("%t{} = select i1 true, {} {}, {} {}", result, src_t, v, src_t, v)
+            } else {
+                format!("%t{} = fptosi {} {} to {}", result, src_t, v, dst_t)
+            }
         }
         _ => return vec![],
     };

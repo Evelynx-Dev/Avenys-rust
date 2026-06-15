@@ -13,7 +13,32 @@ fn struct_field_llvm_type(dt: &DataType) -> &'static str {
         DataType::F64 => "double",
         DataType::Bool => "i1",
         DataType::None => "i64",
+        DataType::Generic(_) => "i64",
         _ => "ptr",
+    }
+}
+
+fn struct_field_llvm_body_type(dt: &DataType) -> String {
+    match dt {
+        DataType::Array { element_type, size } => {
+            format!("[{} x {}]", size, struct_field_llvm_body_type(element_type))
+        }
+        _ => struct_field_llvm_type(dt).to_string(),
+    }
+}
+
+fn struct_field_size(dt: &DataType) -> usize {
+    match dt {
+        DataType::I64 | DataType::Char | DataType::U64 => 8,
+        DataType::I32 | DataType::U32 => 4,
+        DataType::I16 | DataType::U16 => 2,
+        DataType::I8 | DataType::U8 => 1,
+        DataType::F32 => 4,
+        DataType::F64 => 8,
+        DataType::Bool => 1,
+        DataType::None => 8,
+        DataType::Array { element_type, size } => *size as usize * struct_field_size(element_type),
+        _ => 8,
     }
 }
 
@@ -22,6 +47,15 @@ fn generate_runtime_declarations(ir: &str) -> String {
     let needed: &[(&str, &str)] = &[
         ("declare ptr @dasu(", "declare ptr @dasu(i64)"),
         ("declare i64 @rt_list_len(", "declare i64 @rt_list_len(ptr)"),
+        ("declare ptr @rt_list_create(", "declare ptr @rt_list_create(i64, i64)"),
+        ("declare ptr @rt_list_push_i64(", "declare ptr @rt_list_push_i64(ptr, i64)"),
+        ("declare ptr @rt_list_push_ptr(", "declare ptr @rt_list_push_ptr(ptr, ptr)"),
+        ("declare ptr @rt_dicts_set_i64(", "declare ptr @rt_dicts_set_i64(ptr, ptr, i64)"),
+        ("declare ptr @rt_dicts_set(", "declare ptr @rt_dicts_set(ptr, ptr, ptr)"),
+        ("declare ptr @rt_dicts_set_with_kind(", "declare ptr @rt_dicts_set_with_kind(ptr, ptr, ptr, i64)"),
+        ("declare ptr @rt_dicts_keys(", "declare ptr @rt_dicts_keys(ptr)"),
+        ("declare ptr @rt_dicts_values(", "declare ptr @rt_dicts_values(ptr)"),
+        ("declare ptr @rt_dict_to_string(", "declare ptr @rt_dict_to_string(ptr)"),
         ("declare ptr @rt_math_range_i64(", "declare ptr @rt_math_range_i64(i64)"),
         ("@.fmt_str =", "@.fmt_str = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\""),
         ("@.fmt_i64 =", "@.fmt_i64 = private unnamed_addr constant [5 x i8] c\"%ld\\0A\\00\""),
@@ -56,30 +90,64 @@ fn generate_struct_constructors(program: &crate::parser::ast::Program) -> String
                 continue;
             }
 
-            let mut field_types: Vec<&'static str> = Vec::with_capacity(field_count);
+            let param_types: Vec<&str> = fields.iter().filter_map(|f| {
+                if let Statement::Let { data_type, .. } = f {
+                    Some(struct_field_llvm_type(data_type))
+                } else {
+                    None
+                }
+            }).collect();
+            let body_types: Vec<String> = fields.iter().filter_map(|f| {
+                if let Statement::Let { data_type, .. } = f {
+                    Some(struct_field_llvm_body_type(data_type))
+                } else {
+                    None
+                }
+            }).collect();
+
+            let mut total_size = 0usize;
             for field in fields {
                 if let Statement::Let { data_type, .. } = field {
-                    field_types.push(struct_field_llvm_type(data_type));
+                    total_size += struct_field_size(data_type);
                 }
             }
 
-            if field_types.is_empty() {
+            if param_types.is_empty() {
                 continue;
             }
 
-            let struct_ty = field_types.join(", ");
-            let params: Vec<String> = field_types
+            let struct_ty = body_types.join(", ");
+            let params: Vec<String> = param_types
                 .iter()
                 .enumerate()
                 .map(|(i, ft)| format!("{} %{}", ft, i))
                 .collect();
 
-            let mut body = format!("  %ptr = call ptr @malloc(i64 {})\n", field_types.len() * 8);
-            for (i, ft) in field_types.iter().enumerate() {
-                body.push_str(&format!(
-                    "  %f{i}_ptr = getelementptr inbounds {{ {struct_ty} }}, ptr %ptr, i32 0, i32 {i}\n"
-                ));
-                body.push_str(&format!("  store {ft} %{i}, ptr %f{i}_ptr\n"));
+            let mut body = String::new();
+            body.push_str(&format!("  %ptr = call ptr @malloc(i64 {total_size})\n"));
+            for (i, field) in fields.iter().enumerate() {
+                if let Statement::Let { data_type, .. } = field {
+                    let bty = &body_types[i];
+                    body.push_str(&format!(
+                        "  %f{i}_ptr = getelementptr inbounds {{ {struct_ty} }}, ptr %ptr, i32 0, i32 {i}\n"
+                    ));
+                    match data_type {
+                        DataType::Array { .. } => {
+                            body.push_str(&format!(
+                                "  %f{i}_loaded = load {bty}, ptr %{i}\n"
+                            ));
+                            body.push_str(&format!(
+                                "  store {bty} %f{i}_loaded, ptr %f{i}_ptr\n"
+                            ));
+                        }
+                        _ => {
+                            body.push_str(&format!(
+                                "  store {} %{i}, ptr %f{i}_ptr\n",
+                                struct_field_llvm_type(data_type),
+                            ));
+                        }
+                    }
+                }
             }
             body.push_str("  ret ptr %ptr\n");
 

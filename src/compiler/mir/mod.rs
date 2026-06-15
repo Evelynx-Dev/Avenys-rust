@@ -94,6 +94,7 @@ pub enum MirOp {
     Sub(MirValue, MirValue),
     Mul(MirValue, MirValue),
     SDiv(MirValue, MirValue),
+    SRem(MirValue, MirValue),
     Shl(MirValue, MirValue),
     And(MirValue, MirValue),
     Or(MirValue, MirValue),

@@ -59,6 +59,13 @@ fn try_fold(inst: &MirInst) -> Option<MirConst> {
                 _ => binop_const(a, b, |x, y| x / y, |_, _| 0.0),
             }
         }
+        SRem(MirValue::Const(a), MirValue::Const(b)) => {
+            match (a, b) {
+                (MirConst::Int(0), _) => None,
+                (_, MirConst::Int(0)) => None,
+                _ => binop_const(a, b, |x, y| x % y, |_, _| 0.0),
+            }
+        }
         Shl(MirValue::Const(a), MirValue::Const(b)) => {
             match (a, b) {
                 (MirConst::Int(x), MirConst::Int(y)) => Some(MirConst::Int(x << y)),
@@ -317,6 +324,7 @@ fn replace_value_in_op(op: &mut MirOp, copies: &HashMap<usize, MirValue>) -> usi
         | MirOp::Sub(l, r)
         | MirOp::Mul(l, r)
         | MirOp::SDiv(l, r)
+        | MirOp::SRem(l, r)
         | MirOp::Shl(l, r)
         | MirOp::And(l, r)
         | MirOp::Or(l, r)
@@ -419,6 +427,7 @@ fn collect_uses(op: &MirOp, used: &mut HashSet<usize>) {
         | MirOp::Sub(l, r)
         | MirOp::Mul(l, r)
         | MirOp::SDiv(l, r)
+        | MirOp::SRem(l, r)
         | MirOp::Shl(l, r)
         | MirOp::And(l, r)
         | MirOp::Or(l, r)
@@ -881,6 +890,7 @@ mod tests {
             functions: vec![f],
             entry_point: None,
             extern_functions: vec![],
+            struct_types: HashMap::new(),
         };
         let total = optimize(&mut prog);
         assert!(total >= 1, "expected at least strength_reduction, got {total}");
@@ -904,6 +914,7 @@ mod tests {
             functions: vec![f],
             entry_point: None,
             extern_functions: vec![],
+            struct_types: HashMap::new(),
         };
         let total = optimize(&mut prog);
         assert!(total >= 3, "expected copy_prop + fold + dead_elim + merge, got {total}");
