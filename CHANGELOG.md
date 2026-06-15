@@ -2,6 +2,14 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.11.23] - 2026-06-15
+
+### Fixed
+- Kioto `core/dicts`: `rt_dicts_get()` and the `get` wrapper now declare a
+  `:str` return type so the runtime's `void*` result is propagated instead of
+  being discarded as a void call. (Fixes
+  `kioto_async_ready_value_compiles_and_runs`.)
+
 ## [3.11.22] - 2026-06-15
 
 ### Fixed
