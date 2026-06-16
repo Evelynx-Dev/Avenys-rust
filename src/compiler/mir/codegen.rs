@@ -11,12 +11,18 @@ pub(crate) struct LlvmCtx<'a> {
     next_string_id: usize,
     defined_fn_names: std::collections::HashSet<String>,
     extern_fn_names: std::collections::HashSet<String>,
+    /// Maps extern function name -> its mire-wrapper LLVM name (e.g. "abs" -> "@fn_abs_wrapper").
+    extern_wrapper_names: HashMap<String, String>,
     struct_types: &'a HashMap<String, Vec<(String, DataType)>>,
 }
 
 pub fn mir_to_llvm(program: &MirProgram) -> (String, Vec<(String, String)>) {
     let mut extern_decls = Vec::new();
+    let mut declared = std::collections::HashSet::new();
     for ext in &program.extern_functions {
+        if !declared.insert(ext.name.clone()) {
+            continue;
+        }
         let ret = llvm_type_str(&ext.return_type);
         let params: Vec<String> = ext.params.iter().map(|t| llvm_type_str(t)).collect();
         let sig = params.join(", ");
@@ -32,6 +38,11 @@ pub fn mir_to_llvm(program: &MirProgram) -> (String, Vec<(String, String)>) {
     for ext in &program.extern_functions {
         extern_fn_names.insert(ext.name.clone());
     }
+    let used_extern_wrappers = collect_used_extern_wrappers(program, &extern_fn_names);
+    let extern_wrapper_names: HashMap<String, String> = used_extern_wrappers
+        .iter()
+        .map(|name| (name.clone(), format!("@fn_{}_wrapper", sanitize_fn_name(name))))
+        .collect();
     let mut ctx = LlvmCtx {
         strings: Vec::new(),
         vars: HashMap::new(),
@@ -42,11 +53,23 @@ pub fn mir_to_llvm(program: &MirProgram) -> (String, Vec<(String, String)>) {
         next_string_id: 0,
         defined_fn_names,
         extern_fn_names,
+        extern_wrapper_names,
         struct_types: &program.struct_types,
     };
     for func in &program.functions {
         let func_ir = compile_function_to_llvm(func, &mut ctx);
         function_irs.push(func_ir);
+    }
+    // Generate wrappers only for extern functions that are actually used as function values.
+    let ext_by_name: HashMap<String, &MirExternFunction> = program
+        .extern_functions
+        .iter()
+        .map(|ext| (ext.name.clone(), ext))
+        .collect();
+    for name in &used_extern_wrappers {
+        if let Some(&ext) = ext_by_name.get(name) {
+            function_irs.push(generate_extern_wrapper(ext));
+        }
     }
     let strings = ctx.strings;
 
@@ -60,6 +83,70 @@ pub fn mir_to_llvm(program: &MirProgram) -> (String, Vec<(String, String)>) {
     out.extend(function_irs);
 
     (out.join("\n"), Vec::new())
+}
+
+fn collect_used_extern_wrappers(
+    program: &MirProgram,
+    extern_fn_names: &std::collections::HashSet<String>,
+) -> std::collections::HashSet<String> {
+    let mut used = std::collections::HashSet::new();
+    let mut visit_value = |v: &MirValue| {
+        match v {
+            MirValue::Global(name) | MirValue::FunctionRef { name, .. } => {
+                if extern_fn_names.contains(name) {
+                    used.insert(name.clone());
+                }
+            }
+            _ => {}
+        }
+    };
+    for func in &program.functions {
+        for block in &func.blocks {
+            for inst in &block.insts {
+                match &inst.op {
+                    MirOp::Call(callee, args, _) => {
+                        visit_value(callee);
+                        for arg in args {
+                            visit_value(arg);
+                        }
+                    }
+                    MirOp::Load(v, _) | MirOp::Store(_, v) | MirOp::Copy(v)
+                    | MirOp::Add(v, _) | MirOp::Sub(v, _) | MirOp::Mul(v, _) | MirOp::SDiv(v, _)
+                    | MirOp::SRem(v, _) | MirOp::Shl(v, _) | MirOp::And(v, _) | MirOp::Or(v, _)
+                    | MirOp::ICmp(_, v, _) | MirOp::FCmp(_, v, _) | MirOp::Gep(v, _, _)
+                    | MirOp::PtrToInt(v, _) | MirOp::IntToPtr(v, _) | MirOp::BitCast(v, _)
+                    | MirOp::ZExt(v, _) | MirOp::Trunc(v, _) | MirOp::Sitofp(v, _)
+                    | MirOp::Fptosi(v, _) => {
+                        visit_value(v);
+                        if let MirOp::Add(_, r) | MirOp::Sub(_, r) | MirOp::Mul(_, r)
+                            | MirOp::SDiv(_, r) | MirOp::SRem(_, r) | MirOp::Shl(_, r)
+                            | MirOp::And(_, r) | MirOp::Or(_, r) | MirOp::ICmp(_, _, r)
+                            | MirOp::FCmp(_, _, r) | MirOp::Store(r, _) = &inst.op
+                        {
+                            visit_value(r);
+                        }
+                        if let MirOp::Gep(_, indices, _) = &inst.op {
+                            for idx in indices {
+                                visit_value(idx);
+                            }
+                        }
+                    }
+                    MirOp::Phi(pairs, _) => {
+                        for (v, _) in pairs {
+                            visit_value(v);
+                        }
+                    }
+                    MirOp::Select(c, t, f) => {
+                        visit_value(c);
+                        visit_value(t);
+                        visit_value(f);
+                    }
+                    MirOp::Alloca(_) => {}
+                }
+            }
+        }
+    }
+    used
 }
 
 fn sanitize_fn_name(name: &str) -> String {
@@ -85,6 +172,8 @@ pub(crate) fn compile_function_to_llvm(func: &MirFunction, ctx: &mut LlvmCtx) ->
     ctx.param_types.clear();
     ctx.next_tmp = 0;
     ctx.next_extra = 0;
+    // Every mire function receives an implicit environment pointer as its first argument.
+    param_strs.push("ptr %env_ptr".to_string());
     for p in &func.params {
         let ty = llvm_type_str(&p.data_type);
         let arg_n = format!("%arg_{}", p.name);
@@ -93,7 +182,14 @@ pub(crate) fn compile_function_to_llvm(func: &MirFunction, ctx: &mut LlvmCtx) ->
     }
 
     let mut parts = Vec::new();
-    parts.push(format!("define {} {}({}) {{", ret_type, llvm_name, param_strs.join(", ")));
+    let noinline_attr = if func.noinline { " noinline" } else { "" };
+    parts.push(format!(
+        "define {} {}({}){} {{",
+        ret_type,
+        llvm_name,
+        param_strs.join(", "),
+        noinline_attr
+    ));
 
     for block in &func.blocks {
         if block.id > 0 {
@@ -109,9 +205,11 @@ pub(crate) fn compile_function_to_llvm(func: &MirFunction, ctx: &mut LlvmCtx) ->
             }
         }
 
-        let term = if matches!(block.terminator, MirTerminator::Unreachable)
-            && block.id + 1 == func.blocks.len()
-        {
+        // Any block that is still unreachable after lowering/inlining represents a
+        // fall-off-the-end path; emit a default return so control cannot fall through
+        // into later blocks (which the LLVM inliner or our own lowering may append
+        // after the original last block).
+        let term = if matches!(block.terminator, MirTerminator::Unreachable) {
             default_return_for_type(&ret_type)
         } else {
             compile_terminator(&block.terminator, ctx, &ret_type)
@@ -128,6 +226,47 @@ pub(crate) fn compile_function_to_llvm(func: &MirFunction, ctx: &mut LlvmCtx) ->
     ctx.next_extra = saved_next_extra;
     ctx.param_types.clear();
     parts.join("\n")
+}
+
+fn generate_extern_wrapper(ext: &MirExternFunction) -> String {
+    let wrapper_name = format!("@fn_{}_wrapper", sanitize_fn_name(&ext.name));
+    let ret_ty = llvm_type_str(&ext.return_type);
+    let param_tys: Vec<String> = ext.params.iter().map(llvm_type_str).collect();
+    let param_names: Vec<String> = (0..ext.params.len()).map(|i| format!("%arg_{}", i)).collect();
+    let param_strs: Vec<String> = param_tys
+        .iter()
+        .zip(param_names.iter())
+        .map(|(t, n)| format!("{} {}", t, n))
+        .collect();
+    let mut lines = Vec::new();
+    let sig_params = if param_strs.is_empty() {
+        "ptr %env_ptr".to_string()
+    } else {
+        format!("ptr %env_ptr, {}", param_strs.join(", "))
+    };
+    lines.push(format!(
+        "define {} {}({}) {{",
+        ret_ty, wrapper_name, sig_params
+    ));
+    let arg_strs: Vec<String> = param_tys
+        .iter()
+        .zip(param_names.iter())
+        .map(|(t, n)| format!("{} {}", t, n))
+        .collect();
+    if ret_ty == "void" {
+        lines.push(format!("  call void @{}({})", ext.name, arg_strs.join(", ")));
+        lines.push("  ret void".to_string());
+    } else {
+        lines.push(format!(
+            "  %r = call {} @{}({})",
+            ret_ty,
+            ext.name,
+            arg_strs.join(", ")
+        ));
+        lines.push(format!("  ret {} %r", ret_ty));
+    }
+    lines.push("}".to_string());
+    lines.join("\n")
 }
 
 fn llvm_type_str(dt: &DataType) -> String {
@@ -210,15 +349,89 @@ fn resolve_typed(val: &MirValue, ctx: &mut LlvmCtx) -> (String, String) {
             (format!("%arg_{}", name), t)
         }
         MirValue::Global(name) => {
-            let llvm_name = if ctx.defined_fn_names.contains(name) {
-                format!("@fn_{}", name)
-            } else if ctx.extern_fn_names.contains(name) {
-                format!("@{}", name)
+            let llvm_name = if let Some(wrapper) = ctx.extern_wrapper_names.get(name) {
+                wrapper.clone()
+            } else if ctx.defined_fn_names.contains(name) {
+                format!("@fn_{}", sanitize_fn_name(name))
             } else {
                 format!("@{}", name)
             };
             (llvm_name, "ptr".to_string())
         }
+        MirValue::EnvPtr => ("%env_ptr".to_string(), "ptr".to_string()),
+        MirValue::FunctionRef { name, .. } => {
+            (format!("@fn_{}", sanitize_fn_name(name)), "ptr".to_string())
+        }
+    }
+}
+
+fn resolve_named_call(
+    name: &str,
+    env: &MirValue,
+    args: &[MirValue],
+    ll_ret: &str,
+    is_void: bool,
+    result_id: Option<usize>,
+    ctx: &mut LlvmCtx,
+    extra: &mut Vec<String>,
+) -> String {
+    let mut arg_strs = Vec::new();
+    for a in args {
+        let (v, t) = resolve_typed(a, ctx);
+        if t == "i1" {
+            let zext = tmp_extra(ctx, "i64");
+            extra.push(format!("{} = zext i1 {} to i64", zext, v));
+            arg_strs.push(format!("i64 {}", zext));
+        } else {
+            arg_strs.push(format!("{} {}", t, v));
+        }
+    }
+    let (fn_name, needs_env) = if let Some(wrapper) = ctx.extern_wrapper_names.get(name) {
+        (wrapper.clone(), true)
+    } else if ctx.defined_fn_names.contains(name) {
+        (format!("@fn_{}", sanitize_fn_name(name)), true)
+    } else if ctx.extern_fn_names.contains(name) {
+        (format!("@{}", name), false)
+    } else {
+        // Try stripping root namespace (e.g. "async.pal_proc_exists" -> "pal_proc_exists")
+        let stripped = name.split_once('.').and_then(|(_, rest)| {
+            if ctx.defined_fn_names.contains(rest) {
+                Some(format!("@fn_{}", sanitize_fn_name(rest)))
+            } else if ctx.extern_fn_names.contains(rest) {
+                Some(format!("@{}", rest))
+            } else {
+                None
+            }
+        });
+        let llvm_name = stripped.unwrap_or_else(|| format!("@{}", name));
+        let needs = llvm_name.starts_with("@fn_");
+        (llvm_name, needs)
+    };
+    // Mire functions carry an implicit environment pointer as the first argument.
+    if needs_env {
+        let env_str = match env {
+            MirValue::Const(MirConst::None) => "ptr null".to_string(),
+            other => {
+                let (v, t) = resolve_typed(other, ctx);
+                if t == "ptr" {
+                    format!("ptr {}", v)
+                } else {
+                    let tmp = tmp_extra(ctx, "ptr");
+                    extra.push(format!("{} = inttoptr {} {} to ptr", tmp, t, v));
+                    format!("ptr {}", tmp)
+                }
+            }
+        };
+        arg_strs.insert(0, env_str);
+    }
+    if is_void {
+        format!("call void {}({})", fn_name, arg_strs.join(", "))
+    } else {
+        let result = tmp_result(ctx, ll_ret, result_id);
+        format!(
+            "%t{} = call {} {}({})",
+            result, ll_ret, fn_name, arg_strs.join(", ")
+        )
     }
 }
 
@@ -452,8 +665,12 @@ fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
             };
             format!("%t{} = fcmp {} double {}, {}", result, cond, l, r)
         }
-        MirOp::Call(name, args, ret_ty) => {
-            if name == "str" {
+        MirOp::Call(callee, args, ret_ty) => {
+            let name_opt: Option<&str> = match callee {
+                MirValue::FunctionRef { name, .. } | MirValue::Global(name) => Some(name.as_str()),
+                _ => None,
+            };
+            if name_opt == Some("str") {
                 // Dedicated str() builtin lowering
                 if args.len() != 1 {
                     return vec![];
@@ -478,7 +695,7 @@ fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
                     }
                 };
                 line
-            } else if name == "dasu" || name == "print" {
+            } else if name_opt == Some("dasu") || name_opt == Some("print") {
                 // dasu() / print() builtin expansion
                 if args.is_empty() {
                     return vec![];
@@ -510,7 +727,7 @@ fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
                 extra.push(format!("%t{} = inttoptr i64 0 to ptr", result));
                 line
                 // result is the ptr returned by dasu (dummy null pointer)
-            } else if name == "call" {
+            } else if name_opt == Some("call") {
                 // Indirect call via function pointer
                 if args.len() < 1 {
                     return vec![];
@@ -532,6 +749,28 @@ fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
                 };
                 let mut arg_strs = Vec::new();
                 let mut param_tys = Vec::new();
+                // Every indirect-call target is a mire function (possibly an extern wrapper),
+                // so it always receives an implicit environment pointer as the first argument.
+                // If the callee value carries an environment (e.g. a capturing closure),
+                // pass it through; otherwise pass null.
+                let env_arg = match &args[0] {
+                    MirValue::FunctionRef { env, .. } => {
+                        let (env_str, env_ty) = resolve_typed(env, ctx);
+                        if env_ty == "ptr" {
+                            format!("ptr {}", env_str)
+                        } else {
+                            let tmp = tmp_extra(ctx, "ptr");
+                            extra.push(format!(
+                                "{} = inttoptr {} {} to ptr",
+                                tmp, env_ty, env_str
+                            ));
+                            format!("ptr {}", tmp)
+                        }
+                    }
+                    _ => "ptr null".to_string(),
+                };
+                arg_strs.push(env_arg);
+                param_tys.push("ptr".to_string());
                 for a in &args[1..] {
                     let (v, t) = resolve_typed(a, ctx);
                     if t == "i1" {
@@ -572,31 +811,42 @@ fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
                         arg_strs.push(format!("{} {}", t, v));
                     }
                 }
-                let fn_name = if ctx.defined_fn_names.contains(name) {
-                    format!("@fn_{}", sanitize_fn_name(name))
-                } else if ctx.extern_fn_names.contains(name) {
-                    format!("@{}", name)
-                } else {
-                    // Try stripping root namespace (e.g. "async.pal_proc_exists" -> "pal_proc_exists")
-                    let stripped = name.split_once('.').and_then(|(_, rest)| {
-                        if ctx.defined_fn_names.contains(rest) {
-                            Some(format!("@fn_{}", sanitize_fn_name(rest)))
-                        } else if ctx.extern_fn_names.contains(rest) {
-                            Some(format!("@{}", rest))
-                        } else {
-                            None
+                match callee {
+                    MirValue::FunctionRef { name, env } => {
+                        resolve_named_call(name, env, args, &ll_ret, is_void, inst.result, ctx, &mut extra)
+                    }
+                    MirValue::Global(name) => {
+                        resolve_named_call(name, &MirValue::Const(MirConst::None), args, &ll_ret, is_void, inst.result, ctx, &mut extra)
+                    }
+                    MirValue::Temp(callee_id) => {
+                        // Indirect call through a function value stored in a temp.
+                        // The temp is expected to be a pointer to { fn_ptr, env_ptr }.
+                        let fn_ptr = tmp_extra(ctx, "ptr");
+                        let env_ptr = tmp_extra(ctx, "ptr");
+                        let callee_name = ctx.vars.get(callee_id).cloned().unwrap_or_else(|| format!("%t{}", callee_id));
+                        extra.push(format!("{} = getelementptr {{ ptr, ptr }}, ptr {}, i32 0, i32 0", fn_ptr, callee_name));
+                        extra.push(format!("{} = getelementptr {{ ptr, ptr }}, ptr {}, i32 0, i32 1", env_ptr, callee_name));
+                        let fn_ptr_loaded = tmp_extra(ctx, "ptr");
+                        let env_ptr_loaded = tmp_extra(ctx, "ptr");
+                        extra.push(format!("{} = load ptr, ptr {}", fn_ptr_loaded, fn_ptr));
+                        extra.push(format!("{} = load ptr, ptr {}", env_ptr_loaded, env_ptr));
+                        let mut param_tys: Vec<String> = vec!["ptr".to_string()];
+                        arg_strs.insert(0, format!("ptr {}", env_ptr_loaded));
+                        for a in args {
+                            let (_, t) = resolve_typed(a, ctx);
+                            param_tys.push(t.clone());
                         }
-                    });
-                    stripped.unwrap_or_else(|| format!("@{}", name))
-                };
-                if is_void {
-                    format!("call void {}({})", fn_name, arg_strs.join(", "))
-                } else {
-                    let result = tmp_result(ctx, &ll_ret, inst.result);
-                    format!(
-                        "%t{} = call {} {}({})",
-                        result, ll_ret, fn_name, arg_strs.join(", ")
-                    )
+                        let fn_sig = format!("{} ({})*", ll_ret, param_tys.join(", "));
+                        let fn_cast = tmp_extra(ctx, "ptr");
+                        extra.push(format!("{} = bitcast ptr {} to {}", fn_cast, fn_ptr_loaded, fn_sig));
+                        if is_void {
+                            format!("call void {}({})", fn_cast, arg_strs.join(", "))
+                        } else {
+                            let result = tmp_result(ctx, &ll_ret, inst.result);
+                            format!("%t{} = call {} {}({})", result, ll_ret, fn_cast, arg_strs.join(", "))
+                        }
+                    }
+                    MirValue::EnvPtr | MirValue::Const(_) | MirValue::Param(_) => String::new(),
                 }
             }
         }

@@ -421,4 +421,308 @@ impl TypeChecker {
             other => other.clone(),
         }
     }
+
+    /// Compute the set of variables captured by a closure body. This is a
+    /// scoped free-variable analysis: identifiers that are not parameters or
+    /// local declarations, and that resolve to outer-scope variables, become
+    /// captures. Nested closures contribute their own free variables to the
+    /// outer closure's capture set.
+    pub(super) fn collect_captures(
+        &self,
+        body: &[Statement],
+        params: &[(String, DataType)],
+        existing: &[(String, DataType)],
+    ) -> Vec<(String, DataType)> {
+        let mut used = HashSet::new();
+        let mut declared: HashSet<String> = params.iter().map(|(n, _)| n.clone()).collect();
+        for (n, _) in existing {
+            declared.insert(n.clone());
+        }
+        collect_used_identifiers_in_statements(body, &mut declared, &mut used);
+        let mut captures = Vec::new();
+        for name in used {
+            if name == "self" {
+                continue;
+            }
+            if self.functions.contains_key(&name) {
+                continue;
+            }
+            if let Some((ty, _)) = self.lookup_var(&name) {
+                captures.push((name, ty));
+            }
+        }
+        captures.sort_by(|a, b| a.0.cmp(&b.0));
+        captures
+    }
+}
+
+fn collect_used_identifiers_in_statements(
+    stmts: &[Statement],
+    declared: &mut HashSet<String>,
+    used: &mut HashSet<String>,
+) {
+    for stmt in stmts {
+        collect_used_identifiers_in_statement(stmt, declared, used);
+    }
+}
+
+fn collect_used_identifiers_in_statement(
+    stmt: &Statement,
+    declared: &mut HashSet<String>,
+    used: &mut HashSet<String>,
+) {
+    match stmt {
+        Statement::Let { name, value, .. } => {
+            if let Some(v) = value {
+                collect_used_identifiers_in_expr(v, declared, used);
+            }
+            declared.insert(name.clone());
+        }
+        Statement::Assignment { target, value, .. } => {
+            collect_used_identifiers_in_assignment_target(target, declared, used);
+            collect_used_identifiers_in_expr(value, declared, used);
+            if let AssignmentTarget::Variable(n) = target {
+                if !declared.contains(n) {
+                    used.insert(n.clone());
+                }
+            }
+        }
+        Statement::Return(Some(expr))
+        | Statement::Expression(expr)
+        | Statement::Drop { value: expr } => {
+            collect_used_identifiers_in_expr(expr, declared, used);
+        }
+        Statement::Return(None) => {}
+        Statement::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            collect_used_identifiers_in_expr(condition, declared, used);
+            {
+                let mut then_declared = declared.clone();
+                collect_used_identifiers_in_statements(then_branch, &mut then_declared, used);
+            }
+            if let Some(else_b) = else_branch {
+                let mut else_declared = declared.clone();
+                collect_used_identifiers_in_statements(else_b, &mut else_declared, used);
+            }
+        }
+        Statement::While { condition, body } => {
+            collect_used_identifiers_in_expr(condition, declared, used);
+            let mut body_declared = declared.clone();
+            collect_used_identifiers_in_statements(body, &mut body_declared, used);
+        }
+        Statement::For {
+            variable,
+            index,
+            iterable,
+            body,
+        } => {
+            collect_used_identifiers_in_expr(iterable, declared, used);
+            let mut body_declared = declared.clone();
+            body_declared.insert(variable.clone());
+            if let Some(idx) = index {
+                body_declared.insert(idx.clone());
+            }
+            collect_used_identifiers_in_statements(body, &mut body_declared, used);
+        }
+        Statement::Find {
+            variable,
+            iterable,
+            body,
+        } => {
+            collect_used_identifiers_in_expr(iterable, declared, used);
+            let mut body_declared = declared.clone();
+            body_declared.insert(variable.clone());
+            collect_used_identifiers_in_statements(body, &mut body_declared, used);
+        }
+        Statement::Match {
+            value,
+            cases,
+            default,
+        } => {
+            collect_used_identifiers_in_expr(value, declared, used);
+            for (pattern, body) in cases {
+                let mut pat_declared = declared.clone();
+                collect_pattern_bindings(pattern, &mut pat_declared);
+                collect_used_identifiers_in_statements(body, &mut pat_declared, used);
+            }
+            let mut default_declared = declared.clone();
+            collect_used_identifiers_in_statements(default, &mut default_declared, used);
+        }
+        Statement::Function {
+            name, params, body, ..
+        } => {
+            declared.insert(name.clone());
+            let mut fn_declared: HashSet<String> =
+                params.iter().map(|(n, _)| n.clone()).collect();
+            collect_used_identifiers_in_statements(body, &mut fn_declared, used);
+        }
+        Statement::Unsafe { body } => {
+            let mut unsafe_declared = declared.clone();
+            collect_used_identifiers_in_statements(body, &mut unsafe_declared, used);
+        }
+        Statement::Asm { instructions } => {
+            for (_, expr) in instructions {
+                collect_used_identifiers_in_expr(expr, declared, used);
+            }
+        }
+        Statement::New { value, .. } => {
+            if let Some(v) = value {
+                collect_used_identifiers_in_expr(v, declared, used);
+            }
+        }
+        Statement::Own { value, .. } => {
+            if let Some(v) = value {
+                collect_used_identifiers_in_expr(v, declared, used);
+            }
+        }
+        Statement::Move { target, value } => {
+            collect_used_identifiers_in_expr(value, declared, used);
+            if !declared.contains(target) {
+                used.insert(target.clone());
+            }
+        }
+        _ => {}
+    }
+}
+
+fn collect_used_identifiers_in_assignment_target(
+    target: &AssignmentTarget,
+    declared: &mut HashSet<String>,
+    used: &mut HashSet<String>,
+) {
+    match target {
+        AssignmentTarget::Variable(_) | AssignmentTarget::Field(_) => {}
+        AssignmentTarget::Index { target, index } => {
+            collect_used_identifiers_in_expr(target, declared, used);
+            collect_used_identifiers_in_expr(index, declared, used);
+        }
+    }
+}
+
+fn collect_pattern_bindings(pattern: &Expression, declared: &mut HashSet<String>) {
+    match pattern {
+        Expression::Identifier(ident) => {
+            declared.insert(ident.name.clone());
+        }
+        Expression::Tuple { elements, .. } | Expression::List { elements, .. } => {
+            for e in elements {
+                collect_pattern_bindings(e, declared);
+            }
+        }
+        Expression::EnumVariant { payloads, .. } => {
+            for p in payloads {
+                collect_pattern_bindings(p, declared);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn collect_used_identifiers_in_expr(
+    expr: &Expression,
+    declared: &HashSet<String>,
+    used: &mut HashSet<String>,
+) {
+    match expr {
+        Expression::Identifier(ident) => {
+            if !declared.contains(&ident.name) {
+                used.insert(ident.name.clone());
+            }
+        }
+        Expression::BinaryOp { left, right, .. } => {
+            collect_used_identifiers_in_expr(left, declared, used);
+            collect_used_identifiers_in_expr(right, declared, used);
+        }
+        Expression::UnaryOp { operand, .. } => {
+            collect_used_identifiers_in_expr(operand, declared, used);
+        }
+        Expression::NamedArg { value, .. } => {
+            collect_used_identifiers_in_expr(value, declared, used);
+        }
+        Expression::Call { name, args, .. } => {
+            if !name.contains('.') && !declared.contains(name) {
+                used.insert(name.clone());
+            }
+            if let Some((prefix, _)) = name.split_once('.') {
+                if prefix != "self" && !declared.contains(prefix) {
+                    used.insert(prefix.to_string());
+                }
+            }
+            for arg in args {
+                collect_used_identifiers_in_expr(arg, declared, used);
+            }
+        }
+        Expression::List { elements, .. } | Expression::Tuple { elements, .. } => {
+            for e in elements {
+                collect_used_identifiers_in_expr(e, declared, used);
+            }
+        }
+        Expression::Dict { entries, .. } => {
+            for (k, v) in entries {
+                collect_used_identifiers_in_expr(k, declared, used);
+                collect_used_identifiers_in_expr(v, declared, used);
+            }
+        }
+        Expression::Index { target, index, .. } => {
+            collect_used_identifiers_in_expr(target, declared, used);
+            collect_used_identifiers_in_expr(index, declared, used);
+        }
+        Expression::MemberAccess { target, .. } => {
+            collect_used_identifiers_in_expr(target, declared, used);
+        }
+        Expression::Reference { expr, .. }
+        | Expression::Dereference { expr, .. }
+        | Expression::Box { value: expr, .. }
+        | Expression::Try { expr, .. }
+        | Expression::Ok { value: expr, .. }
+        | Expression::Err { value: expr, .. } => {
+            collect_used_identifiers_in_expr(expr, declared, used);
+        }
+        Expression::Pipeline { input, stage, .. } => {
+            collect_used_identifiers_in_expr(input, declared, used);
+            collect_used_identifiers_in_expr(stage, declared, used);
+        }
+        Expression::Match {
+            value,
+            cases,
+            default,
+            ..
+        } => {
+            collect_used_identifiers_in_expr(value, declared, used);
+            for (pat, body_expr) in cases {
+                let mut pat_declared = declared.clone();
+                collect_pattern_bindings(pat, &mut pat_declared);
+                collect_used_identifiers_in_expr(body_expr, &pat_declared, used);
+            }
+            collect_used_identifiers_in_expr(default, declared, used);
+        }
+        Expression::Closure { params, body, .. } => {
+            let mut inner_declared = declared.clone();
+            for (n, _) in params {
+                inner_declared.insert(n.clone());
+            }
+            collect_used_identifiers_in_statements(body, &mut inner_declared, used);
+        }
+        Expression::EnumVariant { payloads, .. } => {
+            for p in payloads {
+                collect_used_identifiers_in_expr(p, declared, used);
+            }
+        }
+        Expression::Literal(Literal::List(elements))
+        | Expression::Literal(Literal::Tuple(elements)) => {
+            for e in elements {
+                collect_used_identifiers_in_expr(e, declared, used);
+            }
+        }
+        Expression::Literal(Literal::Dict(entries)) => {
+            for ((k, v), _) in entries {
+                collect_used_identifiers_in_expr(k, declared, used);
+                collect_used_identifiers_in_expr(v, declared, used);
+            }
+        }
+        _ => {}
+    }
 }

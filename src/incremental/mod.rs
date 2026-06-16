@@ -3,8 +3,8 @@ use crate::error::mss::MssError;
 use crate::error::{ErrorKind, MireError, Result};
 use crate::parser::Program;
 use crate::parser::ast::{
-    AssignmentTarget, DataType, EnumVariantDef, Expression, FunctionDef, Identifier, Literal,
-    MireValue, QueryBinding, QueryGroup, QueryJoin, QueryOp, Statement, TraitMethodSig, Visibility,
+    AssignmentTarget, DataType, EnumVariantDef, Expression, Identifier, Literal,
+    QueryBinding, QueryGroup, QueryJoin, QueryOp, Statement, TraitMethodSig, Visibility,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

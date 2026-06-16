@@ -6,13 +6,10 @@ mod expressions;
 mod primitives;
 mod statements;
 mod types;
-mod values;
-
 use expressions::*;
 use primitives::*;
 use statements::*;
 use types::*;
-use values::*;
 
 #[cfg(test)]
 pub(super) fn stable_statement_hash(statement: &Statement) -> u64 {

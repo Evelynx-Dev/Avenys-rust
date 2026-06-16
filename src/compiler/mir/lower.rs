@@ -15,6 +15,8 @@ struct MirLower {
     bare_to_qualified: HashMap<String, String>,
     method_map: HashMap<String, HashMap<String, String>>,
     current_block: usize,
+    closure_functions: Vec<MirFunction>,
+    closure_counter: usize,
 }
 
 fn extract_struct_types(program: &Program) -> HashMap<String, Vec<(String, DataType)>> {
@@ -150,7 +152,7 @@ pub fn lower_program(program: &Program) -> MirProgram {
     let mut entry_point = None;
     let mut extern_functions = Vec::new();
     let mut seen_functions = HashSet::new();
-    let struct_types = extract_struct_types(program);
+    let mut struct_types = extract_struct_types(program);
     let enum_types = extract_enum_types(program);
     let method_map = extract_method_map(program);
 
@@ -213,9 +215,13 @@ pub fn lower_program(program: &Program) -> MirProgram {
                     bare_to_qualified: bare_to_qualified.clone(),
                     method_map: method_map.clone(),
                     current_block: 0,
+                    closure_functions: Vec::new(),
+                    closure_counter: 0,
                 };
 
                 lower.lower_function_body(body);
+                struct_types.extend(lower.struct_types.clone());
+                functions.extend(lower.closure_functions);
                 if !lower.func.blocks.is_empty() {
                     lower.func.blocks[0].label = "entry".to_string();
                 }
@@ -269,9 +275,13 @@ pub fn lower_program(program: &Program) -> MirProgram {
                                 bare_to_qualified: bare_to_qualified.clone(),
                                 method_map: method_map.clone(),
                                 current_block: 0,
+                                closure_functions: Vec::new(),
+                                closure_counter: 0,
                             };
 
                         lower.lower_function_body(body);
+                        struct_types.extend(lower.struct_types.clone());
+                        functions.extend(lower.closure_functions);
                         if !lower.func.blocks.is_empty() {
                             lower.func.blocks[0].label = "entry".to_string();
                         }
@@ -315,7 +325,7 @@ impl MirLower {
                     self.func.blocks[last].push(
                         Some(str_result),
                         MirOp::Call(
-                            "rt_dict_to_string".to_string(),
+                            MirValue::Global("rt_dict_to_string".to_string()),
                             vec![lowered],
                             MirType { data_type: DataType::Unknown },
                         ),
@@ -456,8 +466,8 @@ impl MirLower {
                             DataType::Array { size, .. } => {
                                 self.func.blocks[last].push(
                                     None,
-                                    MirOp::Call(
-                                        "rt_check_bounds_i64".to_string(),
+                        MirOp::Call(
+                            MirValue::Global("rt_check_bounds_i64".to_string()),
                                         vec![
                                             index_val.clone(),
                                             MirValue::Const(MirConst::Int(*size as i64)),
@@ -471,8 +481,8 @@ impl MirLower {
                                 let len_val = self.new_temp();
                                 self.func.blocks[last].push(
                                     Some(len_val),
-                                    MirOp::Call(
-                                        "rt_list_len".to_string(),
+                        MirOp::Call(
+                            MirValue::Global("rt_list_len".to_string()),
                                         vec![target_val.clone()],
                                         MirType { data_type: DataType::I64 },
                                     ),
@@ -480,8 +490,8 @@ impl MirLower {
                                 );
                                 self.func.blocks[last].push(
                                     None,
-                                    MirOp::Call(
-                                        "rt_check_bounds_i64".to_string(),
+                        MirOp::Call(
+                            MirValue::Global("rt_check_bounds_i64".to_string()),
                                         vec![index_val.clone(), MirValue::temp(len_val)],
                                         MirType { data_type: DataType::None },
                                     ),
@@ -653,7 +663,7 @@ impl MirLower {
                 self.func.blocks[cond_block].push(
                     Some(len_val),
                     MirOp::Call(
-                        "rt_list_len".to_string(),
+                        MirValue::Global("rt_list_len".to_string()),
                         vec![iter_val.clone()],
                         MirType { data_type: DataType::I64 },
                     ),
@@ -883,65 +893,6 @@ impl MirLower {
                 name,
                 args,
                 ..
-            } if name == "call" && !args.is_empty() && matches!(args[0], Expression::Closure { .. }) => {
-                // Inline a call whose callee is a closure literal, e.g. call((x) => x + offset, 32).
-                if let Expression::Closure { params, body, .. } = &args[0] {
-                    let old_vars = self.vars.clone();
-                    let old_var_types = self.var_types.clone();
-
-                    // Bind closure parameters to the supplied arguments.
-                    for ((param_name, param_type), arg_expr) in params.iter().zip(args.iter().skip(1)) {
-                        let arg_val = self.lower_expression(arg_expr);
-                        let ptr = self.new_temp();
-                        let last = self.current_block;
-                        self.func.blocks[last].push(
-                            Some(ptr),
-                            MirOp::Alloca(MirType { data_type: param_type.clone() }),
-                            loc,
-                        );
-                        self.func.blocks[last].push(
-                            None,
-                            MirOp::Store(MirValue::temp(ptr), arg_val),
-                            loc,
-                        );
-                        self.vars.insert(param_name.clone(), ptr);
-                        self.var_types.insert(param_name.clone(), param_type.clone());
-                    }
-
-                    // Lower the body; the last statement yields the closure's result.
-                    let result = if body.is_empty() {
-                        MirValue::Const(MirConst::None)
-                    } else {
-                        let mut last_result = MirValue::Const(MirConst::None);
-                        for (i, stmt) in body.iter().enumerate() {
-                            if i == body.len() - 1 {
-                                last_result = match stmt {
-                                    Statement::Expression(expr) => self.lower_expression(expr),
-                                    Statement::Return(Some(expr)) => self.lower_expression(expr),
-                                    Statement::Return(None) => MirValue::Const(MirConst::None),
-                                    _ => {
-                                        self.lower_statement(stmt);
-                                        MirValue::Const(MirConst::None)
-                                    }
-                                };
-                            } else {
-                                self.lower_statement(stmt);
-                            }
-                        }
-                        last_result
-                    };
-
-                    self.vars = old_vars;
-                    self.var_types = old_var_types;
-                    result
-                } else {
-                    MirValue::Const(MirConst::None)
-                }
-            }
-            Expression::Call {
-                name,
-                args,
-                ..
             } if name == "__type_matches" => {
                 MirValue::Const(MirConst::Bool(true))
             }
@@ -956,11 +907,11 @@ impl MirLower {
                 let last = self.current_block;
                 self.func.blocks[last].push(
                     Some(result),
-                    MirOp::Call(
-                        "rt_math_range_i64".to_string(),
-                        mir_args,
-                        MirType { data_type: DataType::Unknown },
-                    ),
+                MirOp::Call(
+                    MirValue::Global("rt_math_range_i64".to_string()),
+                    mir_args,
+                    MirType { data_type: DataType::Unknown },
+                ),
                     loc,
                 );
                 MirValue::temp(result)
@@ -983,13 +934,22 @@ impl MirLower {
                 self.func.blocks[last].push(
                     Some(result),
                     MirOp::Call(
-                        rt_name.to_string(),
+                        MirValue::Global(rt_name.to_string()),
                         vec![arg_val],
                         MirType { data_type: DataType::I64 },
                     ),
                     loc,
                 );
                 MirValue::temp(result)
+            }
+            Expression::Call { name, args, .. } if name == "lists.map" && args.len() == 2 => {
+                self.lower_lists_map(args)
+            }
+            Expression::Call { name, args, .. } if name == "lists.filter" && args.len() == 2 => {
+                self.lower_lists_filter(args)
+            }
+            Expression::Call { name, args, .. } if name == "lists.fold" && args.len() == 3 => {
+                self.lower_lists_fold(args)
             }
             Expression::Call {
                 name,
@@ -1054,7 +1014,7 @@ impl MirLower {
                     self.func.blocks[last].push(
                         None,
                         MirOp::Call(
-                            resolved_name,
+                            MirValue::FunctionRef { name: resolved_name, env: Box::new(MirValue::Const(MirConst::None)) },
                             mir_args,
                             MirType {
                                 data_type: data_type.clone(),
@@ -1068,7 +1028,7 @@ impl MirLower {
                     self.func.blocks[last].push(
                         Some(result),
                         MirOp::Call(
-                            resolved_name,
+                            MirValue::FunctionRef { name: resolved_name, env: Box::new(MirValue::Const(MirConst::None)) },
                             mir_args,
                             MirType {
                                 data_type: data_type.clone(),
@@ -1078,6 +1038,14 @@ impl MirLower {
                     );
                     MirValue::temp(result)
                 }
+            }
+            Expression::Closure {
+                params,
+                body,
+                return_type,
+                capture,
+            } => {
+                self.lower_capturing_closure(params, body, return_type, capture)
             }
             Expression::Match {
                 value,
@@ -1266,7 +1234,7 @@ impl MirLower {
                         self.func.blocks[last].push(
                             Some(result),
                             MirOp::Call(
-                                name.clone(),
+                                MirValue::FunctionRef { name: name.clone(), env: Box::new(MirValue::Const(MirConst::None)) },
                                 mir_args,
                                 MirType {
                                     data_type: data_type.clone(),
@@ -1292,7 +1260,7 @@ impl MirLower {
                         self.func.blocks[last].push(
                             None,
                             MirOp::Call(
-                                "rt_check_bounds_i64".to_string(),
+                                MirValue::Global("rt_check_bounds_i64".to_string()),
                                 vec![
                                     index_val.clone(),
                                     MirValue::Const(MirConst::Int(*size as i64)),
@@ -1307,7 +1275,7 @@ impl MirLower {
                         self.func.blocks[last].push(
                             Some(len_val),
                             MirOp::Call(
-                                "rt_list_len".to_string(),
+                                MirValue::Global("rt_list_len".to_string()),
                                 vec![target_val.clone()],
                                 MirType { data_type: DataType::I64 },
                             ),
@@ -1316,7 +1284,7 @@ impl MirLower {
                         self.func.blocks[last].push(
                             None,
                             MirOp::Call(
-                                "rt_check_bounds_i64".to_string(),
+                                MirValue::Global("rt_check_bounds_i64".to_string()),
                                 vec![index_val.clone(), MirValue::temp(len_val)],
                                 MirType { data_type: DataType::None },
                             ),
@@ -1440,7 +1408,7 @@ impl MirLower {
                         self.func.blocks[last].push(
                             Some(init),
                             MirOp::Call(
-                                "rt_list_create".to_string(),
+                                MirValue::Global("rt_list_create".to_string()),
                                 vec![
                                     MirValue::Const(MirConst::Int(4)),
                                     MirValue::Const(MirConst::Int(8)),
@@ -1476,7 +1444,7 @@ impl MirLower {
                             self.func.blocks[last].push(
                                 Some(pushed),
                                 MirOp::Call(
-                                    push_fn.to_string(),
+                                    MirValue::Global(push_fn.to_string()),
                                     vec![MirValue::temp(loaded), elem_val],
                                     MirType { data_type: DataType::Unknown },
                                 ),
@@ -1588,11 +1556,11 @@ impl MirLower {
                     let last = self.current_block;
                     self.func.blocks[last].push(
                         Some(pushed),
-                        MirOp::Call(
-                            set_fn.to_string(),
-                            call_args,
-                            MirType { data_type: DataType::Unknown },
-                        ),
+                            MirOp::Call(
+                                MirValue::Global(set_fn.to_string()),
+                                call_args,
+                                MirType { data_type: DataType::Unknown },
+                            ),
                         loc,
                     );
                     let last = self.current_block;
@@ -1618,6 +1586,155 @@ impl MirLower {
         }
     }
 
+    fn lower_closure_function(
+        &mut self,
+        params: &[(String, DataType)],
+        body: &[Statement],
+        return_type: &DataType,
+        captures: &[(String, DataType)],
+        env_struct_name: &str,
+    ) -> String {
+        let name = format!("closure_{}", self.closure_counter);
+        self.closure_counter += 1;
+        let mir_params: Vec<MirParam> = params
+            .iter()
+            .map(|(n, t)| MirParam {
+                name: n.clone(),
+                data_type: t.clone(),
+            })
+            .collect();
+        let mut lower = MirLower {
+            func: MirFunction::new(name.clone(), mir_params, return_type.clone()),
+            next_temp: 0,
+            vars: HashMap::new(),
+            var_types: HashMap::new(),
+            struct_types: self.struct_types.clone(),
+            enum_types: self.enum_types.clone(),
+            bare_to_qualified: self.bare_to_qualified.clone(),
+            method_map: self.method_map.clone(),
+            current_block: 0,
+            closure_functions: Vec::new(),
+            closure_counter: 0,
+        };
+        lower.func.noinline = true;
+        // Create the entry block and wire captures BEFORE lowering body,
+        // so the body can reference them as local variables.
+        let entry_id = lower.entry_block_id();
+        for (idx, (cap_name, cap_type)) in captures.iter().enumerate() {
+            let gep = lower.new_temp();
+            lower.func.blocks[entry_id].push(
+                Some(gep),
+                MirOp::Gep(
+                    MirValue::EnvPtr,
+                    vec![
+                        MirValue::Const(MirConst::Int(0)),
+                        MirValue::Const(MirConst::Int(idx as i64)),
+                    ],
+                    env_struct_name.to_string(),
+                ),
+                (0, 0),
+            );
+            lower.vars.insert(cap_name.clone(), gep);
+            lower.var_types.insert(cap_name.clone(), cap_type.clone());
+        }
+        lower.lower_function_body(body);
+        lower.func.body_hash = lower.func.compute_hash();
+        // Merge any synthetic struct types created by nested closures.
+        self.struct_types.extend(lower.struct_types.drain());
+        self.closure_functions.extend(lower.closure_functions);
+        self.closure_functions.push(lower.func);
+        name
+    }
+
+    fn lower_capturing_closure(
+        &mut self,
+        params: &[(String, DataType)],
+        body: &[Statement],
+        return_type: &DataType,
+        captures: &[(String, DataType)],
+    ) -> MirValue {
+        let loc = (0, 0);
+        eprintln!("LOWER CAPTURING CLOSURE captures={:?} return_type={:?}", captures, return_type);
+        let env_struct_name = format!("closure_env_{}", self.closure_counter);
+        let env_fields: Vec<(String, DataType)> = captures
+            .iter()
+            .map(|(n, t)| (format!("capture_{}", n), t.clone()))
+            .collect();
+        self.struct_types
+            .insert(env_struct_name.clone(), env_fields);
+
+        let name = self.lower_closure_function(
+            params,
+            body,
+            return_type,
+            captures,
+            &env_struct_name,
+        );
+
+        // Allocate the environment struct on the heap.
+        let env_size = (captures.len() as i64) * 8;
+        let env_ptr = self.new_temp();
+        self.func.blocks[self.current_block].push(
+            Some(env_ptr),
+            MirOp::Call(
+                MirValue::Global("rt_closure_env_alloc".to_string()),
+                vec![MirValue::Const(MirConst::Int(env_size))],
+                MirType {
+                    data_type: DataType::Unknown,
+                },
+            ),
+            loc,
+        );
+
+        // Store each captured value into the corresponding field.
+        for (idx, (cap_name, cap_type)) in captures.iter().enumerate() {
+            let cap_val = self.load_variable(cap_name, cap_type);
+            let gep = self.new_temp();
+            self.func.blocks[self.current_block].push(
+                Some(gep),
+                MirOp::Gep(
+                    MirValue::temp(env_ptr),
+                    vec![
+                        MirValue::Const(MirConst::Int(0)),
+                        MirValue::Const(MirConst::Int(idx as i64)),
+                    ],
+                    env_struct_name.clone(),
+                ),
+                loc,
+            );
+            self.func.blocks[self.current_block].push(
+                None,
+                MirOp::Store(MirValue::temp(gep), cap_val),
+                loc,
+            );
+        }
+
+        MirValue::FunctionRef {
+            name,
+            env: Box::new(MirValue::temp(env_ptr)),
+        }
+    }
+
+    fn load_variable(&mut self, name: &str, data_type: &DataType) -> MirValue {
+        let ptr = self
+            .vars
+            .get(name)
+            .copied()
+            .unwrap_or_else(|| panic!("unknown captured variable '{}'", name));
+        let tmp = self.new_temp();
+        self.func.blocks[self.current_block].push(
+            Some(tmp),
+            MirOp::Load(
+                MirValue::temp(ptr),
+                MirType {
+                    data_type: data_type.clone(),
+                },
+            ),
+            (0, 0),
+        );
+        MirValue::temp(tmp)
+    }
+
     fn extract_closure_expr(expr: &Expression) -> &Expression {
         if let Expression::Closure { body, .. } = expr {
             if let Some(Statement::Return(Some(inner))) = body.first() {
@@ -1625,6 +1742,468 @@ impl MirLower {
             }
         }
         expr
+    }
+
+    fn lower_lists_map(&mut self, args: &[Expression]) -> MirValue {
+        let loc = (0, 0);
+        let closure_val = self.lower_expression(&args[0]);
+        let list_val = self.lower_expression(&args[1]);
+
+        // result = rt_list_create(4, 8)
+        let result_ptr = self.new_temp();
+        self.func.blocks[self.current_block].push(
+            Some(result_ptr),
+            MirOp::Alloca(MirType { data_type: DataType::Unknown }),
+            loc,
+        );
+        let init = self.new_temp();
+        self.func.blocks[self.current_block].push(
+            Some(init),
+            MirOp::Call(
+                MirValue::Global("rt_list_create".to_string()),
+                vec![
+                    MirValue::Const(MirConst::Int(4)),
+                    MirValue::Const(MirConst::Int(8)),
+                ],
+                MirType { data_type: DataType::Unknown },
+            ),
+            loc,
+        );
+        self.func.blocks[self.current_block].push(
+            None,
+            MirOp::Store(MirValue::temp(result_ptr), MirValue::temp(init)),
+            loc,
+        );
+
+        // i = 0
+        let i_ptr = self.new_temp();
+        self.func.blocks[self.current_block].push(
+            Some(i_ptr),
+            MirOp::Alloca(MirType { data_type: DataType::I64 }),
+            loc,
+        );
+        self.func.blocks[self.current_block].push(
+            None,
+            MirOp::Store(MirValue::temp(i_ptr), MirValue::Const(MirConst::Int(0))),
+            loc,
+        );
+
+        let pre_block = self.current_block;
+        let cond_block = self.new_block("map_cond");
+        let body_block = self.new_block("map_body");
+        let end_block = self.new_block("map_end");
+        self.func.blocks[pre_block].terminator = MirTerminator::Br(cond_block);
+
+        // cond: i < len(list)
+        self.current_block = cond_block;
+        let i_loaded = self.new_temp();
+        self.func.blocks[cond_block].push(
+            Some(i_loaded),
+            MirOp::Load(MirValue::temp(i_ptr), MirType { data_type: DataType::I64 }),
+            loc,
+        );
+        let len_val = self.new_temp();
+        self.func.blocks[cond_block].push(
+            Some(len_val),
+            MirOp::Call(
+                MirValue::Global("rt_list_len".to_string()),
+                vec![list_val.clone()],
+                MirType { data_type: DataType::I64 },
+            ),
+            loc,
+        );
+        let cond = self.new_temp();
+        self.func.blocks[cond_block].push(
+            Some(cond),
+            MirOp::ICmp(MirCmp::Lt, MirValue::temp(i_loaded), MirValue::temp(len_val)),
+            loc,
+        );
+        self.func.blocks[cond_block].terminator =
+            MirTerminator::BrCond(MirValue::temp(cond), body_block, end_block);
+
+        // body
+        self.current_block = body_block;
+        let i_loaded2 = self.new_temp();
+        self.func.blocks[body_block].push(
+            Some(i_loaded2),
+            MirOp::Load(MirValue::temp(i_ptr), MirType { data_type: DataType::I64 }),
+            loc,
+        );
+        let elem = self.new_temp();
+        self.func.blocks[body_block].push(
+            Some(elem),
+            MirOp::Call(
+                MirValue::Global("rt_lists_get_i64".to_string()),
+                vec![list_val.clone(), MirValue::temp(i_loaded2)],
+                MirType { data_type: DataType::I64 },
+            ),
+            loc,
+        );
+        let mapped = self.new_temp();
+        self.func.blocks[body_block].push(
+            Some(mapped),
+            MirOp::Call(
+                closure_val.clone(),
+                vec![MirValue::temp(elem)],
+                MirType { data_type: DataType::I64 },
+            ),
+            loc,
+        );
+        let loaded_result = self.new_temp();
+        self.func.blocks[body_block].push(
+            Some(loaded_result),
+            MirOp::Load(MirValue::temp(result_ptr), MirType { data_type: DataType::Unknown }),
+            loc,
+        );
+        let pushed = self.new_temp();
+        self.func.blocks[body_block].push(
+            Some(pushed),
+            MirOp::Call(
+                MirValue::Global("rt_list_push_i64".to_string()),
+                vec![MirValue::temp(loaded_result), MirValue::temp(mapped)],
+                MirType { data_type: DataType::Unknown },
+            ),
+            loc,
+        );
+        self.func.blocks[body_block].push(
+            None,
+            MirOp::Store(MirValue::temp(result_ptr), MirValue::temp(pushed)),
+            loc,
+        );
+        // i = i + 1
+        let old_i = self.new_temp();
+        self.func.blocks[body_block].push(
+            Some(old_i),
+            MirOp::Load(MirValue::temp(i_ptr), MirType { data_type: DataType::I64 }),
+            loc,
+        );
+        let new_i = self.new_temp();
+        self.func.blocks[body_block].push(
+            Some(new_i),
+            MirOp::Add(MirValue::temp(old_i), MirValue::Const(MirConst::Int(1))),
+            loc,
+        );
+        self.func.blocks[body_block].push(
+            None,
+            MirOp::Store(MirValue::temp(i_ptr), MirValue::temp(new_i)),
+            loc,
+        );
+        self.func.blocks[body_block].terminator = MirTerminator::Br(cond_block);
+
+        self.current_block = end_block;
+        let final_result = self.new_temp();
+        self.func.blocks[end_block].push(
+            Some(final_result),
+            MirOp::Load(MirValue::temp(result_ptr), MirType { data_type: DataType::Unknown }),
+            loc,
+        );
+        MirValue::temp(final_result)
+    }
+
+    fn lower_lists_filter(&mut self, args: &[Expression]) -> MirValue {
+        let loc = (0, 0);
+        let closure_val = self.lower_expression(&args[0]);
+        let list_val = self.lower_expression(&args[1]);
+
+        let result_ptr = self.new_temp();
+        self.func.blocks[self.current_block].push(
+            Some(result_ptr),
+            MirOp::Alloca(MirType { data_type: DataType::Unknown }),
+            loc,
+        );
+        let init = self.new_temp();
+        self.func.blocks[self.current_block].push(
+            Some(init),
+            MirOp::Call(
+                MirValue::Global("rt_list_create".to_string()),
+                vec![
+                    MirValue::Const(MirConst::Int(4)),
+                    MirValue::Const(MirConst::Int(8)),
+                ],
+                MirType { data_type: DataType::Unknown },
+            ),
+            loc,
+        );
+        self.func.blocks[self.current_block].push(
+            None,
+            MirOp::Store(MirValue::temp(result_ptr), MirValue::temp(init)),
+            loc,
+        );
+
+        let i_ptr = self.new_temp();
+        self.func.blocks[self.current_block].push(
+            Some(i_ptr),
+            MirOp::Alloca(MirType { data_type: DataType::I64 }),
+            loc,
+        );
+        self.func.blocks[self.current_block].push(
+            None,
+            MirOp::Store(MirValue::temp(i_ptr), MirValue::Const(MirConst::Int(0))),
+            loc,
+        );
+        let elem_ptr = self.new_temp();
+        self.func.blocks[self.current_block].push(
+            Some(elem_ptr),
+            MirOp::Alloca(MirType { data_type: DataType::I64 }),
+            loc,
+        );
+
+        let pre_block = self.current_block;
+        let cond_block = self.new_block("filter_cond");
+        let body_block = self.new_block("filter_body");
+        let keep_block = self.new_block("filter_keep");
+        let inc_block = self.new_block("filter_inc");
+        let end_block = self.new_block("filter_end");
+        self.func.blocks[pre_block].terminator = MirTerminator::Br(cond_block);
+
+        self.current_block = cond_block;
+        let i_loaded = self.new_temp();
+        self.func.blocks[cond_block].push(
+            Some(i_loaded),
+            MirOp::Load(MirValue::temp(i_ptr), MirType { data_type: DataType::I64 }),
+            loc,
+        );
+        let len_val = self.new_temp();
+        self.func.blocks[cond_block].push(
+            Some(len_val),
+            MirOp::Call(
+                MirValue::Global("rt_list_len".to_string()),
+                vec![list_val.clone()],
+                MirType { data_type: DataType::I64 },
+            ),
+            loc,
+        );
+        let cond = self.new_temp();
+        self.func.blocks[cond_block].push(
+            Some(cond),
+            MirOp::ICmp(MirCmp::Lt, MirValue::temp(i_loaded), MirValue::temp(len_val)),
+            loc,
+        );
+        self.func.blocks[cond_block].terminator =
+            MirTerminator::BrCond(MirValue::temp(cond), body_block, end_block);
+
+        self.current_block = body_block;
+        let i_loaded2 = self.new_temp();
+        self.func.blocks[body_block].push(
+            Some(i_loaded2),
+            MirOp::Load(MirValue::temp(i_ptr), MirType { data_type: DataType::I64 }),
+            loc,
+        );
+        let elem_raw = self.new_temp();
+        self.func.blocks[body_block].push(
+            Some(elem_raw),
+            MirOp::Call(
+                MirValue::Global("rt_lists_get_i64".to_string()),
+                vec![list_val.clone(), MirValue::temp(i_loaded2)],
+                MirType { data_type: DataType::I64 },
+            ),
+            loc,
+        );
+        self.func.blocks[body_block].push(
+            None,
+            MirOp::Store(MirValue::temp(elem_ptr), MirValue::temp(elem_raw)),
+            loc,
+        );
+        let keep = self.new_temp();
+        self.func.blocks[body_block].push(
+            Some(keep),
+            MirOp::Call(
+                closure_val.clone(),
+                vec![MirValue::temp(elem_raw)],
+                MirType { data_type: DataType::Bool },
+            ),
+            loc,
+        );
+        self.func.blocks[body_block].terminator =
+            MirTerminator::BrCond(MirValue::temp(keep), keep_block, inc_block);
+
+        self.current_block = keep_block;
+        let elem = self.new_temp();
+        self.func.blocks[keep_block].push(
+            Some(elem),
+            MirOp::Load(MirValue::temp(elem_ptr), MirType { data_type: DataType::I64 }),
+            loc,
+        );
+        let loaded_result = self.new_temp();
+        self.func.blocks[keep_block].push(
+            Some(loaded_result),
+            MirOp::Load(MirValue::temp(result_ptr), MirType { data_type: DataType::Unknown }),
+            loc,
+        );
+        let pushed = self.new_temp();
+        self.func.blocks[keep_block].push(
+            Some(pushed),
+            MirOp::Call(
+                MirValue::Global("rt_list_push_i64".to_string()),
+                vec![MirValue::temp(loaded_result), MirValue::temp(elem)],
+                MirType { data_type: DataType::Unknown },
+            ),
+            loc,
+        );
+        self.func.blocks[keep_block].push(
+            None,
+            MirOp::Store(MirValue::temp(result_ptr), MirValue::temp(pushed)),
+            loc,
+        );
+        self.func.blocks[keep_block].terminator = MirTerminator::Br(inc_block);
+
+        self.current_block = inc_block;
+        let old_i = self.new_temp();
+        self.func.blocks[inc_block].push(
+            Some(old_i),
+            MirOp::Load(MirValue::temp(i_ptr), MirType { data_type: DataType::I64 }),
+            loc,
+        );
+        let new_i = self.new_temp();
+        self.func.blocks[inc_block].push(
+            Some(new_i),
+            MirOp::Add(MirValue::temp(old_i), MirValue::Const(MirConst::Int(1))),
+            loc,
+        );
+        self.func.blocks[inc_block].push(
+            None,
+            MirOp::Store(MirValue::temp(i_ptr), MirValue::temp(new_i)),
+            loc,
+        );
+        self.func.blocks[inc_block].terminator = MirTerminator::Br(cond_block);
+
+        self.current_block = end_block;
+        let final_result = self.new_temp();
+        self.func.blocks[end_block].push(
+            Some(final_result),
+            MirOp::Load(MirValue::temp(result_ptr), MirType { data_type: DataType::Unknown }),
+            loc,
+        );
+        MirValue::temp(final_result)
+    }
+
+    fn lower_lists_fold(&mut self, args: &[Expression]) -> MirValue {
+        let loc = (0, 0);
+        let acc_init = self.lower_expression(&args[0]);
+        let closure_val = self.lower_expression(&args[1]);
+        let list_val = self.lower_expression(&args[2]);
+
+        let acc_ptr = self.new_temp();
+        self.func.blocks[self.current_block].push(
+            Some(acc_ptr),
+            MirOp::Alloca(MirType { data_type: DataType::I64 }),
+            loc,
+        );
+        self.func.blocks[self.current_block].push(
+            None,
+            MirOp::Store(MirValue::temp(acc_ptr), acc_init),
+            loc,
+        );
+
+        let i_ptr = self.new_temp();
+        self.func.blocks[self.current_block].push(
+            Some(i_ptr),
+            MirOp::Alloca(MirType { data_type: DataType::I64 }),
+            loc,
+        );
+        self.func.blocks[self.current_block].push(
+            None,
+            MirOp::Store(MirValue::temp(i_ptr), MirValue::Const(MirConst::Int(0))),
+            loc,
+        );
+
+        let pre_block = self.current_block;
+        let cond_block = self.new_block("fold_cond");
+        let body_block = self.new_block("fold_body");
+        let end_block = self.new_block("fold_end");
+        self.func.blocks[pre_block].terminator = MirTerminator::Br(cond_block);
+
+        self.current_block = cond_block;
+        let i_loaded = self.new_temp();
+        self.func.blocks[cond_block].push(
+            Some(i_loaded),
+            MirOp::Load(MirValue::temp(i_ptr), MirType { data_type: DataType::I64 }),
+            loc,
+        );
+        let len_val = self.new_temp();
+        self.func.blocks[cond_block].push(
+            Some(len_val),
+            MirOp::Call(
+                MirValue::Global("rt_list_len".to_string()),
+                vec![list_val.clone()],
+                MirType { data_type: DataType::I64 },
+            ),
+            loc,
+        );
+        let cond = self.new_temp();
+        self.func.blocks[cond_block].push(
+            Some(cond),
+            MirOp::ICmp(MirCmp::Lt, MirValue::temp(i_loaded), MirValue::temp(len_val)),
+            loc,
+        );
+        self.func.blocks[cond_block].terminator =
+            MirTerminator::BrCond(MirValue::temp(cond), body_block, end_block);
+
+        self.current_block = body_block;
+        let i_loaded2 = self.new_temp();
+        self.func.blocks[body_block].push(
+            Some(i_loaded2),
+            MirOp::Load(MirValue::temp(i_ptr), MirType { data_type: DataType::I64 }),
+            loc,
+        );
+        let elem = self.new_temp();
+        self.func.blocks[body_block].push(
+            Some(elem),
+            MirOp::Call(
+                MirValue::Global("rt_lists_get_i64".to_string()),
+                vec![list_val.clone(), MirValue::temp(i_loaded2)],
+                MirType { data_type: DataType::I64 },
+            ),
+            loc,
+        );
+        let acc_loaded = self.new_temp();
+        self.func.blocks[body_block].push(
+            Some(acc_loaded),
+            MirOp::Load(MirValue::temp(acc_ptr), MirType { data_type: DataType::I64 }),
+            loc,
+        );
+        let new_acc = self.new_temp();
+        self.func.blocks[body_block].push(
+            Some(new_acc),
+            MirOp::Call(
+                closure_val.clone(),
+                vec![MirValue::temp(acc_loaded), MirValue::temp(elem)],
+                MirType { data_type: DataType::I64 },
+            ),
+            loc,
+        );
+        self.func.blocks[body_block].push(
+            None,
+            MirOp::Store(MirValue::temp(acc_ptr), MirValue::temp(new_acc)),
+            loc,
+        );
+        let old_i = self.new_temp();
+        self.func.blocks[body_block].push(
+            Some(old_i),
+            MirOp::Load(MirValue::temp(i_ptr), MirType { data_type: DataType::I64 }),
+            loc,
+        );
+        let new_i = self.new_temp();
+        self.func.blocks[body_block].push(
+            Some(new_i),
+            MirOp::Add(MirValue::temp(old_i), MirValue::Const(MirConst::Int(1))),
+            loc,
+        );
+        self.func.blocks[body_block].push(
+            None,
+            MirOp::Store(MirValue::temp(i_ptr), MirValue::temp(new_i)),
+            loc,
+        );
+        self.func.blocks[body_block].terminator = MirTerminator::Br(cond_block);
+
+        self.current_block = end_block;
+        let final_result = self.new_temp();
+        self.func.blocks[end_block].push(
+            Some(final_result),
+            MirOp::Load(MirValue::temp(acc_ptr), MirType { data_type: DataType::I64 }),
+            loc,
+        );
+        MirValue::temp(final_result)
     }
 
     fn get_target_elem_type(&self, target: &Expression) -> String {

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::parser::ast::{
-    AssignmentTarget, DataType, Expression, MireValue, Program, QueryOp, Statement,
+    AssignmentTarget, DataType, Expression, Program, QueryOp, Statement,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -499,10 +499,10 @@ impl SemanticModelBuilder {
                 } = expression
                 {
                     self.with_scope(|builder| {
-                        for (name, value) in capture {
+                        for (name, data_type) in capture {
                             builder.register_binding(
                                 name.clone(),
-                                Self::mire_value_type(value),
+                                data_type.clone(),
                                 BindingKind::Value,
                                 None,
                                 false,
@@ -730,51 +730,4 @@ impl SemanticModelBuilder {
         }
     }
 
-    fn mire_value_type(value: &MireValue) -> DataType {
-        match value {
-            MireValue::I8(_) => DataType::I8,
-            MireValue::I16(_) => DataType::I16,
-            MireValue::I32(_) => DataType::I32,
-            MireValue::I64(_) => DataType::I64,
-            MireValue::U8(_) => DataType::U8,
-            MireValue::U16(_) => DataType::U16,
-            MireValue::U32(_) => DataType::U32,
-            MireValue::U64(_) => DataType::U64,
-            MireValue::Float(_) | MireValue::F64(_) => DataType::F64,
-            MireValue::F32(_) => DataType::F32,
-            MireValue::Str(_) => DataType::Str,
-            MireValue::Bool(_) => DataType::Bool,
-            MireValue::None => DataType::None,
-            MireValue::List(_) => DataType::List,
-            MireValue::Dict(_) => DataType::Dict,
-            MireValue::Tuple(_) => DataType::Tuple,
-            MireValue::Function(_) | MireValue::Builtinfn(_) => DataType::Function,
-            MireValue::Ref { is_mutable, .. } => {
-                if *is_mutable {
-                    DataType::mutable_ref(DataType::Unknown)
-                } else {
-                    DataType::shared_ref(DataType::Unknown)
-                }
-            }
-            MireValue::Box { .. } => DataType::Box,
-            MireValue::Array { elements, size } => DataType::Array {
-                element_type: Box::new(
-                    elements
-                        .first()
-                        .map(Self::mire_value_type)
-                        .unwrap_or(DataType::Anything),
-                ),
-                size: *size,
-            },
-            MireValue::Slice { elements } => DataType::Slice {
-                element_type: Box::new(
-                    elements
-                        .first()
-                        .map(Self::mire_value_type)
-                        .unwrap_or(DataType::Anything),
-                ),
-            },
-            MireValue::EnumVariant { enum_name, .. } => DataType::EnumNamed(enum_name.clone()),
-        }
-    }
 }

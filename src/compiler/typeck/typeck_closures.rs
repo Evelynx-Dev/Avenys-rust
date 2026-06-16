@@ -85,8 +85,11 @@ impl TypeChecker {
 
         self.push_scope();
 
-        for (name, value) in capture.iter() {
-            self.insert_var(name.clone(), Self::mire_value_type(value), true);
+        let captures = self.collect_captures(body, params, capture);
+        *capture = captures;
+
+        for (name, data_type) in capture.iter() {
+            self.insert_var(name.clone(), data_type.clone(), true);
         }
 
         for ((name, param_type), expected_type) in params.iter_mut().zip(expected_params.iter()) {

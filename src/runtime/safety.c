@@ -25,3 +25,7 @@ int64_t rt_rem_i64(int64_t a, int64_t b) {
 void rt_check_bounds_i64(int64_t index, int64_t len) {
     if (index < 0 || index >= len) rt_panic_out_of_bounds();
 }
+
+void *rt_closure_env_alloc(int64_t size) {
+    return malloc((size_t)size);
+}

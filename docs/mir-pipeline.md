@@ -18,8 +18,14 @@ Core data structures — all derive `Debug, Clone`:
 | `MirFunction` | Name, params, return type, basic blocks |
 | `MirBlock` | ID, label, instruction list, terminator |
 | `MirInst` | `result: Option<usize>`, `op: MirOp`, `loc` |
-| `MirValue` | `Const(MirConst)`, `Temp(usize)`, `Param(String)`, `Global(String)` |
+| `MirValue` | `Const(MirConst)`, `Temp(usize)`, `Param(String)`, `Global(String)`, `FunctionRef { name, env }`, `EnvPtr` |
 | `MirConst` | `Int(i64)`, `Float(f64)`, `Bool(bool)`, `Char(char)`, `Str(String)`, `None` |
+
+`FunctionRef { name, env }` holds the name of a mire function (user-defined, generated
+closure, or extern wrapper) together with the environment pointer value. It is resolved
+to `@fn_<name>` during codegen and is the first step toward a uniform first-class function
+representation. `EnvPtr` represents the implicit environment pointer parameter available in
+closure bodies.
 | `MirOp` | Alloca, Load, Store, Add, Sub, Mul, SDiv, Shl, And, Or, ICmp, FCmp, Call, Gep, PtrToInt, IntToPtr, BitCast, ZExt, Trunc, Phi, Select, Copy |
 | `MirCmp` | Eq, Ne, Lt, Le, Gt, Ge |
 | `MirTerminator` | `Br(usize)`, `BrCond(MirValue, usize, usize)`, `Ret(Option<MirValue>)`, `Unreachable` |
@@ -43,11 +49,12 @@ Core data structures — all derive `Debug, Clone`:
 | Unary ops (-, !) | ✅ |
 | Function calls (user + builtins) | ✅ (builtins emit as regular calls) |
 | Method calls (instance dispatch) | ✅ (resolves via `method_map`, prepends receiver) |
+| First-class function values | ⚠️ `FunctionRef` symbols only; full `{fn_ptr, env_ptr}` struct value not yet materialized |
 | Match expressions | ✅ (BrCond per case with literal/enum discriminant comparison, case blocks) |
 | If-expressions (`__if_expr`) | ✅ (BrCond + phi-like store/load) |
 | Literals (int, float, bool, char, str) | ✅ |
 | Variable references | ✅ (type-aware Load via `var_types`) |
-| Extern functions | ✅ (collected as `MirExternFunction`) |
+| Extern functions | ✅ (collected as `MirExternFunction`; wrappers generated on demand in codegen)
 | Index expressions (array/map read) | ✅ (GEP + Load) |
 | Index assignment (array/map write) | ✅ (GEP + Store) |
 | Member access (struct field read) | ✅ (GEP + Load via struct metadata) |
@@ -56,7 +63,8 @@ Core data structures — all derive `Debug, Clone`:
 | Reference (`&expr`) | ✅ (returns alloca ptr, skips Load) |
 | Dereference (`*expr`) | ✅ (Load from pointer) |
 | Unsafe blocks | ✅ (forwards body) |
-| Closures | ❌ |
+| Closures | ⚠️ Lowered to standalone functions; captures are always empty (parser does not emit captures yet) |
+| Higher-order list functions | ✅ `lists.map`, `lists.filter`, `lists.fold` lowered to loops that call the closure function |
 | Pipeline (`|>`) | ❌ |
 | Enum variants (bare path) | ✅ Resolves to real discriminant |
 | Enum variants (with payload) | ⚠️ Returns discriminant only (payloads not bound yet) |
@@ -100,6 +108,8 @@ Returns LLVM IR text + extern libs (currently always empty).
 | Branch / conditional branch | ✅ |
 | Return | ✅ |
 | Function calls (typed args) | ✅ |
+| Indirect/direct calls via `FunctionRef` | ✅ Direct call to `@fn_<name>` with implicit `env_ptr` argument |
+| Extern function wrappers | ✅ Generated on demand for extern functions used as values (direct calls, `call(...)` targets, or stored in variables) |
 | ZExt bool→i64 | ✅ |
 | Trunc i64→i32 | ✅ |
 | Extern declarations from `ExternFunction` AST | ✅ |
@@ -167,15 +177,40 @@ Returns total number of applied transformations.
 
 ## Known Limitations
 
-1. **Builtins not expanded**: `dasu`, `ireru`, `len`, etc. emitted as regular `call` — clang can't resolve. Existing codegen in `llvm_functions.rs` handles these with special-case C wrappers.
+1. **Builtins not expanded**: `dasu`, `ireru`, `len`, etc. emitted as regular `call` — clang can't resolve. Existing codegen in `llvm_functions.rs` handles these with special-case C wrappers. The MIR backend currently special-cases `len()` dispatch and `lists.map/filter/fold`; other builtins still rely on kioto stubs or runtime helpers.
 
 2. **Extern libs empty**: Second tuple element always `Vec::new()`. The existing codegen properly collects from `ExternLib` statements.
 
 3. **String constants**: `MirConst::Str` emits `ptr null` instead of `@.str = constant [N x i8] c"..."`.
 
-4. **Closures, dicts, enums with payloads**: Not fully lowered. Dict/map literals return `Const(None)`. Enum variants with payloads return discriminant only (payload data not bound/marshalled). Enum payload bindings in match patterns are not extracted. Instance methods now resolve and dispatch correctly (Phases 1–4 complete).
+4. **First-class function values**: `FunctionRef` is only a symbol. A real `{ fn_ptr, env_ptr }` struct value has not been materialized yet, so closures cannot capture variables and function values cannot be stored in variables/structs/returned from functions. All indirect calls currently pass `ptr null` as the environment pointer.
 
-5. **Memory pressure**: Full `build` (compile + link via clang) can use ~4GB RAM — a pre-existing issue from clang runtime compilation, not specific to MIR.
+5. **Inline closure expansion is legacy**: `call((x) => ..., ...)` still has a dedicated inline-expansion path in the lowerer. Once function values are real structs and `call()` works with any function-typed value, this path should be removed.
+
+6. **Dict/Map literals, enums with payloads**: Dict/map literals return `Const(None)` in some paths. Enum variants with payloads return discriminant only (payload data not bound/marshalled). Enum payload bindings in match patterns are not extracted.
+
+7. **Memory pressure**: Full `build` (compile + link via clang) can use ~4GB RAM — a pre-existing issue from clang runtime compilation, not specific to MIR.
+
+## Calling Convention
+
+Every mire function (user-defined, generated closure, or extern wrapper) has an
+implicit first parameter:
+
+```llvm
+define i64 @fn_name(ptr %env_ptr, i64 %arg_0, ...) { ... }
+```
+
+- `env_ptr` is currently always `ptr null` for direct calls and non-capturing
+  closures.
+- `extern fn` declarations referenced as function values get a generated LLVM
+  wrapper `@fn_<name>_wrapper(ptr %env_ptr, ...)` that forwards to the real C
+  symbol. Wrappers are generated on demand to avoid bloating the module for
+  externs that are only called directly.
+- `FunctionRef` stores the environment value alongside the function name, and
+  `EnvPtr` allows closure bodies to read the implicit environment pointer.
+- The `call(...)` builtin in MIR codegen resolves the callee as a
+  `FunctionRef`, bitcasts the function pointer to the call-site signature, and
+  passes `ptr null` as the first argument.
 
 ## Architecture Notes
 

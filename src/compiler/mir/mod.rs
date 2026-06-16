@@ -61,6 +61,14 @@ fn hash_value(value: &MirValue, buf: &mut Vec<u8>) {
             buf.push(3);
             buf.extend_from_slice(name.as_bytes());
         }
+        MirValue::EnvPtr => {
+            buf.push(4);
+        }
+        MirValue::FunctionRef { name, env } => {
+            buf.push(5);
+            buf.extend_from_slice(name.as_bytes());
+            hash_value(env, buf);
+        }
     }
 }
 
@@ -132,9 +140,9 @@ fn hash_op(op: &MirOp, buf: &mut Vec<u8>) {
             hash_value(l, buf);
             hash_value(r, buf);
         }
-        MirOp::Call(name, args, ret) => {
+        MirOp::Call(callee, args, ret) => {
             buf.push(13);
-            buf.extend_from_slice(name.as_bytes());
+            hash_value(callee, buf);
             for a in args {
                 hash_value(a, buf);
             }
@@ -226,6 +234,7 @@ pub struct MirFunction {
     pub ret_type: DataType,
     pub blocks: Vec<MirBlock>,
     pub body_hash: u64,
+    pub noinline: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -248,6 +257,14 @@ pub enum MirValue {
     Temp(usize),
     Param(String),
     Global(String),
+    /// Reference to the implicit environment pointer of the current mire
+    /// function. Used by closure bodies to load captured values.
+    EnvPtr,
+    /// Reference to a mire function together with the value that provides its
+    /// environment pointer. For top-level functions and non-capturing closures
+    /// this is `Const(None)` (i.e. `ptr null`). For capturing closures it is a
+    /// temp holding the allocated environment struct.
+    FunctionRef { name: String, env: Box<MirValue> },
 }
 
 #[derive(Clone, Debug)]
@@ -287,7 +304,7 @@ pub enum MirOp {
     Or(MirValue, MirValue),
     ICmp(MirCmp, MirValue, MirValue),
     FCmp(MirCmp, MirValue, MirValue),
-    Call(String, Vec<MirValue>, MirType),
+    Call(MirValue, Vec<MirValue>, MirType),
     Gep(MirValue, Vec<MirValue>, String),
     PtrToInt(MirValue, MirType),
     IntToPtr(MirValue, MirType),
@@ -351,6 +368,7 @@ impl MirFunction {
             ret_type,
             blocks: Vec::new(),
             body_hash: 0,
+            noinline: false,
         }
     }
 

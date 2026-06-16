@@ -20,7 +20,7 @@ use crate::compiler::{location, AnalysisSelection};
 use crate::error::{MireError, Result};
 use crate::incremental::analysis_unit_key;
 use crate::parser::ast::{
-    AssignmentTarget, DataType, Expression, Identifier, Literal, MireValue, Program, Statement,
+    AssignmentTarget, DataType, Expression, Identifier, Literal, Program, Statement,
     TraitMethodSig,
 };
 #[derive(Debug, Clone)]

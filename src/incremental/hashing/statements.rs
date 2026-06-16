@@ -265,19 +265,6 @@ pub(super) fn hash_optional_statements(statements: &Option<Vec<Statement>>, hash
     }
 }
 
-pub(super) fn hash_function_def(function: &FunctionDef, hasher: &mut FxHasher) {
-    function.name.hash(hasher);
-    hash_params(&function.params, hasher);
-    hash_statements(function.body.as_ref(), hasher);
-    hash_data_type(&function.return_type, hasher);
-    function.is_method.hash(hasher);
-    function.capture.len().hash(hasher);
-    for (name, value) in &function.capture {
-        name.hash(hasher);
-        hash_mire_value(value, hasher);
-    }
-}
-
 pub(super) fn hash_assignment_target(target: &AssignmentTarget, hasher: &mut FxHasher) {
     match target {
         AssignmentTarget::Variable(name) => {

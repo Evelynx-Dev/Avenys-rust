@@ -211,8 +211,10 @@ impl TypeChecker {
                                 }
                             }
                             self.push_scope();
-                            for (name, value) in capture.iter() {
-                                self.insert_var(name.clone(), Self::mire_value_type(value), true);
+                            let captures = self.collect_captures(body, params, capture);
+                            *capture = captures;
+                            for (name, data_type) in capture.iter() {
+                                self.insert_var(name.clone(), data_type.clone(), true);
                             }
                             for (name, ptype) in params.iter() {
                                 self.insert_var(name.clone(), ptype.clone(), true);
@@ -592,8 +594,11 @@ impl TypeChecker {
             } => {
                 self.push_scope();
 
-                for (name, value) in capture.iter() {
-                    self.insert_var(name.clone(), Self::mire_value_type(value), true);
+                let captures = self.collect_captures(body, params, capture);
+                *capture = captures;
+
+                for (name, data_type) in capture.iter() {
+                    self.insert_var(name.clone(), data_type.clone(), true);
                 }
 
                 for (name, ptype) in params.iter() {
@@ -675,8 +680,10 @@ impl TypeChecker {
                 {
                     let elem_type = self.pipeline_input_element_type(&input_type);
                     self.push_scope();
-                    for (name, value) in capture.iter() {
-                        self.insert_var(name.clone(), Self::mire_value_type(value), true);
+                    let captures = self.collect_captures(body, params, capture);
+                    *capture = captures;
+                    for (name, data_type) in capture.iter() {
+                        self.insert_var(name.clone(), data_type.clone(), true);
                     }
                     if let Some((_, ptype)) = params.first_mut()
                         && *ptype == DataType::Unknown

@@ -6,7 +6,7 @@ fn callee_instr_count(func: &MirFunction) -> usize {
 }
 
 fn has_call_to(func: &MirFunction, callee: &str) -> bool {
-    func.blocks.iter().any(|b| b.insts.iter().any(|inst| matches!(&inst.op, MirOp::Call(name, _, _) if name == callee)))
+    func.blocks.iter().any(|b| b.insts.iter().any(|inst| matches!(&inst.op, MirOp::Call(MirValue::FunctionRef { name, .. }, _, _) if name == callee)))
 }
 
 fn max_temp_in_value(value: &MirValue, max: &mut usize) {
@@ -136,7 +136,7 @@ fn inline_into(caller: &mut MirFunction, callee: &MirFunction) -> bool {
         let mut sites = Vec::new();
         for (bi, block) in caller.blocks.iter().enumerate() {
             for (ii, inst) in block.insts.iter().enumerate() {
-                if let MirOp::Call(name, _, _) = &inst.op {
+                if let MirOp::Call(MirValue::FunctionRef { name, .. }, _, _) = &inst.op {
                     if name == &callee.name && ii + 1 == block.insts.len() {
                         sites.push((bi, ii));
                     }
@@ -150,7 +150,6 @@ fn inline_into(caller: &mut MirFunction, callee: &MirFunction) -> bool {
         return false;
     }
 
-    let callee_max_temp = next_available_temp(callee);
     let mut changed = false;
 
     for (bi, ii) in call_sites.into_iter().rev() {
@@ -165,29 +164,11 @@ fn inline_into(caller: &mut MirFunction, callee: &MirFunction) -> bool {
         let old_term = caller.blocks[bi].terminator.clone();
 
         let temp_offset = next_available_temp(caller);
-        let param_base = temp_offset + callee_max_temp;
         let mut inserted: Vec<MirInst> = Vec::new();
-
-        for (pi, param) in callee.params.iter().enumerate() {
-            let ptr = param_base + pi;
-            let arg = args.get(pi).cloned().unwrap_or(MirValue::Const(MirConst::None));
-            inserted.push(MirInst {
-                result: Some(ptr),
-                op: MirOp::Alloca(MirType {
-                    data_type: param.data_type.clone(),
-                }),
-                loc: call_inst.loc,
-            });
-            inserted.push(MirInst {
-                result: None,
-                op: MirOp::Store(MirValue::temp(ptr), arg),
-                loc: call_inst.loc,
-            });
-        }
 
         for inst in &callee_block.insts {
             let new_result = inst.result.map(|r| r + temp_offset);
-            let new_op = remap_op(&inst.op, temp_offset, callee);
+            let new_op = remap_op(&inst.op, temp_offset, callee, &args);
             inserted.push(MirInst {
                 result: new_result,
                 op: new_op,
@@ -198,7 +179,7 @@ fn inline_into(caller: &mut MirFunction, callee: &MirFunction) -> bool {
         if let (Some(result_temp), Some(val)) = (call_result, ret_val.as_ref()) {
             inserted.push(MirInst {
                 result: Some(result_temp),
-                op: MirOp::Copy(remap_val(val, temp_offset, callee)),
+                op: MirOp::Copy(remap_val(val, temp_offset, callee, &args)),
                 loc: call_inst.loc,
             });
         }
@@ -218,8 +199,8 @@ fn inline_into(caller: &mut MirFunction, callee: &MirFunction) -> bool {
     changed
 }
 
-fn remap_op(op: &MirOp, temp_offset: usize, callee: &MirFunction) -> MirOp {
-    let map = |v: &MirValue| remap_val(v, temp_offset, callee);
+fn remap_op(op: &MirOp, temp_offset: usize, callee: &MirFunction, args: &[MirValue]) -> MirOp {
+    let map = |v: &MirValue| remap_val(v, temp_offset, callee, args);
     match op {
         MirOp::Call(n, a, t) => MirOp::Call(n.clone(), a.iter().map(map).collect(), t.clone()),
         MirOp::Alloca(t) => MirOp::Alloca(t.clone()),
@@ -249,13 +230,12 @@ fn remap_op(op: &MirOp, temp_offset: usize, callee: &MirFunction) -> MirOp {
     }
 }
 
-fn remap_val(val: &MirValue, temp_offset: usize, callee: &MirFunction) -> MirValue {
+fn remap_val(val: &MirValue, temp_offset: usize, callee: &MirFunction, args: &[MirValue]) -> MirValue {
     match val {
         MirValue::Temp(id) => MirValue::Temp(*id + temp_offset),
         MirValue::Param(pname) => {
-            let callee_max_temp = callee.next_temp();
             callee.params.iter().position(|p| p.name == *pname)
-                .map(|pi| MirValue::temp(pi + temp_offset + callee_max_temp))
+                .and_then(|pi| args.get(pi).cloned())
                 .unwrap_or_else(|| MirValue::Global(pname.clone()))
         }
         other => other.clone(),
@@ -274,6 +254,7 @@ mod tests {
             ret_type: DataType::I64,
             blocks,
             body_hash: 0,
+            noinline: false,
         };
         f.body_hash = f.compute_hash();
         f
@@ -295,7 +276,7 @@ mod tests {
         ]);
         // caller: calls add42
         let caller = make_func("main", vec![
-            block(0, vec![inst(0, MirOp::Call("add42".into(), vec![], MirType { data_type: DataType::I64 }))], MirTerminator::Ret(Some(MirValue::Temp(0)))),
+            block(0, vec![inst(0, MirOp::Call(MirValue::FunctionRef { name: "add42".into(), env: Box::new(MirValue::Const(MirConst::None)) }, vec![], MirType { data_type: DataType::I64 }))], MirTerminator::Ret(Some(MirValue::Temp(0))))
         ]);
         let mut prog = MirProgram { functions: vec![caller, callee], entry_point: None, extern_functions: vec![], struct_types: HashMap::new() };
         let count = inlining(&mut prog);
@@ -334,7 +315,7 @@ mod tests {
             ], MirTerminator::Ret(Some(MirValue::Temp(5)))),
         ]);
         let caller = make_func("main", vec![
-            block(0, vec![inst(0, MirOp::Call("big".into(), vec![], MirType { data_type: DataType::I64 }))], MirTerminator::Ret(Some(MirValue::Temp(0)))),
+            block(0, vec![inst(0, MirOp::Call(MirValue::FunctionRef { name: "big".into(), env: Box::new(MirValue::Const(MirConst::None)) }, vec![], MirType { data_type: DataType::I64 }))], MirTerminator::Ret(Some(MirValue::Temp(0))))
         ]);
         let mut prog = MirProgram { functions: vec![caller, callee], entry_point: None, extern_functions: vec![], struct_types: HashMap::new() };
         let count = inlining(&mut prog);

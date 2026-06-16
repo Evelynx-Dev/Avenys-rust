@@ -542,6 +542,7 @@ mod tests {
                 terminator,
             }],
             body_hash: 0,
+            noinline: false,
         };
         f.body_hash = f.compute_hash();
         f
@@ -685,7 +686,7 @@ mod tests {
     fn dce_preserves_call() {
         let mut f = make_func(
             "f",
-            vec![void_inst(MirOp::Call("print".to_string(), vec![i64(42)], MirType { data_type: DataType::None }))],
+            vec![void_inst(MirOp::Call(MirValue::FunctionRef { name: "print".to_string(), env: Box::new(MirValue::Const(MirConst::None)) }, vec![i64(42)], MirType { data_type: DataType::None }))],
             MirTerminator::Ret(None),
         );
         assert_eq!(dce_function(&mut f), 0);
@@ -726,7 +727,7 @@ mod tests {
         // result = Call(...) — has side effect, kept even if result unused
         let mut f = make_func(
             "f",
-            vec![inst(1, MirOp::Call("print".to_string(), vec![i64(42)], MirType { data_type: DataType::None }))],
+            vec![inst(1, MirOp::Call(MirValue::FunctionRef { name: "print".to_string(), env: Box::new(MirValue::Const(MirConst::None)) }, vec![i64(42)], MirType { data_type: DataType::None }))],
             MirTerminator::Ret(None),
         );
         assert_eq!(dce_function(&mut f), 0);
@@ -774,6 +775,7 @@ mod tests {
                 })
                 .collect(),
             body_hash: 0,
+            noinline: false,
         };
         f.body_hash = f.compute_hash();
         f

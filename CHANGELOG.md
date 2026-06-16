@@ -2,6 +2,56 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.11.26] - 2026-06-16
+
+### Fixed
+- Closure capture codegen: insertion order of capture GEP instructions corrected
+  (moved before `lower_function_body` so captured variables are visible to the
+  closure body as local variables).
+- Closure env struct types now propagated to `MirProgram.struct_types` so LLVM
+  GEP can resolve the struct layout.
+- Removed dead-code warnings (5 unused functions/imports across hashing, semantic,
+  and typeck modules).
+
+## [3.11.25] - 2026-06-15
+
+### Changed
+- MIR codegen: extern-function wrappers are now generated on demand only for
+  extern functions that are actually referenced as values (direct calls, `call`
+  builtin targets, or stored in function-typed variables). This significantly
+  reduces LLVM IR size and link time for programs that import kioto's large
+  extern-function surface.
+
+### Fixed
+- Restored MIR function inlining (was temporarily disabled during profiling).
+
+## [3.11.24] - 2026-06-15
+
+### Added
+- MIR: first-class function-value foundation. `MirValue::FunctionRef` is now
+  emitted for closures and resolved to a concrete `@fn_...` symbol, and every
+  mire function (including generated closure functions) receives an implicit
+  `env_ptr` parameter so indirect calls can pass a null environment pointer.
+- MIR lowerer: closure literals are now lowered into standalone functions
+  (`closure_N`) instead of being expanded inline at every `call(...)` site.
+- MIR lowerer: `lists.map`, `lists.filter`, and `lists.fold` are now lowered
+  into loops that call the supplied closure function for each element.
+- MIR codegen: wrappers are generated for `extern fn` declarations so they
+  share the mire `env_ptr` calling convention and can be used as function
+  values. (Fixes `callback_call_extern_function_value_alias_runs_end_to_end`.)
+
+### Fixed
+- MIR inliner: parameter mapping now substitutes `MirValue::Param` with the
+  caller's argument value and no longer allocates duplicate parameter slots,
+  so inlining small functions (including short closures) produces correct IR.
+- MIR codegen: any block whose terminator is still `Unreachable` after
+  lowering/inlining now emits a default return instead of LLVM `unreachable`,
+  preventing control from falling through into blocks appended later (e.g.
+  inliner continuation blocks).
+
+### Tests
+- Full regression suite is green: 140 passed / 0 failed.
+
 ## [3.11.23] - 2026-06-15
 
 ### Fixed

@@ -63,6 +63,7 @@ fn generate_runtime_declarations(ir: &str) -> String {
         ("declare i64 @rt_div_i64(", "declare i64 @rt_div_i64(i64, i64)"),
         ("declare i64 @rt_rem_i64(", "declare i64 @rt_rem_i64(i64, i64)"),
         ("declare void @rt_check_bounds_i64(", "declare void @rt_check_bounds_i64(i64, i64)"),
+        ("declare ptr @rt_closure_env_alloc(", "declare ptr @rt_closure_env_alloc(i64)"),
         ("declare ptr @rt_math_range_i64(", "declare ptr @rt_math_range_i64(i64)"),
         ("@.fmt_str =", "@.fmt_str = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\""),
         ("@.fmt_i64 =", "@.fmt_i64 = private unnamed_addr constant [5 x i8] c\"%ld\\0A\\00\""),
@@ -571,7 +572,7 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
                 ir.push_str("\n\ndefine i32 @main(i32 %argc, ptr %argv) {\n");
                 ir.push_str("  store i32 %argc, ptr @.argc\n");
                 ir.push_str("  store ptr %argv, ptr @.argv\n");
-                ir.push_str("  %call_main = call i64 @fn_main()\n");
+                ir.push_str("  %call_main = call i64 @fn_main(ptr null)\n");
                 ir.push_str("  ret i32 0\n");
                 ir.push_str("}\n");
             }
@@ -585,6 +586,7 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
             })
         })?;
     }
+    eprintln!("[DEBUG IR]\n{}", ir);
 
     let final_ir = if matches!(options.opt_level, OptLevel::O0) {
         ir
