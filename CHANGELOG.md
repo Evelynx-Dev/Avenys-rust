@@ -2,6 +2,13 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.11.27] - 2026-06-16
+
+### Infrastructure
+- First build marker: initial packages published to mire-lang/libs (kioto, owl)
+- Build-based compatibility boundary established for Avenys B1.001
+- libs repo: https://github.com/mire-lang/libs.git
+
 ## [3.11.26] - 2026-06-16
 
 ### Fixed
