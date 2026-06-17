@@ -63,6 +63,16 @@ Rules:
 - `const` enforces immutability (compile-time constant)
 - Commas are optional in most positions
 
+### Comments
+
+```mire
+# Line comment with hash
+// Line comment with slashes
+//! Block comment !//
+```
+
+`#`, `//` (line), and `//! ... !//` (block) comments are stripped at the lexer level.
+
 ### Compound Assignment
 
 ```mire
@@ -754,7 +764,7 @@ kioto = { path = "../kioto" }
 kioto/
   mod.mire              # entry point — carga todo
   core/
-    strings/            # split, join, replace, trim, contains, starts_with, ends_with, pad, substr
+    strings/            # upper, lower, strip, trim, ltrim, rtrim, split, join, replace, replace_first, contains, startswith, endswith, len, substr, pad_left, pad_right, repeat, is_empty, index_of, from_i64
     lists/              # push, pop, get, slice, map, filter, fold, concat, contains, index_of
     dicts/              # get, set, keys, values, has, remove, entries, merge
     time/               # now, sleep, format, elapsed, mark
@@ -1042,7 +1052,7 @@ kioto = { path = "../kioto" }
 milib = { path = "./lib/milib" }
 
 # Por versión (busca en OWL_HOME o cache):
-kioto = "3.11.10"
+kioto = { version = "3.11.27" }
 
 # Ambos (path + version metadata):
 milib = { version = "0.2.0", path = "./lib/milib" }
@@ -1133,7 +1143,7 @@ Default profile es `debug` (`-O0`). Usá `--release` o `-O2` para builds optimiz
 
 ## 22. Stability
 
-Compiler version: `3.11.11`.
+Compiler version: `3.11.27`.
 
 **Stable:**
 - `struct`, field access, construction
@@ -1182,11 +1192,55 @@ cargo test
 # Run a specific regression test
 cargo test syntax_reference_prototype_compiles_and_runs
 
-# Run Mire source tests through the CLI
-cargo run -- test
+# Run Mire source tests through OWL
+owl test
 
-# Run error-case tests individually
-cargo run -- run tests/error/01_lexer_unexpected_char.mire
+# Run a single .mire source file
+mire run tests/behavior/hello.mire
+```
+
+The `owl test` command discovers test functions in `.mire` files under `tests/`.
+Functions marked with a test directive are compiled and run; non-test functions
+are ignored. Output uses `cargo-test`-style formatting.
+
+### Test Directives
+
+Place a directive comment on the line immediately before a `pub fn` to mark it:
+
+```mire
+#!cfg::test
+pub fn test_addition: () {
+    # test body
+}
+
+![test] basic arithmetic
+pub fn test_arithmetic: () {
+    assert_eq(add(2 3) 5)
+}
+```
+
+Supported directives:
+
+| Directive | Description |
+|-----------|-------------|
+| `#!cfg::test` | Marks the following function as a test |
+| `#!cfg::bench` | Marks the following function as a benchmark |
+| `#!cfg::example` | Marks the following function as an example |
+| `#!cfg::ignore` | Skips the following function during test runs |
+| `![test]` | Alternative `![]` syntax for marking a test |
+| `![bench]` | Alternative `![]` syntax for marking a benchmark |
+| `![example]` | Alternative `![]` syntax for marking an example |
+| `![ignore]` | Alternative `![]` syntax for skipping a test |
+
+An optional description string can follow the bracket directive (e.g., `![test] basic arithmetic`).
+
+### Test Assertions
+
+Available in test harness:
+
+```mire
+assert_eq(actual expected)
+assert_ne(actual expected)
 ```
 
 ### Test Categories

@@ -75,6 +75,7 @@ fn generate_runtime_declarations(ir: &str) -> String {
         ("declare ptr @rt_i64_to_string(", "declare ptr @rt_i64_to_string(i64)"),
         ("declare ptr @rt_f64_to_string(", "declare ptr @rt_f64_to_string(double)"),
         ("declare ptr @rt_bool_to_string(", "declare ptr @rt_bool_to_string(i64)"),
+        ("declare ptr @rt_get_args(", "declare ptr @rt_get_args(i32, ptr)"),
         ("declare i32 @printf(", "declare i32 @printf(ptr, ...)"),
         ("declare ptr @rt_string_concat(", "declare ptr @rt_string_concat(ptr, ptr)"),
         ("@.argc =", "@.argc = global i32 0"),
@@ -586,7 +587,9 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
             })
         })?;
     }
-    eprintln!("[DEBUG IR]\n{}", ir);
+    if options.debug_dump {
+        eprintln!("[DEBUG IR]\n{}", ir);
+    }
 
     let final_ir = if matches!(options.opt_level, OptLevel::O0) {
         ir

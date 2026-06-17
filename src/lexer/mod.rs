@@ -186,28 +186,33 @@ impl<'a> Lexer<'a> {
     }
 
     fn skip_comment(&mut self) -> Result<bool> {
-        if self.peek(0) == Some('/') && self.peek(1) == Some('/') {
-            self.advance();
-            self.advance();
-            if self.peek(0) == Some('!') {
+        if (self.peek(0) == Some('/') && self.peek(1) == Some('/')) || self.peek(0) == Some('#') {
+            let is_hash = self.peek(0) == Some('#');
+            if is_hash {
                 self.advance();
-                loop {
-                    match (self.peek(0), self.peek(1), self.peek(2)) {
-                        (Some('!'), Some('/'), Some('/')) => {
-                            self.advance();
-                            self.advance();
-                            self.advance();
-                            return Ok(true);
-                        }
-                        (None, _, _) => {
-                            return Err(MireError::new(ErrorKind::Lexer {
-                                line: self.line,
-                                column: self.column,
-                                message: "Unterminated block comment".to_string(),
-                            }));
-                        }
-                        _ => {
-                            self.advance();
+            } else {
+                self.advance();
+                self.advance();
+                if self.peek(0) == Some('!') {
+                    self.advance();
+                    loop {
+                        match (self.peek(0), self.peek(1), self.peek(2)) {
+                            (Some('!'), Some('/'), Some('/')) => {
+                                self.advance();
+                                self.advance();
+                                self.advance();
+                                return Ok(true);
+                            }
+                            (None, _, _) => {
+                                return Err(MireError::new(ErrorKind::Lexer {
+                                    line: self.line,
+                                    column: self.column,
+                                    message: "Unterminated block comment".to_string(),
+                                }));
+                            }
+                            _ => {
+                                self.advance();
+                            }
                         }
                     }
                 }

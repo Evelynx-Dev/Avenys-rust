@@ -77,6 +77,7 @@ pub fn mir_to_llvm(program: &MirProgram) -> (String, Vec<(String, String)>) {
     out.push("target triple = \"x86_64-unknown-linux-gnu\"".to_string());
     out.push(String::new());
     out.extend(extern_decls);
+    out.push("declare ptr @rt_get_args(i32, ptr)".to_string());
     out.push(String::new());
     out.extend(strings);
     out.push(String::new());
@@ -727,6 +728,14 @@ fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
                 extra.push(format!("%t{} = inttoptr i64 0 to ptr", result));
                 line
                 // result is the ptr returned by dasu (dummy null pointer)
+            } else if name_opt == Some("env_args") {
+                // env_args() builtin — delegate to runtime
+                let result = tmp_result(ctx, "ptr", inst.result);
+                let argc = tmp_extra(ctx, "i32");
+                let argv = tmp_extra(ctx, "ptr");
+                extra.push(format!("{} = load i32, ptr @.argc", argc));
+                extra.push(format!("{} = load ptr, ptr @.argv", argv));
+                format!("%t{} = call ptr @rt_get_args(i32 {}, ptr {})", result, argc, argv)
             } else if name_opt == Some("call") {
                 // Indirect call via function pointer
                 if args.len() < 1 {

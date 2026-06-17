@@ -1,7 +1,0 @@
-[project]
-name = "hello_word"
-version = "0.1.0"
-
-[build]
-llvm_version = "22.1.3"
-profile = "release"
