@@ -1,4 +1,4 @@
-import std
+load kioto
 
 fn get_five: () :i64 {
     5

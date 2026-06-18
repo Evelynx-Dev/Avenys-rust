@@ -1,4 +1,4 @@
-import std
+load kioto
 
 struct Node {
     value :i64

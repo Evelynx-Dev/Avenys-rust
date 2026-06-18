@@ -39,7 +39,7 @@ impl TypeChecker {
                 ',' if depth == 0 => {
                     let part = inner[start..idx].trim();
                     if !part.is_empty() {
-                        args.push(DataType::parse_type(part));
+                        args.push(Self::parse_nominal_type_arg(part));
                     }
                     start = idx + ch.len_utf8();
                 }
@@ -48,9 +48,18 @@ impl TypeChecker {
         }
         let tail = inner[start..].trim();
         if !tail.is_empty() {
-            args.push(DataType::parse_type(tail));
+            args.push(Self::parse_nominal_type_arg(tail));
         }
         args
+    }
+
+    fn parse_nominal_type_arg(part: &str) -> DataType {
+        let parsed = DataType::parse_type(part);
+        if parsed == DataType::Unknown {
+            DataType::Generic(part.to_string())
+        } else {
+            parsed
+        }
     }
 
     pub(super) fn bindings_for_nominal_type_args(

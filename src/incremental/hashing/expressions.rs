@@ -121,9 +121,9 @@ pub(super) fn hash_expression(expr: &Expression, hasher: &mut FxHasher) {
             hash_statements(body, hasher);
             hash_data_type(return_type, hasher);
             capture.len().hash(hasher);
-            for (name, value) in capture {
+            for (name, data_type) in capture {
                 name.hash(hasher);
-                hash_mire_value(value, hasher);
+                hash_data_type(data_type, hasher);
             }
         }
         Expression::Reference {

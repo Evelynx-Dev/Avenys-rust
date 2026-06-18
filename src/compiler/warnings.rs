@@ -4,6 +4,7 @@ use crate::error::diagnostic::{
 use crate::parser::Program;
 use crate::parser::ast::{DataType, Expression, Identifier, Literal, Statement};
 use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
 pub struct WarningAnalyzer {
     diagnostics: Vec<Diagnostic>,
@@ -20,10 +21,16 @@ pub struct WarningAnalyzer {
     loop_depth: usize,
     current_line: usize,
     current_column: usize,
+    statement_origins: Vec<PathBuf>,
+    entry_path: Option<PathBuf>,
+    suppress_library_warnings: bool,
 }
 
 impl WarningAnalyzer {
-    pub fn new(filter: WarningFilter, deny: HashSet<DiagnosticCode>) -> Self {
+    pub fn new(
+        filter: WarningFilter,
+        deny: HashSet<DiagnosticCode>,
+    ) -> Self {
         Self {
             diagnostics: Vec::new(),
             filter,
@@ -39,7 +46,21 @@ impl WarningAnalyzer {
             loop_depth: 0,
             current_line: 1,
             current_column: 1,
+            statement_origins: Vec::new(),
+            entry_path: None,
+            suppress_library_warnings: false,
         }
+    }
+
+    pub fn with_origins(
+        mut self,
+        statement_origins: &[PathBuf],
+        entry_path: &Path,
+    ) -> Self {
+        self.statement_origins = statement_origins.to_vec();
+        self.entry_path = Some(entry_path.to_path_buf());
+        self.suppress_library_warnings = true;
+        self
     }
 
     pub fn analyze(
@@ -48,10 +69,30 @@ impl WarningAnalyzer {
         source: &str,
         filename: Option<&str>,
     ) -> Vec<Diagnostic> {
-        for stmt in &program.statements {
+        for (index, stmt) in program.statements.iter().enumerate() {
+            if self.suppress_library_warnings {
+                let origin = self.statement_origins.get(index);
+                if let Some(entry) = &self.entry_path {
+                    if let Some(origin) = origin {
+                        if origin != entry {
+                            continue;
+                        }
+                    }
+                }
+            }
             self.scan_defs(stmt);
         }
-        for stmt in &program.statements {
+        for (index, stmt) in program.statements.iter().enumerate() {
+            if self.suppress_library_warnings {
+                let origin = self.statement_origins.get(index);
+                if let Some(entry) = &self.entry_path {
+                    if let Some(origin) = origin {
+                        if origin != entry {
+                            continue;
+                        }
+                    }
+                }
+            }
             self.scan_usage(stmt);
         }
 
@@ -103,17 +144,17 @@ impl WarningAnalyzer {
         }
 
         let imported_modules = self.imported_modules.clone();
-        for import in &imported_modules {
-            if !self.used_imports.contains(&import.name) {
-                let (line, column) = if import.line == 1 && import.column == 1 {
-                    find_position_for_import(source, &import.name).unwrap_or((1, 1))
+        for load in &imported_modules {
+            if !self.used_imports.contains(&load.name) {
+                let (line, column) = if load.line == 1 && load.column == 1 {
+                    find_position_for_load(source, &load.name).unwrap_or((1, 1))
                 } else {
-                    (import.line, import.column)
+                    (load.line, load.column)
                 };
                 self.push_warn(
                     DiagnosticCode::W0003,
-                    "Unused Import",
-                    format!("Import '{}' is never used", import.name),
+                    "Unused Load",
+                    format!("Load '{}' is never used", load.name),
                     line,
                     column,
                     None,
@@ -261,9 +302,12 @@ impl WarningAnalyzer {
                     self.scan_defs(b);
                 }
             }
-            Statement::Use { path, is_local, .. } if !*is_local => {
+            Statement::Load {
+                path,
+                ..
+            } => {
                 self.imported_modules.push(Identifier {
-                    name: path.clone(),
+                    name: path.join("::"),
                     data_type: DataType::Unknown,
                     line: 1,
                     column: 1,
@@ -480,8 +524,8 @@ impl WarningAnalyzer {
                 );
             }
             Statement::Break | Statement::Continue => {}
-            Statement::Use { path, .. } => {
-                self.used_imports.insert(path.clone());
+            Statement::Load { path, .. } => {
+                self.used_imports.insert(path.join("::"));
             }
             Statement::Function { body, .. } => {
                 for s in body {
@@ -805,7 +849,6 @@ fn contains_explicit_return(statements: &[Statement]) -> bool {
             | Statement::Find { body, .. }
             | Statement::Function { body, .. }
             | Statement::Unsafe { body }
-            | Statement::Module { body, .. }
                 if contains_explicit_return(body) =>
             {
                 return true;
@@ -857,76 +900,15 @@ fn expr_fingerprint(expr: &Expression) -> String {
     }
 }
 
-fn statement_location(statement: &Statement) -> (usize, usize) {
-    match statement {
-        Statement::Let {
-            name_line,
-            name_column,
-            ..
-        } => (*name_line, *name_column),
-        Statement::Assignment { value, .. }
-        | Statement::Expression(value)
-        | Statement::Drop { value }
-        | Statement::New {
-            value: Some(value), ..
-        }
-        | Statement::Own {
-            value: Some(value), ..
-        }
-        | Statement::Move { value, .. } => expression_location(value),
-        Statement::Return(Some(value)) => expression_location(value),
-        Statement::If { condition, .. } | Statement::While { condition, .. } => {
-            expression_location(condition)
-        }
-        Statement::For { iterable, .. } | Statement::Find { iterable, .. } => {
-            expression_location(iterable)
-        }
-        Statement::Match { value, .. } => expression_location(value),
-        _ => (1, 1),
-    }
-}
+use super::location::{expression_location, statement_location};
 
-fn expression_location(expression: &Expression) -> (usize, usize) {
-    match expression {
-        Expression::Identifier(ident) => (ident.line.max(1), ident.column.max(1)),
-        Expression::BinaryOp { left, .. }
-        | Expression::NamedArg { value: left, .. }
-        | Expression::Reference { expr: left, .. }
-        | Expression::Dereference { expr: left, .. }
-        | Expression::Box { value: left, .. }
-        | Expression::Pipeline { input: left, .. }
-        | Expression::Try { expr: left, .. }
-        | Expression::Ok { value: left, .. }
-        | Expression::Err { value: left, .. } => expression_location(left),
-        Expression::UnaryOp { operand, .. } => expression_location(operand),
-        Expression::Call { args, .. }
-        | Expression::List { elements: args, .. }
-        | Expression::Tuple { elements: args, .. } => {
-            args.first().map(expression_location).unwrap_or((1, 1))
-        }
-        Expression::Dict { entries, .. } => entries
-            .first()
-            .map(|(key, _)| expression_location(key))
-            .unwrap_or((1, 1)),
-        Expression::Index { target, .. } | Expression::MemberAccess { target, .. } => {
-            expression_location(target)
-        }
-        Expression::Closure { body, .. } => body.first().map(statement_location).unwrap_or((1, 1)),
-        Expression::Match { value, .. } => expression_location(value),
-        Expression::EnumVariant { payloads, .. } => {
-            payloads.first().map(expression_location).unwrap_or((1, 1))
-        }
-        Expression::Literal(_) | Expression::EnumVariantPath { .. } => (1, 1),
-    }
-}
-
-fn find_position_for_import(source: &str, module: &str) -> Option<(usize, usize)> {
+fn find_position_for_load(source: &str, module: &str) -> Option<(usize, usize)> {
     find_position_for_any_pattern(
         source,
         &[
-            &format!("import {} ", module),
-            &format!("import {}\n", module),
-            &format!("import {}", module),
+            &format!("load {} ", module),
+            &format!("load {}\n", module),
+            &format!("load {}", module),
         ],
     )
 }
@@ -987,4 +969,18 @@ pub fn check_warnings(
     deny: HashSet<DiagnosticCode>,
 ) -> Vec<Diagnostic> {
     WarningAnalyzer::new(filter, deny).analyze(program, source, filename)
+}
+
+pub fn check_warnings_with_origins(
+    program: &Program,
+    source: &str,
+    filename: Option<&str>,
+    filter: WarningFilter,
+    deny: HashSet<DiagnosticCode>,
+    statement_origins: &[PathBuf],
+    entry_path: &Path,
+) -> Vec<Diagnostic> {
+    WarningAnalyzer::new(filter, deny)
+        .with_origins(statement_origins, entry_path)
+        .analyze(program, source, filename)
 }

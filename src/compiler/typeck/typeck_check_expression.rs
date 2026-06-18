@@ -8,37 +8,38 @@ use crate::compiler::typeck::typeck_type_parsing::data_type_name_for_diag;
 use crate::compiler::typeck::{TypeChecker, type_error, type_error_at};
 impl TypeChecker {
     pub(super) fn check_expression(&mut self, expression: &mut Expression) -> Result<DataType> {
-        let (line, column) = Self::expression_location(expression);
+        let (line, column) = super::location::expression_location(expression);
         self.current_line = line;
         self.current_column = column;
         match expression {
             Expression::Literal(lit) => Ok(Self::literal_type(lit)),
             Expression::Identifier(ident) => {
                 if let Some((resolved, _)) = self.lookup_var(&ident.name) {
-                    ident.data_type = resolved.clone();
-                    return Ok(resolved);
+                    if ident.data_type == DataType::Unknown {
+                        ident.data_type = resolved.clone();
+                        return Ok(resolved);
+                    }
+                    return Ok(ident.data_type.clone());
                 }
-                if self.functions.contains_key(&ident.name)
-                    || {
-                        let mut stripped = ident.name.clone();
-                        let mut found = false;
-                        loop {
-                            if let Some(next) = Self::strip_root_namespace(&stripped) {
-                                if next == stripped {
-                                    break;
-                                }
-                                if self.functions.contains_key(&next) {
-                                    found = true;
-                                    break;
-                                }
-                                stripped = next;
-                            } else {
+                if self.functions.contains_key(&ident.name) || {
+                    let mut stripped = ident.name.clone();
+                    let mut found = false;
+                    loop {
+                        if let Some(next) = Self::strip_root_namespace(&stripped) {
+                            if next == stripped {
                                 break;
                             }
+                            if self.functions.contains_key(&next) {
+                                found = true;
+                                break;
+                            }
+                            stripped = next;
+                        } else {
+                            break;
                         }
-                        found
                     }
-                {
+                    found
+                } {
                     ident.data_type = DataType::Function;
                     return Ok(DataType::Function);
                 }
@@ -130,15 +131,11 @@ impl TypeChecker {
                                 .or_else(|| {
                                     let mut stripped = callback_name.clone();
                                     loop {
-                                        if let Some(next) =
-                                            Self::strip_root_namespace(&stripped)
-                                        {
+                                        if let Some(next) = Self::strip_root_namespace(&stripped) {
                                             if next == stripped {
                                                 break None;
                                             }
-                                            if let Some(sig) =
-                                                self.functions.get(&next).cloned()
-                                            {
+                                            if let Some(sig) = self.functions.get(&next).cloned() {
                                                 break Some(sig);
                                             }
                                             stripped = next;
@@ -214,8 +211,10 @@ impl TypeChecker {
                                 }
                             }
                             self.push_scope();
-                            for (name, value) in capture.iter() {
-                                self.insert_var(name.clone(), Self::mire_value_type(value), true);
+                            let captures = self.collect_captures(body, params, capture);
+                            *capture = captures;
+                            for (name, data_type) in capture.iter() {
+                                self.insert_var(name.clone(), data_type.clone(), true);
                             }
                             for (name, ptype) in params.iter() {
                                 self.insert_var(name.clone(), ptype.clone(), true);
@@ -520,8 +519,11 @@ impl TypeChecker {
                             {
                                 let resolved_field =
                                     self.substitute_generics(&field.data_type, &bindings);
-                                *data_type = resolved_field.clone();
-                                return Ok(resolved_field);
+                                if *data_type == DataType::Unknown {
+                                    *data_type = resolved_field.clone();
+                                    return Ok(resolved_field);
+                                }
+                                return Ok((*data_type).clone());
                             }
                         }
                         if let Some(fn_sig) =
@@ -592,8 +594,11 @@ impl TypeChecker {
             } => {
                 self.push_scope();
 
-                for (name, value) in capture.iter() {
-                    self.insert_var(name.clone(), Self::mire_value_type(value), true);
+                let captures = self.collect_captures(body, params, capture);
+                *capture = captures;
+
+                for (name, data_type) in capture.iter() {
+                    self.insert_var(name.clone(), data_type.clone(), true);
                 }
 
                 for (name, ptype) in params.iter() {
@@ -675,8 +680,10 @@ impl TypeChecker {
                 {
                     let elem_type = self.pipeline_input_element_type(&input_type);
                     self.push_scope();
-                    for (name, value) in capture.iter() {
-                        self.insert_var(name.clone(), Self::mire_value_type(value), true);
+                    let captures = self.collect_captures(body, params, capture);
+                    *capture = captures;
+                    for (name, data_type) in capture.iter() {
+                        self.insert_var(name.clone(), data_type.clone(), true);
                     }
                     if let Some((_, ptype)) = params.first_mut()
                         && *ptype == DataType::Unknown

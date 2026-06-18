@@ -1,4 +1,4 @@
-import std
+load kioto
 
 pub skill Printable {
     fn print: (self) :str

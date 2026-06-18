@@ -126,6 +126,7 @@ int64_t rt_strings_index_of(const char *s, const char *sub);
 // ── I/O helpers ──────────────────────────────────────────────────────
 char   *rt_read_line(const char *prompt);
 void   *rt_get_args(int argc, char **argv);
+void    dasu_i64(int64_t value);
 
 // ── Time / CPU string formatters ──────────────────────────────────────
 char   *rt_time_elapsed_ms_str(int64_t start_ns);
@@ -146,6 +147,8 @@ char   *rt_strings_join_list(void *parts, const char *sep);
 int64_t rt_lists_len(void *list);
 int64_t rt_lists_get_i64(void *list, int64_t index);
 void   *rt_lists_get_ptr(void *list, int64_t index);
+char   *rt_vec_get_str(void *list, int64_t index);
+int64_t rt_vec_len(void *list);
 void   *rt_lists_push_i64(void *list, int64_t value);
 void   *rt_lists_push_ptr(void *list, void *value);
 int64_t rt_lists_pop(void *list);
@@ -204,5 +207,13 @@ double  rt_math_median_i64(void *list);
 void   *rt_math_range_i64(int64_t end);
 void   *rt_math_range_between_i64(int64_t start, int64_t end);
 void   *rt_math_range_step_i64(int64_t start, int64_t end, int64_t step);
+
+// ── Runtime safety panics ────────────────────────────────────────────
+void rt_panic_division_by_zero(void);
+void rt_panic_out_of_bounds(void);
+int64_t rt_div_i64(int64_t a, int64_t b);
+int64_t rt_rem_i64(int64_t a, int64_t b);
+void rt_check_bounds_i64(int64_t index, int64_t len);
+void *rt_closure_env_alloc(int64_t size);
 
 #endif // MIRE_RUNTIME_H

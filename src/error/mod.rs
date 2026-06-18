@@ -211,15 +211,11 @@ impl MireError {
     }
 
     pub fn format(&self) -> String {
-        let mut out = format!("error[{}]\n", self.legacy_kind_tag());
-        out.push_str(&format_diagnostic(&self.diagnostic, false));
-        out
+        format_diagnostic(&self.diagnostic, false)
     }
 
     pub fn format_color(&self) -> String {
-        let mut out = format!("error[{}]\n", self.legacy_kind_tag());
-        out.push_str(&format_diagnostic(&self.diagnostic, true));
-        out
+        format_diagnostic(&self.diagnostic, true)
     }
 
     fn context_mut(&mut self) -> &mut MireErrorContext {
@@ -228,17 +224,6 @@ impl MireError {
             .as_mut()
     }
 
-    fn legacy_kind_tag(&self) -> &'static str {
-        match &self.kind {
-            ErrorKind::Lexer { .. } => "lexer",
-            ErrorKind::DeprecatedSyntax { .. } => "deprecated",
-            ErrorKind::Parser { .. } => "parser",
-            ErrorKind::Backend { .. } => "backend",
-            ErrorKind::Runtime { .. } => "runtime",
-            ErrorKind::Type { .. } => "type",
-            ErrorKind::Ownership { .. } => "ownership",
-        }
-    }
 }
 
 impl From<std::io::Error> for MireError {

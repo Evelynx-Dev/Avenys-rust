@@ -11,7 +11,8 @@ pub enum TokenType {
     CharLit,
     BoolLit,
     NoneLit,
-    Import,
+    Load,
+    Module,
     Set,
     Use,
     Return,
@@ -131,8 +132,8 @@ impl Token {
     }
 }
 
-pub struct Lexer {
-    source_chars: Vec<char>,
+pub struct Lexer<'a> {
+    source: &'a str,
     pos: usize,
     len: usize,
     line: usize,
@@ -140,13 +141,12 @@ pub struct Lexer {
     tokens: Vec<Token>,
 }
 
-impl Lexer {
-    pub fn new(source: &str) -> Self {
-        let source_chars: Vec<char> = source.chars().collect();
-        let len = source_chars.len();
+impl<'a> Lexer<'a> {
+    pub fn new(source: &'a str) -> Self {
+        let len = source.len();
         let token_capacity = (len / 4).max(64);
         Self {
-            source_chars,
+            source,
             pos: 0,
             len,
             line: 1,
@@ -155,13 +155,17 @@ impl Lexer {
         }
     }
 
+    fn remaining(&self) -> &'a str {
+        &self.source[self.pos..]
+    }
+
     fn peek(&self, offset: usize) -> Option<char> {
-        self.source_chars.get(self.pos + offset).copied()
+        self.remaining().chars().nth(offset)
     }
 
     fn advance(&mut self) -> Option<char> {
-        let c = *self.source_chars.get(self.pos)?;
-        self.pos += 1;
+        let c = self.remaining().chars().next()?;
+        self.pos += c.len_utf8();
         if c == '\n' {
             self.line += 1;
             self.column = 1;
@@ -182,28 +186,33 @@ impl Lexer {
     }
 
     fn skip_comment(&mut self) -> Result<bool> {
-        if self.peek(0) == Some('/') && self.peek(1) == Some('/') {
-            self.advance();
-            self.advance();
-            if self.peek(0) == Some('!') {
+        if (self.peek(0) == Some('/') && self.peek(1) == Some('/')) || self.peek(0) == Some('#') {
+            let is_hash = self.peek(0) == Some('#');
+            if is_hash {
                 self.advance();
-                loop {
-                    match (self.peek(0), self.peek(1), self.peek(2)) {
-                        (Some('!'), Some('/'), Some('/')) => {
-                            self.advance();
-                            self.advance();
-                            self.advance();
-                            return Ok(true);
-                        }
-                        (None, _, _) => {
-                            return Err(MireError::new(ErrorKind::Lexer {
-                                line: self.line,
-                                column: self.column,
-                                message: "Unterminated block comment".to_string(),
-                            }));
-                        }
-                        _ => {
-                            self.advance();
+            } else {
+                self.advance();
+                self.advance();
+                if self.peek(0) == Some('!') {
+                    self.advance();
+                    loop {
+                        match (self.peek(0), self.peek(1), self.peek(2)) {
+                            (Some('!'), Some('/'), Some('/')) => {
+                                self.advance();
+                                self.advance();
+                                self.advance();
+                                return Ok(true);
+                            }
+                            (None, _, _) => {
+                                return Err(MireError::new(ErrorKind::Lexer {
+                                    line: self.line,
+                                    column: self.column,
+                                    message: "Unterminated block comment".to_string(),
+                                }));
+                            }
+                            _ => {
+                                self.advance();
+                            }
                         }
                     }
                 }
@@ -516,8 +525,9 @@ impl Lexer {
                 let start_col = self.column;
                 let ident = self.read_identifier();
                 let token = match ident.as_str() {
-                    "import" => Token::new(TokenType::Import, self.line, self.column),
                     "set" => Token::new(TokenType::Set, self.line, self.column),
+                    "load" => Token::new(TokenType::Load, self.line, self.column),
+                    "module" => Token::new(TokenType::Module, self.line, self.column),
                     "use" => Token::new(TokenType::Use, self.line, self.column),
                     "return" => Token::new(TokenType::Return, self.line, self.column),
                     "if" => Token::new(TokenType::If, self.line, self.column),

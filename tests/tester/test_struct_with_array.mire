@@ -1,4 +1,4 @@
-import std
+load kioto
 
 struct Stack {
     items :arr[i64 10]

@@ -339,6 +339,7 @@ impl LlvmIrGen {
             "declare i32 @pal_proc_kill(i64)".to_string(),
             "declare void @pal_proc_exit(i64)".to_string(),
             "declare i64 @pal_proc_exists(i64)".to_string(),
+            "declare i64 @abs(i64)".to_string(),
             "declare double @rt_math_sqrt(double)".to_string(),
             "declare double @rt_math_pow(double, double)".to_string(),
             "declare i64 @rt_math_round(double)".to_string(),
@@ -390,7 +391,7 @@ impl LlvmIrGen {
         self.current_line = line;
         self.current_column = column;
         let result = match stmt {
-            Statement::Use { .. } => Ok(()),
+            Statement::Load { .. } => Ok(()),
             Statement::Function { .. } => Ok(()),
             Statement::Let {
                 name,
@@ -623,12 +624,6 @@ impl LlvmIrGen {
                 message: "Avenys statement is parsed/typechecked but not lowered in backend yet"
                     .to_string(),
             })),
-            Statement::Module { body, .. } => {
-                for stmt in body {
-                    self.compile_statement(stmt)?;
-                }
-                Ok(())
-            }
             Statement::Drop { value } => {
                 let dropped = self.compile_expr(value)?;
                 if dropped.ty == LlType::Ptr {
@@ -661,6 +656,7 @@ impl LlvmIrGen {
                 self.store_variable(target, &var.ptr, var.ty, var.data_type, compiled)?;
                 Ok(())
             }
+            Statement::Use { .. } | Statement::UseModule { .. } | Statement::Module { .. } => Ok(()),
         };
         result.map_err(|err| self.attach_context(err))
     }
@@ -2105,8 +2101,6 @@ impl LlvmIrGen {
     fn llvm_fn_name(&mut self, name: &str) -> String {
         if name == "main" {
             "@mire_main".to_string()
-        } else if name.contains('.') {
-            format!("@fn_{}", sanitize_symbol(name))
         } else {
             let counter = {
                 let c = self.next_fn_id.entry(name.to_string()).or_insert(0usize);

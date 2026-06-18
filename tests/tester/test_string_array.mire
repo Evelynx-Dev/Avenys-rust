@@ -1,4 +1,4 @@
-import std
+load kioto
 
 pub fn main: () {
     set names = ["alice" "bob"] :arr[str 2]

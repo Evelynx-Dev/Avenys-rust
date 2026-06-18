@@ -3,10 +3,10 @@ use mire::error::format::format_diagnostic;
 use mire::lexer::tokenize;
 use mire::parser::parse;
 use mire::{
-    BuildMode, BuildOptions, CacheOverrides, ImportMode, MireError, MireImportEntry, MireManifest,
-    MireProject, OptLevel, WarningConfig, analyze_program, analyze_program_with_warnings,
-    compile_file_with_avenys, default_output_dir, load_program_from_file, load_project_manifest,
-    project_manifest_path, write_manifest,
+    BuildMode, BuildOptions, CacheOverrides, ImportMode, MireDependency, MireError, OptLevel,
+    WarningConfig,     analyze_program, analyze_program_with_warnings_and_origins,
+    compile_file_with_avenys, default_output_dir, find_project_root, load_project_manifest,
+    load_program_with_metadata, project_manifest_path, write_manifest,
 };
 use std::collections::HashSet;
 use std::env;
@@ -18,10 +18,11 @@ use std::process::{Command, ExitCode};
 struct CommonOptions {
     mode: BuildMode,
     opt_level: OptLevel,
-    import_mode: ImportMode,
     output: Option<PathBuf>,
     cache: CacheOverrides,
+    owl_home: Option<PathBuf>,
     warn: WarningCliOptions,
+    verbose: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -65,9 +66,15 @@ fn run_cli() -> Result<i32, MireError> {
         "check" => check_command(&cwd, &args[2..]),
         "debug" => debug_command(&cwd, &args[2..]),
         "test" => test_command(&cwd, &args[2..]),
-        "import" => import_command(&cwd, &args[2..]),
+        "validate" => validate_command(&cwd),
+        "owl" => owl_command(&cwd, &args[2..]),
+
         "help" | "--help" | "-h" => {
             print_help();
+            Ok(0)
+        }
+        "--version" | "-V" => {
+            println!("Mire / Avenys v{}", env!("CARGO_PKG_VERSION"));
             Ok(0)
         }
         _ => {
@@ -80,17 +87,18 @@ fn run_cli() -> Result<i32, MireError> {
 fn run_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
     let (common, file, pass_through) = parse_run_options(cwd, args)?;
     let path = resolve_source_path(cwd, file)?;
+    set_owl_home_env(common.owl_home.as_ref());
     let options = BuildOptions {
         mode: common.mode,
         opt_level: common.opt_level,
-        debug_dump: matches!(common.mode, BuildMode::Debug),
+        debug_dump: common.verbose,
         output: common
             .output
             .clone()
             .or_else(|| Some(default_binary_path(&path, common.mode))),
         emit_binary: true,
         persist_ir: false,
-        import_mode: common.import_mode,
+        import_mode: ImportMode::default(),
         cache: common.cache,
         warning_filter: common.warn.filter,
         deny_warnings: common.warn.deny,
@@ -108,16 +116,17 @@ fn run_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
 fn build_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
     let (common, file) = parse_common_with_file(cwd, args)?;
     let path = resolve_source_path(cwd, file)?;
+    set_owl_home_env(common.owl_home.as_ref());
     let options = BuildOptions {
         mode: common.mode,
         opt_level: common.opt_level,
-        debug_dump: matches!(common.mode, BuildMode::Debug),
+        debug_dump: common.verbose,
         output: common
             .output
             .or_else(|| Some(default_binary_path(&path, common.mode))),
         emit_binary: true,
         persist_ir: false,
-        import_mode: common.import_mode,
+        import_mode: ImportMode::default(),
         cache: common.cache,
         warning_filter: common.warn.filter,
         deny_warnings: common.warn.deny,
@@ -131,10 +140,13 @@ fn build_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
 fn check_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
     let (common, file) = parse_common_with_file(cwd, args)?;
     let path = resolve_source_path(cwd, file)?;
+    set_owl_home_env(common.owl_home.as_ref());
     let source = fs::read_to_string(&path).map_err(runtime_err)?;
-    let mut program = load_program_from_file(&path)?;
-    let _ = analyze_program(&mut program, &source)?;
-    let report = analyze_program_with_warnings(
+    let loaded = load_program_with_metadata(&path)?;
+    let mut program = loaded.program;
+    let mut analysis_program = program.clone();
+    let _ = analyze_program(&mut analysis_program, &source)?;
+    let report = analyze_program_with_warnings_and_origins(
         &mut program,
         &source,
         Some(&path.display().to_string()),
@@ -142,6 +154,8 @@ fn check_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
             filter: common.warn.filter,
             deny: common.warn.deny,
         },
+        &loaded.statement_origins,
+        &path,
     )?;
 
     let mut has_error = false;
@@ -157,6 +171,7 @@ fn check_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
 fn debug_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
     let options = parse_debug_options(cwd, args)?;
     let path = resolve_source_path(cwd, options.file.clone())?;
+    set_owl_home_env(options.common.owl_home.as_ref());
     let source = fs::read_to_string(&path).map_err(runtime_err)?;
 
     if options.show_tokens {
@@ -190,7 +205,7 @@ fn debug_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
                 .or_else(|| Some(default_binary_path(&path, options.common.mode))),
             emit_binary: !options.emit_ir_only,
             persist_ir: true,
-            import_mode: options.common.import_mode,
+            import_mode: ImportMode::default(),
             cache: options.common.cache,
             warning_filter: options.common.warn.filter,
             deny_warnings: options.common.warn.deny,
@@ -216,6 +231,7 @@ fn debug_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
 fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
     let mut run = true;
     let mut verbose = false;
+    let mut owl_home = None;
     let mut paths: Vec<String> = Vec::new();
 
     let mut i = 0;
@@ -223,10 +239,19 @@ fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
         match args[i].as_str() {
             "--no-run" => run = false,
             "--verbose" | "-v" => verbose = true,
+            "--owl-home" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| runtime_msg("Missing value for --owl-home"))?;
+                owl_home = Some(PathBuf::from(value));
+            }
             _ => paths.push(args[i].clone()),
         }
         i += 1;
     }
+
+    set_owl_home_env(owl_home.as_ref());
 
     let mut test_files: Vec<PathBuf> = Vec::new();
 
@@ -371,6 +396,157 @@ fn walkdir(dir: &Path, _pattern: &str) -> Result<Vec<PathBuf>, MireError> {
     Ok(results)
 }
 
+fn owl_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
+    if args.is_empty() {
+        return Err(runtime_msg("Usage: mire owl <validate|add|remove>"));
+    }
+    match args[0].as_str() {
+        "validate" => validate_command(cwd),
+        "add" => add_dependency_command(cwd, &args[1..]),
+        "remove" => remove_dependency_command(cwd, &args[1..]),
+        _ => {
+            eprintln!("Unknown owl command: {}", args[0]);
+            eprintln!("Usage: mire owl <validate|add|remove>");
+            Ok(1)
+        }
+    }
+}
+
+fn validate_command(cwd: &Path) -> Result<i32, MireError> {
+    let manifest_path = project_manifest_path(cwd);
+    if !manifest_path.exists() {
+        eprintln!("error: no owl.toml found in {}", cwd.display());
+        return Ok(1);
+    }
+
+    let manifest = load_project_manifest(cwd)?
+        .ok_or_else(|| runtime_msg("Could not parse owl.toml"))?;
+
+    let mut has_issues = false;
+
+    println!("Project: {} v{}", manifest.project.name, manifest.project.version);
+    println!("Entry: {}", manifest.project.entry);
+
+    println!("\n[dependencies]:");
+    if manifest.dependencies.entries.is_empty() {
+        println!("  (none)");
+    } else {
+        for (name, dep) in &manifest.dependencies.entries {
+            let resolved = match dep {
+                MireDependency::PathOnly { path } | MireDependency::WithPath { path, .. } => {
+                    let p = PathBuf::from(path);
+                    if p.is_absolute() { p.clone() } else { cwd.join(p) }
+                }
+                MireDependency::Simple { version } => {
+                    println!("  {} = \"{}\" (version only, cannot validate path)", name, version);
+                    continue;
+                }
+            };
+            if resolved.exists() {
+                let canonical = resolved.canonicalize().unwrap_or(resolved);
+                println!("  {} -> {}", name, canonical.display());
+            } else {
+                eprintln!("  {} -> {} (NOT FOUND)", name, resolved.display());
+                has_issues = true;
+            }
+        }
+    }
+
+    if let Some(exports) = &manifest.exports {
+        println!("\n[exports]:");
+        for (name, path) in &exports.entries {
+            let resolved = cwd.join(path);
+            if resolved.exists() {
+                let canonical = resolved.canonicalize().unwrap_or(resolved);
+                println!("  {} -> {}", name, canonical.display());
+            } else {
+                eprintln!("  {} -> {} (NOT FOUND)", name, resolved.display());
+                has_issues = true;
+            }
+        }
+    }
+
+    if has_issues {
+        eprintln!("\nowl.toml has issues");
+        Ok(1)
+    } else {
+        println!("\nowl.toml is valid");
+        Ok(0)
+    }
+}
+
+fn add_dependency_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
+    if args.is_empty() {
+        return Err(runtime_msg("Usage: mire owl add <name> [--path <path>] [--version <ver>]"));
+    }
+    let name = &args[0];
+
+    let manifest_path = project_manifest_path(cwd);
+    if !manifest_path.exists() {
+        return Err(runtime_msg("No owl.toml found; create one first"));
+    }
+
+    let mut manifest = load_project_manifest(cwd)?
+        .ok_or_else(|| runtime_msg("Could not parse existing owl.toml"))?;
+
+    if manifest.dependencies.entries.contains_key(name) {
+        return Err(runtime_msg(&format!("Dependency '{}' already exists", name)));
+    }
+
+    let mut path = None;
+    let mut version = None;
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--path" => {
+                i += 1;
+                path = Some(args.get(i).ok_or_else(|| runtime_msg("Missing value for --path"))?.clone());
+            }
+            "--version" => {
+                i += 1;
+                version = Some(args.get(i).ok_or_else(|| runtime_msg("Missing value for --version"))?.clone());
+            }
+            _ => return Err(runtime_msg(&format!("Unknown option: {}", args[i]))),
+        }
+        i += 1;
+    }
+
+    let dep = match (path, version) {
+        (Some(p), Some(v)) => MireDependency::WithPath { version: v, path: p },
+        (Some(p), None) => MireDependency::PathOnly { path: p },
+        (None, Some(v)) => MireDependency::Simple { version: v },
+        (None, None) => return Err(runtime_msg("Specify --path or --version for the dependency")),
+    };
+
+    manifest.dependencies.entries.insert(name.clone(), dep);
+    write_manifest(&manifest, &manifest_path)?;
+    println!("Added dependency '{}' to [dependencies]", name);
+    Ok(0)
+}
+
+fn remove_dependency_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
+    if args.is_empty() {
+        return Err(runtime_msg("Usage: mire owl remove <name>"));
+    }
+    let name = &args[0];
+
+    let manifest_path = project_manifest_path(cwd);
+    if !manifest_path.exists() {
+        return Err(runtime_msg("No owl.toml found"));
+    }
+
+    let mut manifest = load_project_manifest(cwd)?
+        .ok_or_else(|| runtime_msg("Could not parse existing owl.toml"))?;
+
+    if manifest.dependencies.entries.remove(name).is_none() {
+        return Err(runtime_msg(&format!("Dependency '{}' not found in [dependencies]", name)));
+    }
+
+    write_manifest(&manifest, &manifest_path)?;
+    println!("Removed dependency '{}' from [dependencies]", name);
+    Ok(0)
+}
+
 fn parse_run_options(
     cwd: &Path,
     args: &[String],
@@ -398,10 +574,11 @@ fn parse_common_with_file(
 ) -> Result<(CommonOptions, Option<String>), MireError> {
     let mut mode = BuildMode::Debug;
     let mut opt_level = OptLevel::O0;
-    let mut import_mode = ImportMode::Legacy;
     let mut output = None;
     let mut file = None;
     let mut cache = CacheOverrides::default();
+    let mut owl_home = None;
+    let mut verbose = false;
     let mut warn_all = false;
     let mut warn_codes = HashSet::new();
     let mut deny_codes = HashSet::new();
@@ -440,14 +617,12 @@ fn parse_common_with_file(
                     .ok_or_else(|| runtime_msg("Missing output path after -o/--output"))?;
                 output = Some(PathBuf::from(value));
             }
-            "--import-mode" => {
+            "--owl-home" => {
                 i += 1;
                 let value = args
                     .get(i)
-                    .ok_or_else(|| runtime_msg("Missing value for --import-mode"))?;
-                import_mode = ImportMode::parse(value).ok_or_else(|| {
-                    runtime_msg("Invalid --import-mode value, use legacy|reachable")
-                })?;
+                    .ok_or_else(|| runtime_msg("Missing value for --owl-home"))?;
+                owl_home = Some(PathBuf::from(value));
             }
             "--cache-max-units" => {
                 i += 1;
@@ -476,6 +651,7 @@ fn parse_common_with_file(
                     .ok_or_else(|| runtime_msg("Missing warning code after --deny"))?;
                 deny_codes.insert(parse_warning_code(code)?);
             }
+            "--verbose" | "-v" => verbose = true,
             value if value.starts_with('-') => {
                 return Err(runtime_msg(&format!("Unknown option: {value}")));
             }
@@ -509,13 +685,14 @@ fn parse_common_with_file(
         CommonOptions {
             mode,
             opt_level,
-            import_mode,
             output,
             cache,
+            owl_home,
             warn: WarningCliOptions {
                 filter: warning_filter,
                 deny: deny_codes,
             },
+            verbose,
         },
         file,
     ))
@@ -554,130 +731,15 @@ fn parse_debug_options(cwd: &Path, args: &[String]) -> Result<DebugOptions, Mire
     })
 }
 
-fn import_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
-    if args.is_empty() {
-        eprintln!("Usage: mire import <module> [--version <ver>] [--path <path>]");
-        eprintln!("  mire import kioto              add kioto module (version-based)");
-        eprintln!("  mire import kioto --version 0.2 add kioto with version");
-        eprintln!("  mire import ./local-mod         add local module");
-        return Ok(1);
-    }
-
-    let module = &args[0];
-    let mut version = String::new();
-    let mut path = String::new();
-    let mut json_output = false;
-
-    let mut i = 1;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--version" | "-v" => {
-                i += 1;
-                version = args
-                    .get(i)
-                    .ok_or_else(|| {
-                        MireError::runtime("Missing version after --version".to_string())
-                    })?
-                    .clone();
-            }
-            "--path" | "-p" => {
-                i += 1;
-                path = args
-                    .get(i)
-                    .ok_or_else(|| MireError::runtime("Missing path after --path".to_string()))?
-                    .clone();
-            }
-            "--json" => {
-                json_output = true;
-            }
-            _ => {
-                return Err(MireError::runtime(format!("Unknown option: {}", args[i])));
-            }
-        }
-        i += 1;
-    }
-
-    let manifest_path = project_manifest_path(cwd);
-    let output_version = if version.is_empty() {
-        "latest".to_string()
-    } else {
-        version.clone()
-    };
-    let output_path = if path.is_empty() {
-        None
-    } else {
-        Some(path.clone())
-    };
-
-    // Load or create manifest
-    let mut manifest = match load_project_manifest(cwd) {
-        Ok(Some(m)) => m,
-        _ => MireManifest {
-            project: MireProject {
-                name: cwd
-                    .file_name()
-                    .map(|s| s.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "project".to_string()),
-                version: "0.1.0".to_string(),
-                entry: "code/main.mire".to_string(),
-            },
-            cache: None,
-            imports: Default::default(),
-        },
-    };
-
-    let entry = if !path.is_empty() {
-        if !version.is_empty() {
-            MireImportEntry::WithPath {
-                version,
-                path: path.clone(),
-            }
-        } else {
-            MireImportEntry::PathOnly { path: path.clone() }
-        }
-    } else if !version.is_empty() {
-        MireImportEntry::Simple { version }
-    } else {
-        MireImportEntry::Simple {
-            version: "latest".to_string(),
-        }
-    };
-
-    manifest.imports.entries.insert(module.clone(), entry);
-    write_manifest(&manifest, &manifest_path)?;
-    if json_output {
-        println!(
-            "{}",
-            serde_json::json!({
-                "status": "ok",
-                "module": module,
-                "manifest": manifest_path,
-                "version": output_version,
-                "path": output_path,
-            })
-        );
-    } else {
-        println!("Added import '{}' to {}", module, manifest_path.display());
-    }
-    Ok(0)
-}
-
 fn default_entry_from_manifest(cwd: &Path) -> Result<Option<String>, MireError> {
-    let owl_toml = cwd.join("owl.toml");
-    let path = if owl_toml.exists() {
-        Some(owl_toml)
-    } else {
-        None
+    let project_root = match find_project_root(cwd) {
+        Some(root) => root,
+        None => return Ok(None),
     };
-
-    let Some(path) = path else { return Ok(None) };
-    let raw = fs::read_to_string(&path).map_err(runtime_err)?;
-    let value = raw
-        .lines()
-        .find_map(|line| line.trim().strip_prefix("entry"))
-        .and_then(|tail| tail.split('=').nth(1))
-        .map(|v| v.trim().trim_matches('"').to_string());
-    Ok(value)
+    let manifest = load_project_manifest(&project_root)?;
+    let entry = manifest.map(|m| m.project.entry).unwrap_or_default();
+    let path = project_root.join(&entry);
+    Ok(Some(path.to_string_lossy().to_string()))
 }
 
 fn resolve_source_path(cwd: &Path, file: Option<String>) -> Result<PathBuf, MireError> {
@@ -768,15 +830,28 @@ fn print_help() {
     println!("  --debug               Build profile debug (default)");
     println!("  --release             Build profile release");
     println!("  -O, --opt-level <n>   0|1|2|3|s|z");
-    println!("  --import-mode <m>     legacy|reachable (default: legacy)");
+    println!("  --owl-home <path>     Override the Owl module cache root");
     println!("\nCommands:");
     println!("  run [file] [-- args]  Compile + execute");
     println!("  build [file]          Compile only");
     println!("  check [file]          Analyze only");
     println!("  debug [file]          Debug build, emits IR");
-    println!("  import <module>       Add import to owl.toml");
-    println!("    --json              Emit machine-readable import result");
+
     println!("  test [paths...]       Run integration tests from tests/");
     println!("    --no-run            Compile only, skip execution");
     println!("    --verbose, -v       Show per-test results");
+    println!("\nManifest commands:");
+    println!("  validate              Validate owl.toml");
+    println!("  owl add <name>        Add dependency to [dependencies]");
+    println!("    --path <path>       Path dependency");
+    println!("    --version <ver>     Version dependency");
+    println!("  owl remove <name>     Remove dependency from [dependencies]");
+}
+
+fn set_owl_home_env(path: Option<&PathBuf>) {
+    if let Some(path) = path {
+        unsafe {
+            std::env::set_var("MIRE_OWL_HOME", path);
+        }
+    }
 }

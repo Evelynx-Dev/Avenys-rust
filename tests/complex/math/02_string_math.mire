@@ -1,6 +1,6 @@
-import std
-import strings
-import math
+load kioto
+load kioto::strings
+load kioto::math
 
 pub fn main: () {
     set name = "mire" :str

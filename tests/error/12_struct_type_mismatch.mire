@@ -1,4 +1,4 @@
-import std
+load kioto
 
 pub struct Counter {
     count: i64

@@ -1,4 +1,4 @@
-import std
+load kioto
 
 fn reverse_array: (arr :arr[i64 5]) :vec[i64] {
     set a0 = arr at 0

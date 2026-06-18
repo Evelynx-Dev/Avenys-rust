@@ -357,14 +357,22 @@ char *rt_strings_strip(const char *s) { return rt_strings_trim(s); }
 void *rt_strings_split(const char *s, const char *sep) {
     void *list = rt_list_create(8, 8);
     if (!s || !sep || !*sep) { list = rt_list_push_ptr(list, rt_managed_from_slice(s ? s : "", s ? strlen(s) : 0)); return list; }
-    char *copy = rt_strdup_raw(s);
-    if (!copy) return list;
-    char *token = strtok(copy, sep);
-    while (token) {
-        list = rt_list_push_ptr(list, rt_managed_from_slice(token, strlen(token)));
-        token = strtok(NULL, sep);
+    size_t sep_len = strlen(sep);
+    size_t s_len = strlen(s);
+    const char *p = s;
+    while (*p) {
+        const char *found = strstr(p, sep);
+        if (!found) {
+            list = rt_list_push_ptr(list, rt_managed_from_slice(p, strlen(p)));
+            break;
+        }
+        list = rt_list_push_ptr(list, rt_managed_from_slice(p, found - p));
+        p = found + sep_len;
     }
-    free(copy);
+    // Preserve a trailing empty segment when the input ends with the separator.
+    if (s_len >= sep_len && memcmp(s + s_len - sep_len, sep, sep_len) == 0) {
+        list = rt_list_push_ptr(list, rt_managed_from_slice("", 0));
+    }
     return list;
 }
 

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use crate::compiler::location;
 use crate::compiler::AnalysisSelection;
 use crate::compiler::semantic::{BindingInfo, BindingKind, FunctionInfo, SemanticModel};
 use crate::error::mss::MssError;
@@ -470,11 +471,6 @@ impl<'a> BorrowChecker<'a> {
                     self.check_expression(expr)?;
                 }
             }
-            Statement::Module { body, .. } => {
-                self.push_scope();
-                self.check_statements(body)?;
-                self.pop_scope();
-            }
             Statement::Drop { value } => {
                 self.check_expression(value)?;
                 if let Some(name) = Self::identifier_name(value) {
@@ -514,8 +510,11 @@ impl<'a> BorrowChecker<'a> {
             | Statement::Continue
             | Statement::ExternLib { .. }
             | Statement::ExternFunction { .. }
+            | Statement::Load { .. }
+            | Statement::Enum { .. }
+            | Statement::Module { .. }
             | Statement::Use { .. }
-            | Statement::Enum { .. } => {}
+            | Statement::UseModule { .. } => {}
         }
 
         Ok(())
@@ -878,18 +877,11 @@ impl<'a> BorrowChecker<'a> {
                         return Err(self.ownership_error(MssError::MultipleMutableRefs));
                     }
                     self.ensure_borrow_allowed(&target, false)?;
-                } else if let Some(binding) =
-                    Self::identifier_name(arg).and_then(|name| self.semantic_binding(&name))
-                    && !matches!(
-                        binding.kind,
-                        BindingKind::SharedRef | BindingKind::MutableRef
-                    )
+                } else if let Some(name) = Self::identifier_name(arg)
+                    && let Some(binding) = self.semantic_binding(&name)
+                    && !matches!(binding.kind, BindingKind::SharedRef | BindingKind::MutableRef)
                 {
-                    return Err(MireError::type_error(format!(
-                        "Function '{}' argument {} requires a shared reference",
-                        callee,
-                        index + 1
-                    )));
+                    self.ensure_borrow_allowed(&name, false)?;
                 }
             }
             DataType::RefMut { .. } => {
@@ -902,15 +894,11 @@ impl<'a> BorrowChecker<'a> {
                         )));
                     }
                     self.ensure_borrow_allowed(&target, true)?;
-                } else if let Some(binding) =
-                    Self::identifier_name(arg).and_then(|name| self.semantic_binding(&name))
+                } else if let Some(name) = Self::identifier_name(arg)
+                    && let Some(binding) = self.semantic_binding(&name)
                     && !matches!(binding.kind, BindingKind::MutableRef)
                 {
-                    return Err(MireError::type_error(format!(
-                        "Function '{}' argument {} requires a mutable reference",
-                        callee,
-                        index + 1
-                    )));
+                    self.ensure_borrow_allowed(&name, true)?;
                 }
             }
             _ => {
@@ -968,32 +956,7 @@ impl<'a> BorrowChecker<'a> {
     }
 
     fn statement_location(statement: &Statement) -> (usize, usize) {
-        match statement {
-            Statement::Let {
-                name_line,
-                name_column,
-                ..
-            } => (*name_line, *name_column),
-            Statement::Assignment { value, .. }
-            | Statement::Expression(value)
-            | Statement::Drop { value }
-            | Statement::New {
-                value: Some(value), ..
-            }
-            | Statement::Own {
-                value: Some(value), ..
-            }
-            | Statement::Move { value, .. } => Self::expression_location(value),
-            Statement::Return(Some(value)) => Self::expression_location(value),
-            Statement::If { condition, .. } | Statement::While { condition, .. } => {
-                Self::expression_location(condition)
-            }
-            Statement::For { iterable, .. } | Statement::Find { iterable, .. } => {
-                Self::expression_location(iterable)
-            }
-            Statement::Match { value, .. } => Self::expression_location(value),
-            _ => (1, 1),
-        }
+        location::statement_location(statement)
     }
 
     fn semantic_binding(&self, name: &str) -> Option<&BindingInfo> {

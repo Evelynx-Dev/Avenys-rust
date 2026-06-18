@@ -1,4 +1,4 @@
-import std
+load kioto
 
 fn concat: (a :str, b :str) :str {
     a + b

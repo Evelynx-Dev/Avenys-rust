@@ -175,22 +175,27 @@ pub(super) fn hash_statement(statement: &Statement, hasher: &mut FxHasher) {
                 hash_expression(expr, hasher);
             }
         }
-        Statement::Use {
+        Statement::Load {
             path,
             alias,
             items,
-            is_local,
         } => {
             hasher.write_u8(23);
             path.hash(hasher);
             alias.hash(hasher);
             items.hash(hasher);
-            is_local.hash(hasher);
         }
-        Statement::Module { name, body } => {
+        Statement::Module { name } => {
             hasher.write_u8(24);
             name.hash(hasher);
-            hash_statements(body, hasher);
+        }
+        Statement::Use { path } => {
+            hasher.write_u8(22);
+            path.hash(hasher);
+        }
+        Statement::UseModule { name } => {
+            hasher.write_u8(33);
+            name.hash(hasher);
         }
         Statement::Drop { value } => {
             hasher.write_u8(25);
@@ -257,19 +262,6 @@ pub(super) fn hash_optional_statements(statements: &Option<Vec<Statement>>, hash
             hash_statements(stmts, hasher);
         }
         None => hasher.write_u8(0),
-    }
-}
-
-pub(super) fn hash_function_def(function: &FunctionDef, hasher: &mut FxHasher) {
-    function.name.hash(hasher);
-    hash_params(&function.params, hasher);
-    hash_statements(function.body.as_ref(), hasher);
-    hash_data_type(&function.return_type, hasher);
-    function.is_method.hash(hasher);
-    function.capture.len().hash(hasher);
-    for (name, value) in &function.capture {
-        name.hash(hasher);
-        hash_mire_value(value, hasher);
     }
 }
 

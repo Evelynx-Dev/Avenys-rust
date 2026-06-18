@@ -1,4 +1,4 @@
-import std
+load kioto
 
 fn classify: (x :i64) :str {
     "hello"

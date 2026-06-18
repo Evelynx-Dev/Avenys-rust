@@ -2,7 +2,7 @@
 
 Mire is a compiled, statically typed programming language with ownership-oriented memory safety checks and an LLVM-based backend.
 
-Current compiler crate version: `3.11.4`.
+Current compiler crate version: `3.11.11`.
 
 ## Status
 
@@ -10,12 +10,15 @@ Current compiler crate version: `3.11.4`.
 - Compiler pipeline: lexer, parser, type checker, semantic analysis, borrow checker, LLVM lowering
 - Incremental compilation: enabled (cache, reuse, LRU pruning)
 - Optimization profiles: `debug/release` + `-O0/-O1/-O2/-O3/-Os/-Oz`
-- Public CLI surface: `run`, `build`, `check`, `debug`, `test`, `import`
-- Standard library (`std/` / Kioto): provides fs, env, strings, lists, dicts, time, cpu, mem, proc, async, gpu, term, math, and io via direct `rt_*` / `pal_*` externs.
+- Public CLI surface: `run`, `build`, `check`, `debug`, `test`, `validate`, `owl add`, `owl remove`
+- Module loading: package-based via `owl.toml [dependencies]`. No filesystem probing.
+- Hierarchical exports: `load kioto::math::basic` resolves through `owl.toml [exports]`.
+- Intra-package linking: `module <name>` and `use <name>` (no parens).
+- Standard library (Kioto): provides fs, env, strings, lists, dicts, time, cpu, mem, proc, async, gpu, term, math, and io via direct `rt_*` / `pal_*` externs.
 - LLVM codegen emits `rt_*` / `pal_*` calls directly — the old `@mire_*` symbols are gone.
 - PAL (Platform Abstraction Layer): `src/pal/` with linux backend. WASM backend in progress.
 - Runtime core: `src/runtime/` — platform-independent managed strings, lists, dicts.
-- TOML-based import management: `owl.toml` `[imports]` section with `mire import` CLI command.
+- Dependency management: `owl.toml` `[dependencies]` and `[exports]` sections.
 
 ## Quick Start
 
@@ -31,8 +34,10 @@ mire run [file] [options] [-- args]      # Compile and run
 mire build [file] [options]               # Compile to binary
 mire check [file] [options]               # Type-check without codegen
 mire debug [file] [options]               # Debug compilation
-mire import <module> [options]            # Add import to owl.toml
 mire test [paths...] [options]            # Compile/run .mire tests
+mire validate                             # Validate owl.toml
+mire owl add <name> [--path] [--version]  # Add dependency
+mire owl remove <name>                    # Remove dependency
 ```
 
 Default profile is `debug` (`-O0`). Use `--release` or `-O2` for optimized builds.
@@ -49,10 +54,11 @@ mire run tests/complex/algorithms/01_sum_loop.mire -- --ms
 # Build a release binary
 mire build my_program.mire --release
 
-# Add a module dependency
-mire import kioto --version 0.2
-mire import ./local-lib --path lib/local-lib
-mire import kioto --json
+# Validate manifest
+mire validate
+
+# Add a dependency
+mire owl add kioto --path ../kioto
 ```
 
 ## Documentation

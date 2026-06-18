@@ -1,6 +1,6 @@
-import std
-import strings
-import math
+load kioto
+load kioto::strings
+load kioto::math
 
 fn greet: (name :str) :str {
     set upper = strings.to_upper(name)

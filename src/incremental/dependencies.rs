@@ -87,7 +87,6 @@ pub(crate) fn collect_statement_dependencies(statement: &Statement, deps: &mut V
         }
         Statement::Type { fields, .. }
         | Statement::Unsafe { body: fields }
-        | Statement::Module { body: fields, .. }
         | Statement::Impl {
             methods: fields, ..
         } => {
@@ -167,8 +166,8 @@ pub(crate) fn collect_statement_dependencies(statement: &Statement, deps: &mut V
                 collect_expression_dependencies(expr, deps);
             }
         }
-        Statement::Use { path, items, .. } => {
-            deps.push(path.clone());
+        Statement::Load { path, items, .. } => {
+            deps.extend(path.iter().cloned());
             if let Some(items) = items {
                 deps.extend(items.iter().cloned());
             }
@@ -177,7 +176,131 @@ pub(crate) fn collect_statement_dependencies(statement: &Statement, deps: &mut V
             deps.push(name.clone());
             deps.push(path.clone());
         }
-        Statement::Break | Statement::Continue => {}
+        Statement::Break | Statement::Continue | Statement::Module { .. } | Statement::Use { .. } | Statement::UseModule { .. } => {}
+    }
+}
+
+pub(crate) fn collect_statement_bindings(statement: &Statement, bindings: &mut Vec<String>) {
+    match statement {
+        Statement::Let { name, .. } => bindings.push(name.clone()),
+        Statement::Move { target, .. } => bindings.push(target.clone()),
+        Statement::Function { params, body, .. } => {
+            for (param_name, _) in params {
+                bindings.push(param_name.clone());
+            }
+            for stmt in body {
+                collect_statement_bindings(stmt, bindings);
+            }
+        }
+        Statement::For { variable, index, body, .. } => {
+            bindings.push(variable.clone());
+            if let Some(index) = index {
+                bindings.push(index.clone());
+            }
+            for stmt in body {
+                collect_statement_bindings(stmt, bindings);
+            }
+        }
+        Statement::Find { variable, body, .. } => {
+            bindings.push(variable.clone());
+            for stmt in body {
+                collect_statement_bindings(stmt, bindings);
+            }
+        }
+        Statement::If { then_branch, else_branch, .. } => {
+            for stmt in then_branch {
+                collect_statement_bindings(stmt, bindings);
+            }
+            if let Some(else_branch) = else_branch {
+                for stmt in else_branch {
+                    collect_statement_bindings(stmt, bindings);
+                }
+            }
+        }
+        Statement::While { body, .. } => {
+            for stmt in body {
+                collect_statement_bindings(stmt, bindings);
+            }
+        }
+        Statement::Match { cases, default, .. } => {
+            for (_, body) in cases {
+                for stmt in body {
+                    collect_statement_bindings(stmt, bindings);
+                }
+            }
+            for stmt in default {
+                collect_statement_bindings(stmt, bindings);
+            }
+        }
+        Statement::Unsafe { body } | Statement::Type { fields: body, .. } | Statement::Impl { methods: body, .. } => {
+            for stmt in body {
+                collect_statement_bindings(stmt, bindings);
+            }
+        }
+        Statement::Return(Some(expr)) | Statement::Expression(expr) | Statement::Drop { value: expr } => {
+            collect_expression_bindings(expr, bindings);
+        }
+        _ => {}
+    }
+}
+
+fn collect_expression_bindings(expression: &Expression, bindings: &mut Vec<String>) {
+    match expression {
+        Expression::Match { cases, default, .. } => {
+            for (_, expr) in cases {
+                collect_expression_bindings(expr, bindings);
+            }
+            collect_expression_bindings(default, bindings);
+        }
+        Expression::Closure { params, body, .. } => {
+            for (param_name, _) in params {
+                bindings.push(param_name.clone());
+            }
+            for stmt in body {
+                collect_statement_bindings(stmt, bindings);
+            }
+        }
+        Expression::BinaryOp { left, right, .. } => {
+            collect_expression_bindings(left, bindings);
+            collect_expression_bindings(right, bindings);
+        }
+        Expression::UnaryOp { operand, .. }
+        | Expression::Reference { expr: operand, .. }
+        | Expression::Dereference { expr: operand, .. }
+        | Expression::Box { value: operand, .. } => collect_expression_bindings(operand, bindings),
+        Expression::Call { args, .. }
+        | Expression::List { elements: args, .. }
+        | Expression::Tuple { elements: args, .. } => {
+            for arg in args {
+                collect_expression_bindings(arg, bindings);
+            }
+        }
+        Expression::Dict { entries, .. } => {
+            for (key, value) in entries {
+                collect_expression_bindings(key, bindings);
+                collect_expression_bindings(value, bindings);
+            }
+        }
+        Expression::Index { target, index, .. } => {
+            collect_expression_bindings(target, bindings);
+            collect_expression_bindings(index, bindings);
+        }
+        Expression::MemberAccess { target, .. } | Expression::NamedArg { value: target, .. } => {
+            collect_expression_bindings(target, bindings);
+        }
+        Expression::Pipeline { input, stage, .. } => {
+            collect_expression_bindings(input, bindings);
+            collect_expression_bindings(stage, bindings);
+        }
+        Expression::Try { expr, .. } | Expression::Ok { value: expr, .. } | Expression::Err { value: expr, .. } => {
+            collect_expression_bindings(expr, bindings);
+        }
+        Expression::EnumVariant { payloads, .. } => {
+            for payload in payloads {
+                collect_expression_bindings(payload, bindings);
+            }
+        }
+        Expression::EnumVariantPath { .. } | Expression::Identifier { .. } | Expression::Literal { .. } => {}
     }
 }
 

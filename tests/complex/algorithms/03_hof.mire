@@ -1,4 +1,4 @@
-import std
+load kioto
 
 pub fn main: () {
     set result = lists.fold(0, (a b) => a + b, [1 2 3 4 5])

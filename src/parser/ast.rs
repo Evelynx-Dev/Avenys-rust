@@ -236,7 +236,7 @@ pub enum Expression {
         params: Vec<(String, DataType)>,
         body: Vec<Statement>,
         return_type: DataType,
-        capture: Vec<(String, MireValue)>,
+        capture: Vec<(String, DataType)>,
     },
     Reference {
         expr: Box<Expression>,
@@ -578,15 +578,19 @@ pub enum Statement {
     Asm {
         instructions: Vec<(String, Expression)>,
     },
-    Use {
-        path: String,
+    Load {
+        path: Vec<String>,
         alias: Option<String>,
         items: Option<Vec<String>>,
-        is_local: bool,
+    },
+    UseModule {
+        name: String,
+    },
+    Use {
+        path: Vec<String>,
     },
     Module {
         name: String,
-        body: Vec<Statement>,
     },
     Drop {
         value: Expression,
@@ -730,7 +734,7 @@ pub struct FunctionDef {
     pub body: Arc<Vec<Statement>>,
     pub return_type: DataType,
     pub is_method: bool,
-    pub capture: Vec<(String, MireValue)>,
+    pub capture: Vec<(String, DataType)>,
 }
 
 impl MireValue {

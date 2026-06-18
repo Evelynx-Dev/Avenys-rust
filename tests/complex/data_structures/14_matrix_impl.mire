@@ -1,4 +1,4 @@
-import std
+load kioto
 
 struct Matrix {
     data :arr[i64 9]

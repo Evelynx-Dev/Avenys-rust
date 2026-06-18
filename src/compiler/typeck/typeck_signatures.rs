@@ -82,7 +82,7 @@ impl TypeChecker {
                     }
                     self.collect_function_signatures(methods)?;
                 }
-                Statement::Module { body, .. } => self.collect_function_signatures(body)?,
+                Statement::Module { .. } => {} // Module declarations don't contain functions
                 Statement::Skill { name, methods, .. } => {
                     self.traits.insert(
                         name.clone(),
@@ -188,7 +188,7 @@ impl TypeChecker {
                     }
                     self.collect_function_return_signatures(methods)?;
                 }
-                Statement::Module { body, .. } => self.collect_function_return_signatures(body)?,
+                Statement::Module { .. } => {} // Module declarations don't contain functions
                 Statement::Type { fields, .. } => {
                     self.collect_function_return_signatures(fields)?
                 }

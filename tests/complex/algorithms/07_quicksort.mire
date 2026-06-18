@@ -1,4 +1,4 @@
-import std
+load kioto
 
 fn quicksort_inner: (arr :arr[i64 8], left :i64, right :i64) :arr[i64 8] {
     if left >= right {

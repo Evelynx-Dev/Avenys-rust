@@ -1,4 +1,4 @@
-import std
+load kioto
 
 fn get_value: (x :i64) :i64 {
     x * 2

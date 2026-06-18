@@ -27,8 +27,7 @@ fn statement_contains_explicit_return(statement: &Statement) -> bool {
         Statement::While { body, .. }
         | Statement::For { body, .. }
         | Statement::Find { body, .. }
-        | Statement::Unsafe { body }
-        | Statement::Module { body, .. } => statements_contain_explicit_return(body),
+        | Statement::Unsafe { body } => statements_contain_explicit_return(body),
         Statement::Match { cases, default, .. } => {
             cases
                 .iter()

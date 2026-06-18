@@ -28,7 +28,7 @@ for i in $(seq 1 1200); do
 done
 
 cat > "$APP_DIR/main.mire" <<'EOF'
-import ./code/heavy
+load ./code/heavy
 pub fn main: () {
   use dasu(hot())
 }

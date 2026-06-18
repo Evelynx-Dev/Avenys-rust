@@ -1,4 +1,4 @@
-import std
+load kioto
 
 fn greet: (name :str) :str {
     "hello " + name

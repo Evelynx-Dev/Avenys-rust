@@ -1,0 +1,7 @@
+[project]
+name = "mire"
+version = "3.11.10"
+entry = "mod.mire"
+
+[dependencies]
+kioto = { path = "../kioto" }
