@@ -10,7 +10,7 @@ set -e
 #   curl -fsSL <url> | sh -s -- --prefix ~/.local    # user install
 #   curl -fsSL <url> | sh -s -- --no-owl             # mire only
 #   curl -fsSL <url> | sh -s -- --no-profile         # skip PATH setup
-#   curl -fsSL <url> | sh -s -- --tag B2             # specific release
+#   curl -fsSL <url> | sh -s -- --tag B1.1           # specific release
 
 REPO="mire-lang/Avenys-rust"
 TARBALL="mire-linux-x86_64.tar.gz"
