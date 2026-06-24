@@ -4,21 +4,41 @@ set -e
 # ── Avenys (mire) Install Script ──────────────────────────────────────
 # Installs the mire compiler from the latest GitHub release artifact
 # Usage: curl -fsSL <url> | sh
+# Options:
+#   MIRE_TAG   - specific release tag (default: fetches latest from API)
+#   MIRE_PREFIX - install prefix (default: /usr/local)
 
 REPO="mire-lang/Avenys-rust"
 PREFIX="${MIRE_PREFIX:-/usr/local}"
 BIN_DIR="${PREFIX}/bin"
 LIB_DIR="${PREFIX}/lib/mire"
-DEFAULT_TAG="v3.11.28"
 
 echo "┌─ Avenys Mire Compiler Install ──────────────────────────────────┐"
 echo "│ repo:   ${REPO}"
 echo "│ prefix: ${PREFIX}"
-echo "│ tag:    ${MIRE_TAG:-$DEFAULT_TAG}"
 echo "└─────────────────────────────────────────────────────────────────┘"
 
-TAG="${MIRE_TAG:-$DEFAULT_TAG}"
 TARBALL="mire-linux-x86_64.tar.gz"
+
+get_latest_tag() {
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null | grep '"tag_name"' | head -1 | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/'
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO- "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null | grep '"tag_name"' | head -1 | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/'
+    fi
+}
+
+if [ -n "${MIRE_TAG:-}" ]; then
+    TAG="$MIRE_TAG"
+else
+    TAG="$(get_latest_tag)"
+    if [ -z "$TAG" ]; then
+        echo "error: could not determine latest tag. Set MIRE_TAG manually."
+        exit 1
+    fi
+fi
+
+echo "│ tag:    ${TAG}"
 URL="https://github.com/${REPO}/releases/download/${TAG}/${TARBALL}"
 
 TMPDIR="$(mktemp -d)"
@@ -38,7 +58,7 @@ fi
 echo "  extracting..."
 tar xzf "$TMPDIR/$TARBALL" -C "$TMPDIR"
 
-echo "  installing mire to ${BIN_DIR}..."
+echo "  installing mire runtime..."
 sudo mkdir -p "$BIN_DIR" "$LIB_DIR"
 sudo cp "$TMPDIR/mire/mire" "$BIN_DIR/mire"
 sudo chmod +x "$BIN_DIR/mire"
