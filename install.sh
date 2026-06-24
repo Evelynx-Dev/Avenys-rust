@@ -61,6 +61,13 @@ done
 if [ -z "$PREFIX" ]; then
     PREFIX="${MIRE_PREFIX:-/usr/local}"
 fi
+
+# Expand ~ in prefix
+case "$PREFIX" in
+    ~/*) PREFIX="${HOME}${PREFIX#~}" ;;
+    ~)   PREFIX="${HOME}" ;;
+esac
+
 BIN_DIR="${PREFIX}/bin"
 LIB_DIR="${PREFIX}/lib/mire"
 
