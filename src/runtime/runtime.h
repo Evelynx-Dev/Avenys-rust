@@ -18,6 +18,7 @@ char *rt_managed_from_cstr(const char *src);
 char *rt_managed_printf_i64(const char *fmt, long long value);
 char *rt_managed_printf_f64(const char *fmt, double value);
 void  rt_managed_free(char *value);
+void  rt_managed_cleanup_all(void);
 size_t rt_managed_len(const char *value);
 int   rt_managed_contains(const char *data_ptr);
 void  rt_managed_register(char *data_ptr);
@@ -105,6 +106,7 @@ void  *rt_dict_set_ptr(void *dict_ptr, int64_t key_kind, int64_t value_kind,
 int64_t rt_dict_has(void *dict_ptr, int64_t key_kind, int64_t key_i64, void *key_ptr);
 void  *rt_dict_remove(void *dict_ptr, int64_t key_kind, int64_t key_i64, void *key_ptr);
 char  *rt_dict_to_string(void *dict_ptr);
+void   rt_dict_free(void *dict_ptr);
 void  *rt_dict_keys(void *dict_ptr);
 void  *rt_dict_values(void *dict_ptr);
 
@@ -156,6 +158,7 @@ void   *rt_lists_slice(void *list, int64_t start, int64_t end);
 void   *rt_lists_concat(void *a, void *b);
 void   *rt_lists_remove(void *list, int64_t index);
 void   *rt_lists_clear(void *list);
+void    rt_list_free(void *list);
 void   *rt_lists_flatten(void *list);
 void   *rt_lists_sort(void *list);
 char   *rt_lists_join_list(void *list, const char *sep);
@@ -215,5 +218,6 @@ int64_t rt_div_i64(int64_t a, int64_t b);
 int64_t rt_rem_i64(int64_t a, int64_t b);
 void rt_check_bounds_i64(int64_t index, int64_t len);
 void *rt_closure_env_alloc(int64_t size);
+void  rt_closure_env_free(void *env);
 
 #endif // MIRE_RUNTIME_H
