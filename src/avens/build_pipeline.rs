@@ -323,7 +323,6 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
     let optimized_ir_path = options
         .persist_ir
         .then(|| output_dir.join(format!("{stem}.opt.ll")));
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let runtime_base = runtime_base();
     let pal_backend = std::env::var("MIRE_PAL").unwrap_or_else(|_| "linux".to_string());
     let (c_source_files, c_sources_hash) = if options.emit_binary {
@@ -661,7 +660,7 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
     }
 
     if options.emit_binary {
-        let cache_dir = manifest_dir.join(".cobject_cache");
+        let cache_dir = runtime_base.join(".cobject_cache");
         let c_objects: Vec<String> = if c_source_files.len() <= 1 {
             c_source_files.iter().map(|src| precompile_c_object(src, &cache_dir, &runtime_base)).collect::<Result<_>>()?
         } else {
