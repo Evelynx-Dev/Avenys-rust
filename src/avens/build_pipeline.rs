@@ -4,6 +4,31 @@ use crate::compiler::mir::{codegen::mir_to_llvm, lower::lower_program, optimize:
 use crate::loader::load_program_with_cache;
 use crate::parser::ast::{DataType, Statement};
 use std::hash::{Hash, Hasher};
+use std::path::PathBuf;
+
+fn runtime_base() -> PathBuf {
+    if let Ok(dir) = std::env::var("MIRE_RUNTIME_DIR") {
+        let p = PathBuf::from(&dir);
+        if p.join("runtime").exists() {
+            return p;
+        }
+    }
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    if manifest_dir.join("src/runtime").exists() {
+        return manifest_dir.join("src");
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            if parent.join("runtime").exists() {
+                return parent.to_path_buf();
+            }
+            if parent.join("../lib/mire/runtime").exists() {
+                return parent.join("../lib/mire");
+            }
+        }
+    }
+    manifest_dir.join("src")
+}
 
 fn struct_field_llvm_type(dt: &DataType) -> &'static str {
     match dt {
@@ -219,21 +244,19 @@ fn c_object_hash(content: &str) -> u64 {
     hasher.finish()
 }
 
-fn precompile_c_object(c_path: &str, manifest_dir: &Path) -> Result<String> {
+fn precompile_c_object(c_path: &str, cache_dir: &Path, runtime_base: &Path) -> Result<String> {
     let content = fs::read_to_string(c_path).map_err(|err| {
         MireError::new(ErrorKind::Runtime {
             message: format!("Could not read C source '{}': {}", c_path, err),
         })
     })?;
     let hash = c_object_hash(&content);
-    // Use a global cache directory shared across all projects
-    let obj_dir = manifest_dir.join(".cobject_cache");
-    fs::create_dir_all(&obj_dir).map_err(|err| {
+    fs::create_dir_all(cache_dir).map_err(|err| {
         MireError::new(ErrorKind::Runtime {
             message: format!("Could not create cobjects dir: {}", err),
         })
     })?;
-    let obj_path = obj_dir.join(format!("{:x}.o", hash));
+    let obj_path = cache_dir.join(format!("{:x}.o", hash));
     if !obj_path.exists() {
         if std::env::var("MIRE_DEBUG_CACHE").is_ok() {
             eprintln!("[MIR] compiling C object: {} -> {}", c_path, obj_path.display());
@@ -243,9 +266,9 @@ fn precompile_c_object(c_path: &str, manifest_dir: &Path) -> Result<String> {
             .arg(&obj_path)
             .arg(c_path)
             .arg("-I")
-            .arg(manifest_dir.join("src/runtime"))
+            .arg(runtime_base.join("runtime"))
             .arg("-I")
-            .arg(manifest_dir.join("src/pal"))
+            .arg(runtime_base.join("pal"))
             .status()
             .map_err(|err| {
                 MireError::new(ErrorKind::Runtime {
@@ -300,12 +323,13 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
         .persist_ir
         .then(|| output_dir.join(format!("{stem}.opt.ll")));
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let runtime_base = runtime_base();
     let pal_backend = std::env::var("MIRE_PAL").unwrap_or_else(|_| "linux".to_string());
     let (c_source_files, c_sources_hash) = if options.emit_binary {
         let mut files = Vec::new();
-        for entry in std::fs::read_dir(manifest_dir.join("src/runtime")).map_err(|err| {
+        for entry in std::fs::read_dir(runtime_base.join("runtime")).map_err(|err| {
             MireError::new(ErrorKind::Runtime {
-                message: format!("Could not read src/runtime: {}", err),
+                message: format!("Could not read runtime/: {}", err),
             })
         })? {
             let entry = entry.map_err(|err| {
@@ -318,10 +342,10 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
                 files.push(path.to_string_lossy().to_string());
             }
         }
-        for entry in std::fs::read_dir(manifest_dir.join(format!("src/pal/{pal_backend}")))
+        for entry in std::fs::read_dir(runtime_base.join(format!("pal/{pal_backend}")))
             .map_err(|err| {
                 MireError::new(ErrorKind::Runtime {
-                    message: format!("Could not read src/pal/{pal_backend}: {}", err),
+                    message: format!("Could not read pal/{pal_backend}: {}", err),
                 })
             })?
         {
@@ -636,16 +660,18 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
     }
 
     if options.emit_binary {
+        let cache_dir = manifest_dir.join(".cobject_cache");
         let c_objects: Vec<String> = if c_source_files.len() <= 1 {
-            c_source_files.iter().map(|src| precompile_c_object(src, &manifest_dir)).collect::<Result<_>>()?
+            c_source_files.iter().map(|src| precompile_c_object(src, &cache_dir, &runtime_base)).collect::<Result<_>>()?
         } else {
             let results = std::sync::Mutex::new(vec![String::new(); c_source_files.len()]);
             std::thread::scope(|s| {
                 for (i, src) in c_source_files.iter().enumerate() {
                     let results = &results;
-                    let manifest_dir = &manifest_dir;
+                    let cache_dir = &cache_dir;
+                    let runtime_base = &runtime_base;
                     s.spawn(move || {
-                        if let Ok(obj) = precompile_c_object(src, manifest_dir) {
+                        if let Ok(obj) = precompile_c_object(src, cache_dir, runtime_base) {
                             results.lock().unwrap()[i] = obj;
                         }
                     });

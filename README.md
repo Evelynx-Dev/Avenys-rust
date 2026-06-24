@@ -23,13 +23,35 @@ Hello, world!
 
 ---
 
+## Install
+
+### Linux (x86_64)
+
+```bash
+# Quick install (mire + owl + kioto → /usr/local)
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install.sh | sh
+
+# Auditable: review before executing
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install.sh -o install.sh
+less install.sh
+chmod +x install.sh && ./install.sh
+
+# User-local install
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install.sh | sh -s -- --prefix ~/.local
+
+# Compiler only (no owl)
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install.sh | sh -s -- --no-owl
+```
+
+Prerequisites are installed automatically (`clang`, `llvm`, `curl`, `tar`) via your package manager.
+
 ## Quick start
 
 ```bash
-# Build the compiler
+# Build the compiler (dev)
 cargo build --release
 
-# Run all tests (151 passing)
+# Run all tests (286 passing)
 cargo test
 
 # Compile and run a program

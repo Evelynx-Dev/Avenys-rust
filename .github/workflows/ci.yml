@@ -63,14 +63,18 @@ jobs:
           name: mire-linux-x86_64
           path: dist/mire
 
-      - name: Install mire binary
+      - name: Install mire and runtime
         run: |
           chmod +x dist/mire/mire
           sudo cp dist/mire/mire /usr/local/bin/mire
+          sudo mkdir -p /usr/local/lib/mire
+          if [ -d dist/mire/runtime ]; then
+            sudo cp -r dist/mire/runtime /usr/local/lib/mire/
+          fi
+          if [ -d dist/mire/pal ]; then
+            sudo cp -r dist/mire/pal /usr/local/lib/mire/
+          fi
           mire --version || echo "mire installed"
-
-      - name: Checkout mire source (provides src/runtime + src/pal for the binary)
-        uses: actions/checkout@v4
 
       - name: Checkout kioto
         uses: actions/checkout@v4
@@ -89,7 +93,6 @@ jobs:
           mkdir -p ~/.owl/modules
           cp -r libs/kioto ~/.owl/modules/kioto
           cp -r libs/kioto ./kioto
-          ls ~/.owl/modules/kioto/
 
       - name: Build owl
         working-directory: owl-src

@@ -24,17 +24,50 @@ jobs:
 
       - uses: actions-rust-lang/setup-rust-toolchain@v1
 
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq llvm-dev clang
+
       - name: Build mire binary
         working-directory: Avenys-rust
         run: cargo build --release
+
+      - name: Install mire so owl can use it
+        run: |
+          sudo cp Avenys-rust/target/release/mire /usr/local/bin/mire
+          sudo chmod +x /usr/local/bin/mire
+          mire --version
+
+      - name: Checkout owl source
+        uses: actions/checkout@v4
+        with:
+          repository: mire-lang/owl
+          path: owl-src
+
+      - name: Setup owl dependencies
+        run: |
+          cp -r libs/kioto ./kioto
+          mkdir -p ~/.owl/modules
+          cp -r libs/kioto ~/.owl/modules/kioto
+
+      - name: Build owl
+        working-directory: owl-src
+        run: mire build code/main.mire --release -O3 --no-analysis-cache
+
+      - name: Verify owl
+        working-directory: owl-src
+        run: |
+          chmod +x bin/release/main
+          ./bin/release/main -V
 
       - name: Prepare tarball
         run: |
           mkdir -p dist/mire
           cp Avenys-rust/target/release/mire dist/mire/
+          cp owl-src/bin/release/main dist/mire/owl
           cp -r Avenys-rust/src/runtime dist/mire/runtime
           cp -r Avenys-rust/src/pal dist/mire/pal
-          # Bundle kioto from libs repo
           cp -r libs/kioto dist/mire/kioto
           cd dist
           tar czf ../mire-linux-x86_64.tar.gz mire/
