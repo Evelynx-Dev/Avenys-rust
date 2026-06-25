@@ -109,7 +109,8 @@ pub fn lower_program(program: &Program) -> MirProgram {
             });
         }
         if let Statement::ExternLib { name, path } = stmt {
-            extern_libs.push((name.clone(), path.clone()));
+            let clean = name.rsplit('.').next().unwrap_or(name);
+            extern_libs.push((clean.to_string(), path.clone()));
         }
     }
 

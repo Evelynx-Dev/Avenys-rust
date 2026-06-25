@@ -71,14 +71,26 @@ pub(super) fn compile_binary_from_ir(
         clang.arg("-lcrypto");
     }
 
+    if std::env::var("MIRE_DEBUG_LINK").is_ok() {
+        eprintln!("[link] extern_libs: {:?}", extern_libs);
+    }
     for (lib_name, lib_path) in extern_libs {
-        if lib_path.ends_with(".so") || lib_path.ends_with(".a") || lib_path.ends_with(".dylib") {
+        let clean_name = if lib_name.contains('.') {
+            lib_name.rsplit('.').next().unwrap_or(&lib_name)
+        } else {
+            &lib_name
+        };
+        if lib_path.ends_with(".so") || lib_path.ends_with(".dylib") {
+            if let Some(parent) = std::path::Path::new(&lib_path).parent() {
+                clang.arg(format!("-L{}", parent.display()));
+            }
+        } else if lib_path.ends_with(".a") {
             clang.arg(lib_path);
-        } else if !lib_path.is_empty() {
+        } else if lib_path.as_str() != clean_name && !lib_path.is_empty() {
             clang.arg(format!("-l:{}", lib_path));
         }
         clang.arg("-l");
-        clang.arg(lib_name);
+        clang.arg(clean_name);
     }
 
     let mut child = clang.spawn().map_err(|err| {
