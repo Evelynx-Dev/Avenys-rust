@@ -1,14 +1,10 @@
 # Mire Language Reference
 
-Version: **3.11.33** · 285 tests passing
-
-> **Avenys** is the maintainer identity used by the Mire core team for
-> commits and releases. It represents the collective work of all
-> contributors to the project, not a single individual.
+Version: **3.11.33** · 151 tests passing
 
 ---
 
-## 1. Your first program
+## 1. First program
 
 ```mire
 pub fn main: () {
@@ -16,679 +12,420 @@ pub fn main: () {
 }
 ```
 
-Save as `hello.mire` and run:
-
-```bash
-mire run hello.mire
-```
+Save as `hello.mire` and run: `mire run hello.mire`
 
 ---
 
-## 2. Bindings and mutability
+## 2. Variables
 
 ```mire
-set age = 25 :i64          # immutable binding with explicit type
-set name = "mire"          # type inferred as :str
-set ready = true           # inferred :bool
-set total = 0 :i64 mut     # mutable — can be reassigned
-set pi = 3.14159 :f64 const # compile-time constant
+# Immutable (default)
+set name = "Mire"
+set count = 42
 
-# Reassigning a mutable binding
-set total = total + 10
+# Mutable
+set counter = 0 :i64 mut
+set buffer = "" :str mut
 
-# Compound assignment
-set total += 5             # same as: set total = total + 5
-set total -= 2
-set total *= 3
-set total /= 4
-set total %= 2
+# With explicit type
+set x = 10 :i64
+set active = true :bool
+
+# Reassignment
+set counter = counter + 1
+set buffer = buffer + "more"
 ```
 
-Rules:
-- `set` declares a binding
-- `name :Type` annotates the type
-- `mut` enables reassignment
-- `const` marks a compile-time constant
-- `name :Type mut` combines type annotation with mutability
+Types: `str`, `i64`, `bool`, `f64`, `vec[str]`, `vec[i64]`
 
 ---
 
-## 3. Comments
+## 3. Functions
 
 ```mire
-# Line comment
-// Also a line comment
+# Public function
+pub fn greet: (name :&str) {
+    use dasu("Hello, " + *name)
+}
 
-//! This is a
-    block comment
-    spanning multiple lines !//
-```
-
----
-
-## 4. Functions
-
-```mire
-# Simple function with return type
-fn add: (a: i64, b: i64) :i64 {
+# Private function (default)
+fn add: (a :i64, b :i64) :i64 {
     return a + b
 }
 
-# No return value (returns mu)
-fn greet: (name: str) {
-    use dasu("Hello, {name}")
-}
-
-# Entry point
+# No return value
 pub fn main: () {
-    set result = add(5, 3)
-    use dasu(str(result))
+    set result = add(5 3)
+    use dasu(result)
 }
 ```
 
-Functions are private by default. Use `pub` to export.
-
-### Closures
-
-```mire
-set double = (x: i64) => x * 2
-set result = double(21)    # 42
-
-# Multi-line closures use braces
-set clamp = (val: i64, min: i64, max: i64) => {
-    if val < min { return min }
-    if val > max { return max }
-    return val
-}
-```
-
-### Generics
-
-```mire
-fn identity[T]: (x: T) :T {
-    return x
-}
-
-set a = identity[i64](42)   # explicit type argument
-set b = identity("ok")      # inferred T = str
-```
+**Key rules:**
+- Return type follows params: `fn name: (params) :return_type { }`
+- Call arguments are **space-separated**: `add(5 3)` not `add(5, 3)`
+- Param declarations support comma OR space: `(a :i64, b :i64)` or `(a :i64 b :i64)`
 
 ---
 
-## 5. Structs
+## 4. Control flow
 
 ```mire
-struct Point {
-    x: i64
-    y: i64
-}
-
-# Construction
-set p = (Point x: 1, y: 2)
-
-# Field access
-set px = p.x
-
-# Mutation (only if field has 'mut')
-struct Counter {
-    value: i64 mut
-    step: i64
-}
-set c = (Counter value: 0, step: 1)
-set c.value = c.value + c.step
-```
-
-### Methods (`impl`)
-
-```mire
-impl Point {
-    # Instance method — takes self
-    fn sum: (self) :i64 {
-        return self.x + self.y
-    }
-
-    # Associated method — called with ::
-    fn origin: () :Point {
-        return (Point x: 0, y: 0)
-    }
-}
-
-set p = Point::origin()
-set total = p.sum()
-```
-
----
-
-## 6. Enums
-
-```mire
-enum Color { Red, Green, Blue }
-
-enum Option[T] {
-    None
-    Some(value: T)
-}
-
-# Construction
-set c = Color.Red
-set o = Option[i64].Some(42)
-
-# Pattern matching
-match o {
-    Option.None        { use dasu("nothing") }
-    Option.Some(v)     { use dasu("got {v}") }
-}
-
-# Match with return value
-set label = match c {
-    Color.Red   { "red" }
-    Color.Green { "green" }
-    Color.Blue  { "blue" }
-} :str
-```
-
----
-
-## 7. Skills (Traits)
-
-Skills define abstract contracts — method signatures with no bodies. Types
-implement skills via `impl ... for ...` blocks. This is Mire's trait system.
-
-### Declaring a skill
-
-```mire
-pub skill Show {
-    fn show: (self) :str
-}
-
-pub skill Size {
-    fn size: (self) :i64
-}
-```
-
-A skill must have at least one method. `self` (if present) must be the first
-parameter.
-
-### Implementing a skill
-
-```mire
-struct Point {
-    x: i64
-    y: i64
-}
-
-impl Show for Point {
-    fn show: (self) :str {
-        return "Point({self.x}, {self.y})"
-    }
-}
-
-impl Size for Point {
-    fn size: (self) :i64 { return self.x + self.y }
-}
-```
-
-The type must provide a method for EVERY signature declared in the skill.
-
-### Self-type annotation
-
-Methods can require a specific `self` type:
-
-```mire
-pub skill Projectable {
-    fn project: (self: Point) :i64
-}
-
-impl Projectable for Point {
-    fn project: (self) :i64 { return self.x }
-}
-```
-
-### Multiple skills on one type
-
-A single type can implement any number of skills:
-
-```mire
-pub skill Greeter {
-    fn greet: (self) :str
-}
-
-pub skill Counter {
-    fn count: (self) :i64
-}
-
-struct Person { name :str, age :i64 }
-
-impl Greeter for Person {
-    fn greet: (self) :str { return "Hi, " + self.name }
-}
-
-impl Counter for Person {
-    fn count: (self) :i64 { return self.age }
-}
-```
-
-### Generic trait bounds
-
-Skills can constrain generic type parameters with `[T: SkillName]`:
-
-```mire
-skill Show {
-    fn show: (self) :str
-}
-
-type Num { value :i64 }
-
-impl Show for Num {
-    fn show: (self) :str { return "num" }
-}
-
-fn print_it[T: Show]: (x: T) {
-    use dasu(x.show())
-}
-
-pub fn main: () {
-    set n = Num(1)
-    print_it(n)                     # prints "num"
-}
-```
-
-The compiler enforces that the concrete type argument implements all required
-skills at the call site.
-
-### Instance vs associated methods
-
-Methods with `self` are **instance methods** — called with dot notation
-(`x.method()`). Methods without `self` are **associated methods** — called
-with `::` (`Type::method()`). The impl must match the skill declaration.
-
-### Error: skill not implemented
-
-```
-error[E0008]: Type 'Foo' does not implement required method 'Show.show'
-```
-
----
-
-## 8. Control flow
-
-```mire
-# If / elif / else
-if x > 10 {
-    use dasu("big")
-} elif x > 0 {
-    use dasu("small")
+# If/else — braces REQUIRED
+if x > 0 {
+    use dasu("positive")
 } else {
-    use dasu("zero or negative")
+    use dasu("non-positive")
+}
+
+# Nested conditions
+if x > 10 {
+    use dasu("large")
+} else {
+    if x > 0 {
+        use dasu("small positive")
+    } else {
+        use dasu("negative")
+    }
 }
 
 # While loop
 set i = 0 :i64 mut
-while i < 10 {
-    set i += 1
+while i < 5 {
+    use dasu(i)
+    set i = i + 1
 }
 
-# For loop (over ranges or collections)
-for n in range(5) {
-    use dasu(n)
+# For loop
+for item in items {
+    use dasu(item)
 }
+```
 
-# Do-while
-do {
-    set i += 1
-} while i < 20
+**`} else {` must be on the SAME line** — Mire requires the closing brace and `else {` on one line.
 
-# Break and continue
-while true {
-    if done { break }
-    if skip { continue }
-    set i += 1
+---
+
+## 5. Strings
+
+```mire
+set s = "hello" :str mut
+set upper = strings::upper(s)
+set lower = strings::lower(s)
+set trimmed = strings::trim("  ok  ")
+set parts = strings::split("a,b,c" ",")
+set sub = strings::substr("hello" 1 3)
+set has = strings::contains("hello world" "world")
+set pos = strings::index_of("hello world" "world")
+set replaced = strings::replace("old" "old" "new")
+set n = strings::len(s)
+set num = strings::from_i64(42)
+
+# Concatenation
+set full = s + " world"
+
+# Borrows
+fn process: (input :&str) :str {
+    set s = *input          # dereference &str → str
+    return s + " done"
 }
 ```
 
 ---
 
-## 9. Collections
-
-### Arrays (fixed size)
+## 6. Collections
 
 ```mire
-set arr = [10, 20, 30] :arr[i64 3]
-set first = arr at 0          # index access
-set arr at 1 = 99              # index mutation
-```
+# Vectors (dynamic)
+set items = strings::split("a b c" " ")   # vec[str]
+set n = rt_vec_len(items)
+set first = rt_vec_get_str(items 0)
 
-### Vectors (dynamic)
+# Iteration
+set count = iter::count(items)
+set has = iter::contains(items "b")
 
-```mire
+# Lists (i64)
 set nums = [] :vec[i64] mut
-lists.push(nums, 1)
-lists.push(nums, 2)
-set n = lists.get(&nums, 0)
-set len = lists.len(&nums)
+set nums = lists::push(nums 42)
+set val = lists::get(nums 0)
 ```
 
-### Dicts / Maps
+---
+
+## 7. Structs
 
 ```mire
-set m = {a: 1, b: 2} :map[str i64]
-set val = dicts.get(m, "a")
-dicts.set(m, "c", 3)
+# Definition
+pub struct Point {
+    x :i64
+    y :i64
+}
+
+# Construction
+set p = (Point x: 10, y: 20)
+
+# Field access
+use dasu(p.x)
+use dasu(p.y)
+
+# With methods
+impl Point {
+    fn sum: (self) :i64 {
+        return self.x + self.y
+    }
+
+    fn translate: (self, dx :i64, dy :i64) {
+        set self.x = self.x + dx
+        set self.y = self.y + dy
+    }
+}
+
+# Method call
+set total = p.sum()
 ```
 
-### Higher-order functions
+**Struct literal syntax:** `(TypeName field: value, ...)` — parentheses required, field names use colon.
+
+---
+
+## 8. Enums
 
 ```mire
-load kioto
+# Definition
+pub enum Status {
+    Pending
+    Active
+    Done
+    Failed
+}
 
-pub fn main: () {
-    # Fold (reduce with accumulator)
-    set sum = lists.fold(0, (acc, x) => acc + x, [1, 2, 3, 4, 5])
+pub enum Result {
+    Ok(value :i64)
+    Err(msg :str)
+}
 
-    # Map (transform every element)
-    set doubled = lists.map((x) => x * 2, [1, 2, 3])
+# Construction
+set s = Status.Active
+set r = Result.Ok(42)
+set e = Result.Err("not found")
 
-    # Filter (keep matching elements)
-    set evens = lists.filter((x) => x > 2, [1, 2, 3, 4, 5])
-
-    use dasu("sum={sum}")
+# Match
+match s {
+    Status.Pending { use dasu("waiting") }
+    Status.Active  { use dasu("running") }
+    Status.Done    { use dasu("complete") }
+    Status.Failed  { use dasu("error") }
 }
 ```
 
 ---
 
-## 10. Operators
-
-### Arithmetic
+## 9. Skills (Traits)
 
 ```mire
-+   -   *   /   %       # standard arithmetic
-```
-
-### Comparison
-
-```mire
-==   !=   <   >   <=   >=
-```
-
-### Logical
-
-```mire
-&&   ||   !             # and, or, not
-```
-
-### Bitwise
-
-```mire
-&   |   ^   <<   >>     # and, or, xor, shift-left, shift-right
-```
-
-### Pipeline
-
-```mire
-set result = [1, 2, 3]
-    |> lists.map((x) => x * 2)
-    |> lists.filter((x) => x > 2)
-```
-
----
-
-## 11. Types
-
-### Primitives
-
-| Type | Example | Notes |
-|------|---------|-------|
-| `i8`, `i16`, `i32`, `i64` | `42 :i64` | Signed integers |
-| `u8`, `u16`, `u32`, `u64` | `42 :u32` | Unsigned |
-| `f32`, `f64` | `3.14 :f64` | Floating point |
-| `char` | `'a' :char` | Unicode scalar |
-| `str` | `"hello" :str` | Heap string |
-| `bool` | `true`, `false` | Boolean |
-| `mu` | `set x = mu :mu` | Unit / void |
-
-### Literal forms
-
-```mire
-set dec = 42                # decimal (inferred i64)
-set hex = 0xFF              # hexadecimal
-set bin = 0b1010            # binary
-set oct = 0o77              # octal
-set pi = 3.14159            # float (inferred f64)
-set c = 'a'                 # char
-set nl = '\n'               # escaped char
-set s = "hello" :str        # string (requires :str)
-set raw = r"no\nescapes"    # raw string
-```
-
-### Collections
-
-| Type | Syntax | Example |
-|------|--------|---------|
-| Array | `arr[T N]` | `arr[i64 10]` |
-| Vector | `vec[T]` | `vec[i64]` |
-| Map | `map[K V]` | `map[str i64]` |
-
-### References
-
-| Type | Description |
-|------|-------------|
-| `&T` | Shared reference |
-| `&mut T` | Mutable reference |
-
----
-
-## 12. Ownership and references
-
-```mire
-set x = 42 :i64
-set r = &x                  # shared reference
-set v = *r                  # dereference
-
-fn read: (value: &i64) :i64 {
-    return *value
+pub skill Printable {
+    fn print: (self) :str
 }
 
-set y = read(&x)
-```
+pub skill Sized {
+    fn size: (self) :i64
+}
 
-The borrow checker enforces:
-- No use-after-move
-- No mutation while a shared borrow exists
-- No multiple mutable references to the same value
-- No returning references to local variables
+impl Printable for Point {
+    fn print: (self) :str {
+        return "(" + strings::from_i64(self.x) + ", " + strings::from_i64(self.y) + ")"
+    }
+}
+```
 
 ---
 
-## 13. Module system
+## 10. Module system
 
-Mire uses `load` to import modules. Dependencies are declared in `owl.toml`.
-`use` executes expressions as statements (calls for side effects).
+### 10.1 Module declaration
+```mire
+module mymod
 
-### `owl.toml`
+pub fn hello: () :str {
+    return "hi"
+}
+```
 
+### 10.2 Loading modules
+```mire
+load kioto              # loads the standard library
+load mylib::core        # loads a submodule
+```
+
+### 10.3 Namespace access
+```mire
+strings::split(data "\n")     # standard library
+json::get(response "key")      # kioto module
+net::http::get("https://...")  # nested module
+```
+
+### 10.4 owl.toml exports
 ```toml
-[project]
-name = "my-app"
-version = "0.1.0"
-entry = "main.mire"
-
-[dependencies]
-kioto = { path = "../kioto" }
+[exports]
+mymod    = "path/to/mod"
+strings  = "core/strings"
+net      = "core/net"
 ```
 
-### `load` — declare a package
+Each intermediate directory needs its own `owl.toml` to expose submodules:
 
-```mire
-load kioto                # load the entire standard library
-load kioto::math          # load only the math subtree
-load kioto::strings as s  # alias: s.upper() instead of strings.upper()
 ```
-
-`load` must be at the top level of the file, never inside a function.
-
-### `use` — expression statement (side-effect call)
-
-```mire
-use dasu("hello")         # output expression (built-in)
-use proc::exit(1)          # side-effect call
-use async::spawn("cmd")    # spawn background process
-```
-
-`use` evaluates an expression and discards the result. It is NOT an import
-mechanism — use `load` exclusively for importing modules.
-
----
-
-## 14. Kioto standard library
-
-Kioto is auto-injected if not in `[dependencies]`. Available modules:
-
-| Module | Key functions |
-|--------|--------------|
-| `strings` | `upper`, `lower`, `split`, `join`, `replace`, `trim`, `len`, `substr`, `contains`, `starts_with`, `ends_with` |
-| `lists` | `push`, `pop`, `get`, `len`, `slice`, `concat`, `sort`, `reverse`, `unique`, `map`, `filter`, `fold` |
-| `dicts` | `get`, `set`, `keys`, `values`, `has`, `len`, `remove`, `merge` |
-| `math` | `sqrt`, `sin`, `cos`, `tan`, `pow`, `log`, `abs`, `min`, `max`, `pi`, `e`, `sum`, `mean`, `random` |
-| `fs` | `read`, `write`, `exists`, `copy`, `move`, `delete`, `mkdir`, `list` |
-| `env` | `get`, `set`, `args`, `cwd` |
-| `proc` | `run`, `shell`, `spawn`, `pipe`, `on`, `err` |
-| `async` | `spawn`, `join`, `ready`, `failed`, `task::done`, `task::error` |
-| `time` | `now`, `sleep`, `format` |
-| `net` | `connect`, `send`, `recv`, `close`, `poll`, `http::get`, `http::post`, `socket::nonblock` |
-| `ws` | `connect`, `send::text`, `recv`, `recv::all`, `close` |
-| `maybe` | `Some`, `None`, `map`, `unwrap` |
-| `result` | `Ok`, `Err`, `map`, `unwrap`, `is_ok`, `is_err` |
-
----
-
-## 15. I/O
-
-```mire
-# Output
-use dasu("hello")          # print string + newline
-use dasu(42)               # print integer
-use dasu(3.14)             # print float
-use dasu("x = {x}")        # string interpolation
-
-# Input
-set line = ireru()                   # read line from stdin
-set name = ireru("Name: ")           # with prompt
-set age = ireru("Age: ") :i64        # parse as i64
-set height = ireru("Height: ") :f64  # parse as f64
+mylib/
+  owl.toml         ← exports "net" = "core/net"
+  core/
+    net/
+      owl.toml     ← exports "http" = "http/mod.mire"
+      http/
+        mod.mire   ← contains functions
 ```
 
 ---
 
-## 16. String interpolation
+## 11. External libraries (FFI)
 
+### 11.1 Extern functions
 ```mire
-set name = "Mire"
-set count = 42
-use dasu("Hello, {name}!")             # variable
-use dasu("Result: {add(5, 3)}")        # expression
-use dasu("Twice: {count * 2}")         # arithmetic
+extern lib "SDL2"
+extern lib "mylib" "/usr/lib/libmylib.so"
+
+extern fn SDL_Init: (flags :i64) :i64 lib "SDL2"
+extern fn SDL_Quit: () lib "SDL2"
+extern fn puts: (msg :*mut i8) :i32 lib "c"
 ```
 
-Anything inside `{}` is evaluated, converted to string with `str()`, and concatenated.
-
----
-
-## 17. Unsafe, extern, assembly
-
-### Unsafe blocks
-
+### 11.2 Wrapping in safe functions
 ```mire
-unsafe {
-    set raw = &x    # bypasses borrow checker for this block
+module sdl2
+
+extern lib "SDL2"
+extern fn SDL_Init: (flags :i64) :i64 lib "SDL2"
+extern fn SDL_GetError: () :str lib "SDL2"
+
+pub fn init_video: () :bool {
+    return SDL_Init(0x00000020) == 0
+}
+
+pub fn get_error: () :str {
+    return SDL_GetError()
 }
 ```
 
-### Extern functions
+**Supported FFI types:** `i64`, `str`, `bool`, `*mut i8`, `*const i8`
+
+**Linking:** `extern lib "name"` maps to `-lname` at link time.
+For `.so` files, add the path: `extern lib "name" "/usr/lib/libname.so"`.
+
+---
+
+## 12. Built-in functions
+
+| Function | Description |
+|----------|-------------|
+| `use dasu(msg)` | Print to stdout |
+| `proc_run(cmd)` | Run shell command, return output |
+| `proc::spawn_shell(cmd)` | Spawn background process |
+| `proc::wait(pid)` | Wait for spawned process |
+| `strings::from_i64(n)` | i64 → str |
+| `strings::to_i64(s)` | str → i64 |
+| `strings::len(s)` | String length |
+| `fs::read(path)` | Read file |
+| `fs::write(path, data)` | Write file |
+| `fs::exists(path)` | Check file exists |
+| `rt_vec_len(v)` | Vector length |
+| `rt_vec_get_str(v, i)` | Vector element |
+
+---
+
+## 13. Ownership & borrowing
 
 ```mire
-extern lib "c" "libc.so.6"
-extern fn puts: (msg: *const i8) :i32 lib "c"
+# Borrows (&str) — read-only reference
+pub fn print: (msg :&str) {
+    use dasu(*msg)      # dereference with *
+}
+
+# Owned (str) — function takes ownership
+fn consume: (data :str) {
+    use dasu(data)
+    # data freed here
+}
+
+# Mutable variables
+set count = 0 :i64 mut      # :type mut
+set buf = "" :str mut
+
+# Mutable struct fields
+struct Counter {
+    value :i64 mut
+}
 ```
 
-### Inline assembly
+**Key rule:** helper functions should take `&str` borrows, not `str` owned,
+to avoid consuming the caller's value.
+
+---
+
+## 14. Comments
 
 ```mire
-asm {
-    mov rax, rbx
-    add rax, 1
-}
+# Line comment
+#!cfg::test              # test annotation
 ```
 
 ---
 
-## 18. Tests
-
-### Directives
+## 15. Common patterns
 
 ```mire
-#!cfg::test
-pub fn test_arithmetic: () {
-    assert_eq(add(2, 3), 5)
+# Reading a file
+set content = fs::read("input.txt")
+
+# Writing a file
+use fs::write("output.txt" content)
+
+# HTTP GET
+set data = net::http::get("https://api.example.com/data")
+
+# JSON parsing
+set name = json::get(data "user.name")
+set age = json::get(data "user.age")
+
+# Maybe (Option)
+set m = maybe::some("value")
+if maybe::is_some(m) {
+    use dasu(maybe::unwrap(m))
 }
 
-![test] string operations
-pub fn test_strings: () {
-    set s = strings.upper("hello")
-    assert_eq(s, "HELLO")
+# Result
+set r = result::ok("success")
+if result::is_ok(r) {
+    use dasu(result::unwrap(r))
+}
+
+# Logging
+use log::info("server started")
+use log::warn("low memory")
+use log::error("connection lost")
+
+# WebSocket client
+set fd = ws::connect("ws://echo.example.com/")
+use ws::send::text(fd "hello")
+set msg = ws::recv::all(fd)
+
+# HTTP server
+set method = net::http::req_method(raw)
+set path = net::http::req_path(raw)
+set ct = net::http::server_mime("style.css")
+
+# SDL2
+if sdl2::init_video() {
+    set win = sdl2::create_window("Demo" 800 600)
+    sdl2::delay(2000)
+    sdl2::quit()
 }
 ```
-
-### Running tests
-
-```bash
-cargo test                          # Rust integration tests
-mire test                           # Mire source tests
-mire test --verbose                 # per-test output
-mire test tests/behavior/           # specific directory
-```
-
-### Assertions
-
-```mire
-assert_eq(actual, expected)
-assert_ne(actual, expected)
-```
-
----
-
-## 19. CLI reference
-
-```bash
-mire run    [file] [--release] [-O<0|1|2|3|s|z>] [-- args...]
-mire build  [file] [--release] [-O<0|1|2|3|s|z>]
-mire check  [file] [--warn-all] [--deny <code>]
-mire debug  [file] [--tokens] [--ast] [--ir]
-mire test   [paths...] [--no-run] [--verbose]
-mire validate                       # validate owl.toml
-mire owl add <name> --path <path>   # add dependency
-mire owl remove <name>              # remove dependency
-```
-
----
-
-## 20. Stability
-
-**Stable and tested:**
-- Structs, enums, pattern matching
-- Skills (traits) and impl blocks, generic trait bounds
-- Functions, closures, generics
-- Type inference, borrow checking
-- Collections (arrays, vectors, maps)
-- All control flow (if, while, for, do-while, match)
-- Module system (load, use)
-- String interpolation
-- I/O (dasu, ireru)
-- Unsafe blocks, extern functions, inline assembly
-- Incremental compilation with cache
-
-**Improving:**
-- Higher-order functions on lists (map/filter/fold — MIR lowering done, stubs in kioto)
-- Type-safe unwrap for maybe/result
-- Skill codegen (frontend/type-checking complete, LLVM backend pending)
-- owl sync (package fetch/update command not yet implemented)
