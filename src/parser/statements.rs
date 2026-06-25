@@ -270,7 +270,6 @@ impl Parser {
         keyword: TokenType,
         visibility: Visibility,
     ) -> Result<Statement> {
-        let _ = visibility;
         self.expect(keyword)?;
         let name = self.expect_ident()?;
         let (type_params, type_param_bounds) = self.parse_optional_type_params_with_bounds()?;
@@ -326,6 +325,7 @@ impl Parser {
         self.declare(&name);
         Ok(Statement::Type {
             name,
+            visibility,
             type_params,
             type_param_bounds,
             parent,
@@ -342,7 +342,6 @@ impl Parser {
     }
 
     fn parse_skill_statement(&mut self, visibility: Visibility) -> Result<Statement> {
-        let _ = visibility;
         self.expect(TokenType::Skill)?;
         let name = self.expect_ident()?;
         self.expect_block_open()?;
@@ -376,7 +375,7 @@ impl Parser {
         }
 
         self.expect_block_close()?;
-        Ok(Statement::Skill { name, methods })
+        Ok(Statement::Skill { name, visibility, methods })
     }
 
     fn parse_impl_statement(&mut self) -> Result<Statement> {
@@ -416,7 +415,7 @@ impl Parser {
     }
 
     fn parse_enum_statement(&mut self, visibility: Visibility) -> Result<Statement> {
-        let _ = visibility;
+        
         self.expect(TokenType::Enum)?;
         let enum_name = self.expect_ident()?;
         let (type_params, type_param_bounds) = self.parse_optional_type_params_with_bounds()?;
@@ -466,6 +465,7 @@ impl Parser {
         self.declare(&enum_name);
         Ok(Statement::Enum {
             name: enum_name,
+            visibility,
             type_params,
             type_param_bounds,
             variants,

@@ -1220,7 +1220,7 @@ mod tests {
     fn rejects_returning_reference_to_local_from_impl_method() {
         let program = Program {
             statements: vec![
-                Statement::Type {
+                Statement::Type { visibility: Visibility::Public, 
                     name: "Point".to_string(),
                     type_params: Vec::new(),
                     type_param_bounds: Vec::new(),

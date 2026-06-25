@@ -374,7 +374,7 @@ impl TypeChecker {
                 ..
             } => self.check_impl_statement(trait_name, type_name, methods)?,
             Statement::Type { fields, .. } => self.check_type_statement(fields)?,
-            Statement::Skill { name, methods } => self.check_skill_statement(name, methods)?,
+            Statement::Skill { name, methods, .. } => self.check_skill_statement(name, methods)?,
             Statement::Break
             | Statement::Continue
             | Statement::ExternLib { .. }
@@ -801,7 +801,7 @@ mod tests {
     fn partial_typecheck_can_skip_nested_members_in_type_and_impl_members() {
         let mut program = Program {
             statements: vec![
-                Statement::Type {
+                Statement::Type { visibility: Visibility::Public, 
                     name: "PointType".to_string(),
                     type_params: Vec::new(),
                     type_param_bounds: Vec::new(),

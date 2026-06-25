@@ -375,7 +375,7 @@ mod tests {
     fn analysis_units_include_nested_children_for_supported_containers() {
         let program = Program {
             statements: vec![
-                Statement::Type {
+                Statement::Type { visibility: Visibility::Public, 
                     name: "PointType".to_string(),
                     type_params: Vec::new(),
                     type_param_bounds: Vec::new(),
@@ -666,7 +666,7 @@ mod tests {
     fn invalidation_report_matches_member_access_to_type_field_units() {
         let previous = Program {
             statements: vec![
-                Statement::Type {
+                Statement::Type { visibility: Visibility::Public, 
                     name: "Point".to_string(),
                     type_params: Vec::new(),
                     type_param_bounds: Vec::new(),
