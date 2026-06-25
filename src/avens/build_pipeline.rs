@@ -661,6 +661,15 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
 
     if options.emit_binary {
         let cache_dir = runtime_base.join(".cobject_cache");
+        let cache_dir = if fs::create_dir_all(&cache_dir).is_ok() {
+            cache_dir
+        } else {
+            let fallback = std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join(".cobject_cache");
+            let _ = fs::create_dir_all(&fallback);
+            fallback
+        };
         let c_objects: Vec<String> = if c_source_files.len() <= 1 {
             c_source_files.iter().map(|src| precompile_c_object(src, &cache_dir, &runtime_base)).collect::<Result<_>>()?
         } else {
@@ -671,15 +680,25 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
                     let cache_dir = &cache_dir;
                     let runtime_base = &runtime_base;
                     s.spawn(move || {
-                        if let Ok(obj) = precompile_c_object(src, cache_dir, runtime_base) {
-                            results.lock().unwrap()[i] = obj;
+                        match precompile_c_object(src, cache_dir, runtime_base) {
+                            Ok(obj) => { results.lock().unwrap()[i] = obj; }
+                            Err(e) => {
+                                let mut results = results.lock().unwrap();
+                                results[i] = format!("<{}: {}>", src, e);
+                            }
                         }
                     });
                 }
             });
             let results = results.into_inner().unwrap();
-            if results.iter().any(|s| s.is_empty()) {
-                return Err(MireError::runtime("C object compilation failed".to_string()));
+            if results.iter().any(|s| s.is_empty() || s.starts_with('<')) {
+                let failures: Vec<&str> = results.iter()
+                    .filter(|s| s.is_empty() || s.starts_with('<'))
+                    .map(|s| s.as_str())
+                    .collect();
+                return Err(MireError::runtime(
+                    format!("C object compilation failed for: {}", failures.join(", "))
+                ));
             }
             results
         };
