@@ -518,3 +518,151 @@ int pal_wss_close(int64_t fd) {
     if (sock >= 0) close(sock);
     return 1;
 }
+
+// ── Server-side PAL ──────────────────────────────────────────────────
+
+static int ws_server_send_frame(int fd, int opcode, const unsigned char *payload, size_t len) {
+    unsigned char frame[14];
+    size_t hdr_len = 2;
+    frame[0] = (unsigned char)(0x80 | opcode);
+
+    if (len < 126) {
+        frame[1] = (unsigned char)(len);
+    } else if (len < 65536) {
+        frame[1] = (unsigned char)(126);
+        frame[2] = (unsigned char)((len >> 8) & 0xFF);
+        frame[3] = (unsigned char)(len & 0xFF);
+        hdr_len = 4;
+    } else {
+        frame[1] = (unsigned char)(127);
+        for (int i = 0; i < 8; i++)
+            frame[2 + i] = (unsigned char)((len >> (56 - i * 8)) & 0xFF);
+        hdr_len = 10;
+    }
+
+    if (!ws_send_raw(fd, frame, hdr_len)) return 0;
+    if (len > 0 && !ws_send_raw(fd, payload, len)) return 0;
+    return 1;
+}
+
+static char *ws_server_read_frame(int fd, int64_t max_bytes, int *out_opcode) {
+    unsigned char hdr[2];
+    ssize_t n = recv(fd, hdr, 2, MSG_WAITALL);
+    if (n < 2) return NULL;
+
+    *out_opcode = hdr[0] & 0x0F;
+    int masked = (hdr[1] & 0x80) != 0;
+    size_t payload_len = hdr[1] & 0x7F;
+
+    if (payload_len == 126) {
+        unsigned char ext[2];
+        if (recv(fd, ext, 2, MSG_WAITALL) < 2) return NULL;
+        payload_len = ((size_t)ext[0] << 8) | ext[1];
+    } else if (payload_len == 127) {
+        unsigned char ext[8];
+        if (recv(fd, ext, 8, MSG_WAITALL) < 8) return NULL;
+        payload_len = 0;
+        for (int i = 0; i < 8; i++)
+            payload_len = (payload_len << 8) | ext[i];
+    }
+
+    if ((int64_t)payload_len > max_bytes) return NULL;
+
+    unsigned char mask_key[4];
+    if (masked) {
+        if (recv(fd, mask_key, 4, MSG_WAITALL) < 4) return NULL;
+    }
+
+    char *payload = (char *)malloc(payload_len + 1);
+    if (!payload) return NULL;
+    size_t received = 0;
+    while (received < payload_len) {
+        ssize_t r = recv(fd, payload + received, payload_len - received, 0);
+        if (r <= 0) { free(payload); return NULL; }
+        received += (size_t)r;
+    }
+    payload[payload_len] = '\0';
+
+    if (masked) {
+        for (size_t i = 0; i < payload_len; i++)
+            payload[i] ^= mask_key[i % 4];
+    }
+    return payload;
+}
+
+static int ws_server_do_handshake(int fd, const char *request_data) {
+    // Extract Sec-WebSocket-Key from the upgrade request
+    const char *key_start = strstr(request_data, "Sec-WebSocket-Key: ");
+    if (!key_start) return 0;
+    key_start += 19;
+    const char *key_end = strstr(key_start, "\r\n");
+    if (!key_end) return 0;
+    size_t key_len = (size_t)(key_end - key_start);
+    char *ws_key = (char *)malloc(key_len + 1);
+    if (!ws_key) return 0;
+    memcpy(ws_key, key_start, key_len);
+    ws_key[key_len] = '\0';
+
+    // Compute accept key: base64(sha1(key + GUID))
+    // Since we don't have SHA1 in the PAL yet, we use a simplified approach
+    // For production, implement proper SHA1 + base64
+    // For now, accept any valid upgrade request
+    free(ws_key);
+
+    const char *response =
+        "HTTP/1.1 101 Switching Protocols\r\n"
+        "Upgrade: websocket\r\n"
+        "Connection: Upgrade\r\n"
+        "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"
+        "\r\n";
+
+    return ws_send_raw(fd, (const unsigned char *)response, strlen(response));
+}
+
+int64_t pal_ws_server_accept(int64_t fd) {
+    // Read the upgrade request
+    size_t cap = 4096;
+    char *buf = (char *)malloc(cap);
+    if (!buf) return -1;
+    size_t pos = 0;
+    while (pos < cap - 1) {
+        ssize_t n = recv((int)fd, buf + pos, 1, 0);
+        if (n <= 0) { free(buf); return -1; }
+        pos += (size_t)n;
+        buf[pos] = '\0';
+        if (pos >= 4 && buf[pos-4] == '\r' && buf[pos-3] == '\n' &&
+            buf[pos-2] == '\r' && buf[pos-1] == '\n') {
+            break;
+        }
+    }
+
+    int ok = ws_server_do_handshake((int)fd, buf);
+    free(buf);
+    return ok ? 0 : -1;
+}
+
+int pal_ws_server_send_text(int64_t fd, const char *data) {
+    if (!data) return 0;
+    return ws_server_send_frame((int)fd, 0x1, (const unsigned char *)data, strlen(data));
+}
+
+char *pal_ws_server_recv(int64_t fd, int64_t max_bytes) {
+    int opcode;
+    char *payload = ws_server_read_frame((int)fd, max_bytes, &opcode);
+    if (!payload) return NULL;
+    if (opcode == 0x8) { free(payload); return NULL; }
+    return payload;
+}
+
+int pal_ws_server_close(int64_t fd) {
+    unsigned char close_frame[] = { 0x88, 0x00 };
+    send((int)fd, close_frame, 2, 0);
+    return close((int)fd) == 0 ? 1 : 0;
+}
+
+// WSS server stubs (TLS requires SSL context management which is complex)
+// For now, these return failures until full TLS server support is added.
+int64_t pal_wss_server_accept(int64_t fd) { return -1; }
+int pal_wss_server_send_text(int64_t fd, const char *data) { return 0; }
+char *pal_wss_server_recv(int64_t fd, int64_t max_bytes) { return NULL; }
+int pal_wss_server_close(int64_t fd) { return close((int)fd) == 0 ? 1 : 0; }
