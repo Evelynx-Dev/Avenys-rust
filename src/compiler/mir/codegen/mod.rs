@@ -99,7 +99,7 @@ pub fn mir_to_llvm(program: &MirProgram) -> (String, Vec<(String, String)>) {
     out.push(String::new());
     out.extend(function_irs);
 
-    (out.join("\n"), Vec::new())
+    (out.join("\n"), program.extern_libs.clone())
 }
 
 fn sanitize_fn_name(name: &str) -> String {

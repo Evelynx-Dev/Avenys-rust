@@ -93,18 +93,23 @@ pub fn lower_program(program: &Program) -> MirProgram {
     let mut functions = Vec::new();
     let mut entry_point = None;
     let mut extern_functions = Vec::new();
+    let mut extern_libs = Vec::new();
     let mut seen_functions = HashSet::new();
     let mut struct_types = extract_struct_types(program);
     let enum_types = extract_enum_types(program);
     let method_map = extract_method_map(program);
 
     for stmt in &program.statements {
-        if let Statement::ExternFunction { name, params, return_type, .. } = stmt {
+        if let Statement::ExternFunction { name, params, return_type, lib_name, .. } = stmt {
             extern_functions.push(MirExternFunction {
                 name: name.clone(),
+                lib_name: lib_name.clone(),
                 params: params.iter().map(|(_, t)| t.clone()).collect(),
                 return_type: return_type.clone(),
             });
+        }
+        if let Statement::ExternLib { name, path } = stmt {
+            extern_libs.push((name.clone(), path.clone()));
         }
     }
 
@@ -112,11 +117,13 @@ pub fn lower_program(program: &Program) -> MirProgram {
     let builtin_runtime_externs: Vec<MirExternFunction> = vec![
         MirExternFunction {
             name: "rt_strings_contains".to_string(),
+            lib_name: "c".to_string(),
             params: vec![DataType::Str, DataType::Str],
             return_type: DataType::Bool,
         },
         MirExternFunction {
             name: "rt_lists_contains_i64".to_string(),
+            lib_name: "c".to_string(),
             params: vec![
                 DataType::Vector {
                     element_type: Box::new(DataType::I64),
@@ -261,6 +268,7 @@ pub fn lower_program(program: &Program) -> MirProgram {
 
     let mut mp = MirProgram::new(functions, entry_point);
     mp.extern_functions = extern_functions;
+    mp.extern_libs = extern_libs;
     mp.struct_types = struct_types;
     mp
 }

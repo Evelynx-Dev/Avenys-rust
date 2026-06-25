@@ -561,7 +561,7 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
             if options.debug_dump {
                 eprintln!("[MIR] program cache hit ({} functions)", mir.functions.len());
             }
-            (cached_ir, Vec::new())
+            (cached_ir, mir.extern_libs.clone())
         } else {
             let opt_count = optimize(&mut mir);
             if options.debug_dump && opt_count > 0 {
@@ -579,7 +579,7 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
                     }
                 }
             }
-            let ir = mir_to_llvm(&mir).0;
+            let (ir, extern_libs) = mir_to_llvm(&mir);
             phase_mir_time = build_start.elapsed().as_millis() as u64;
             progress_phase("mir", &source_filename, phase_mir_time - phase_analyse_time, phase_mir_time);
             if let Err(e) = cache.store_cached_mir_fn(
@@ -592,7 +592,7 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
                 && options.debug_dump {
                     eprintln!("[MIR] cache store error: {}", e);
                 }
-            (ir, Vec::new())
+            (ir, extern_libs)
         }
     };
     // Append runtime declarations and struct constructor functions (MIR codegen path)

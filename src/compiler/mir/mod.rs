@@ -217,12 +217,14 @@ pub struct MirProgram {
     pub functions: Vec<MirFunction>,
     pub entry_point: Option<String>,
     pub extern_functions: Vec<MirExternFunction>,
+    pub extern_libs: Vec<(String, String)>,
     pub struct_types: HashMap<String, Vec<(String, DataType)>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct MirExternFunction {
     pub name: String,
+    pub lib_name: String,
     pub params: Vec<DataType>,
     pub return_type: DataType,
 }
@@ -355,6 +357,7 @@ impl MirProgram {
             functions,
             entry_point,
             extern_functions: Vec::new(),
+            extern_libs: Vec::new(),
             struct_types: HashMap::new(),
         }
     }

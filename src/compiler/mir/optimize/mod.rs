@@ -403,6 +403,7 @@ mod tests {
             functions: vec![f],
             entry_point: None,
             extern_functions: vec![],
+            extern_libs: vec![],
             struct_types: HashMap::new(),
         };
         let total = optimize(&mut prog);
@@ -427,6 +428,7 @@ mod tests {
             functions: vec![f],
             entry_point: None,
             extern_functions: vec![],
+            extern_libs: vec![],
             struct_types: HashMap::new(),
         };
         let total = optimize(&mut prog);

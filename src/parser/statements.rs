@@ -631,7 +631,11 @@ impl Parser {
     fn parse_extern_lib_statement(&mut self) -> Result<Statement> {
         self.expect(TokenType::Lib)?;
         let name = self.expect_string_or_ident()?;
-        let path = self.expect_string_or_ident()?;
+        let path = if self.check(TokenType::StrLit) || self.check(TokenType::Ident) {
+            self.expect_string_or_ident()?
+        } else {
+            name.clone()
+        };
         Ok(Statement::ExternLib { name, path })
     }
 

@@ -278,7 +278,7 @@ mod tests {
         let caller = make_func("main", vec![
             block(0, vec![inst(0, MirOp::Call(MirValue::FunctionRef { name: "add42".into(), env: Box::new(MirValue::Const(MirConst::None)) }, vec![], MirType { data_type: DataType::I64 }))], MirTerminator::Ret(Some(MirValue::Temp(0))))
         ]);
-        let mut prog = MirProgram { functions: vec![caller, callee], entry_point: None, extern_functions: vec![], struct_types: HashMap::new() };
+        let mut prog = MirProgram { functions: vec![caller, callee], entry_point: None, extern_functions: vec![], extern_libs: vec![], struct_types: HashMap::new() };
         let count = inlining(&mut prog);
         assert_eq!(count, 1, "should have inlined add42");
         assert_eq!(prog.functions.len(), 1, "callee should be removed");
@@ -295,7 +295,7 @@ mod tests {
         let caller = make_func("main", vec![
             block(0, vec![], MirTerminator::Ret(Some(MirValue::Const(MirConst::Int(0))))),
         ]);
-        let mut prog = MirProgram { functions: vec![caller, callee], entry_point: None, extern_functions: vec![], struct_types: HashMap::new() };
+        let mut prog = MirProgram { functions: vec![caller, callee], entry_point: None, extern_functions: vec![], extern_libs: vec![], struct_types: HashMap::new() };
         let count = inlining(&mut prog);
         assert_eq!(count, 0, "no inlining should happen");
         assert_eq!(prog.functions.len(), 2, "both functions remain");
@@ -317,7 +317,7 @@ mod tests {
         let caller = make_func("main", vec![
             block(0, vec![inst(0, MirOp::Call(MirValue::FunctionRef { name: "big".into(), env: Box::new(MirValue::Const(MirConst::None)) }, vec![], MirType { data_type: DataType::I64 }))], MirTerminator::Ret(Some(MirValue::Temp(0))))
         ]);
-        let mut prog = MirProgram { functions: vec![caller, callee], entry_point: None, extern_functions: vec![], struct_types: HashMap::new() };
+        let mut prog = MirProgram { functions: vec![caller, callee], entry_point: None, extern_functions: vec![], extern_libs: vec![], struct_types: HashMap::new() };
         let count = inlining(&mut prog);
         assert_eq!(count, 0, "big function should not be inlined");
         assert_eq!(prog.functions.len(), 2);
