@@ -663,14 +663,12 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
         let cache_dir = runtime_base.join(".cobject_cache");
         let cache_dir = if fs::create_dir_all(&cache_dir).is_ok() {
             cache_dir
-        } else if let Ok(tmp) = std::env::var("MIRE_COBJECT_CACHE") {
-            let p = PathBuf::from(&tmp);
-            let _ = fs::create_dir_all(&p);
-            p
         } else {
-            let p = runtime_base.join("bin/.cache/cobjects");
-            let _ = fs::create_dir_all(&p);
-            p
+            let fallback = std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join(".cobject_cache");
+            let _ = fs::create_dir_all(&fallback);
+            fallback
         };
         let c_objects: Vec<String> = if c_source_files.len() <= 1 {
             c_source_files.iter().map(|src| precompile_c_object(src, &cache_dir, &runtime_base)).collect::<Result<_>>()?
