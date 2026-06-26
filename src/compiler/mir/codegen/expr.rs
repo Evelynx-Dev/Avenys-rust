@@ -272,6 +272,16 @@ pub(crate) fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
                 extra.push("call i32 @fflush(ptr null)".to_string());
                 line
                 // result is the ptr returned by dasu (dummy null pointer)
+            } else if name_opt == Some("ireru") {
+                let prompt_ptr = if args.is_empty() {
+                    "null".to_string()
+                } else {
+                    let (v, _t) = resolve_typed(&args[0], ctx);
+                    v
+                };
+                let result = tmp_result(ctx, "ptr", inst.result);
+                extra.push(format!("call i32 @fflush(ptr null)"));
+                format!("%t{} = call ptr @rt_read_line(ptr {})", result, prompt_ptr)
             } else if name_opt == Some("env_args") {
                 // env_args() builtin — delegate to runtime
                 let result = tmp_result(ctx, "ptr", inst.result);

@@ -506,10 +506,8 @@ choice — short, unambiguous, and visually distinct from English keywords.
 | Function | Origin | Description |
 |----------|--------|-------------|
 | `use dasu(msg)` | 出す (*dasu*, "put out") | Print to stdout |
-| `set line = ireru()` | 入れる (*ireru*, "put in") | Read line from stdin (legacy codegen only) |
-
-`ireru` is parsed and type-checked but the MIR codegen path (default) does not
-emit its runtime symbol yet. Use `MIRE_LEGACY_CODEGEN=1` to access it.
+| `set line = ireru()` | 入れる (*ireru*, "put in") | Read line from stdin |
+| `set line = ireru("> ")` | 入れる with prompt | Read with prompt from stdin |
 
 The rest of the standard library (kioto) uses English names: `log::info`,
 `fs::read`, `net::http::get`, etc. Only the two I/O primitives use Japanese.

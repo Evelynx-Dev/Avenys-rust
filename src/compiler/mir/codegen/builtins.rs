@@ -109,6 +109,7 @@ pub(crate) fn pal_extern_decls() -> Vec<String> {
         "declare i64 @rt_math_floor(double)".to_string(),
         "declare i64 @rt_math_ceil(double)".to_string(),
         "declare i64 @pal_fs_delete(ptr)".to_string(),
+        "declare ptr @rt_read_line(ptr)".to_string(),
         "declare i64 @pal_fs_write(ptr, ptr)".to_string(),
         "declare i64 @pal_fs_append(ptr, ptr)".to_string(),
         "declare ptr @pal_fs_read(ptr)".to_string(),
