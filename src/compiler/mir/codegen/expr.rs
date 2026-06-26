@@ -6,6 +6,7 @@ use crate::compiler::mir::{MirInst, MirOp, MirValue, MirConst, MirCmp, DataType}
 
 pub(crate) fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
     let mut extra = Vec::new();
+    let mut after = Vec::new();
     let line = match &inst.op {
         MirOp::Alloca(ty) => {
             let llty = llvm_type_str(&ty.data_type);
@@ -47,14 +48,14 @@ pub(crate) fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
                 } else {
                     r_str.clone()
                 };
-                // Free owned operand temps that were previous concat results
+                // Free owned operand temps AFTER the concat call (must be alive when concat reads them)
                 if let MirValue::Temp(l_id) = l
                     && ctx.owned_string_temps.remove(l_id) {
-                        extra.push(format!("call void @rt_managed_free(ptr {})", l_str));
+                        after.push(format!("call void @rt_managed_free(ptr {})", l_str));
                     }
                 if let MirValue::Temp(r_id) = r
                     && ctx.owned_string_temps.remove(r_id) {
-                        extra.push(format!("call void @rt_managed_free(ptr {})", r_str));
+                        after.push(format!("call void @rt_managed_free(ptr {})", r_str));
                     }
                 if let Some(id) = inst.result {
                     ctx.owned_string_temps.insert(id);
@@ -531,8 +532,9 @@ pub(crate) fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
             format!("%t{} = phi {} {}", result, ll_ty, incoming.join(", "))
         }
     };
-    let mut result = Vec::with_capacity(extra.len() + 1);
+    let mut result = Vec::with_capacity(extra.len() + 1 + after.len());
     result.extend(extra);
     result.push(line);
+    result.extend(after);
     result
 }

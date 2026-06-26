@@ -3748,7 +3748,7 @@ fn kioto_async_spawn_wait_compiles_and_runs() {
     .expect("write project");
     fs::write(
         &source_path,
-        "load kioto\n\npub fn main: () {\n    set pid = async.spawn(\"true\")\n    set code = async.join(pid)\n    use dasu(str(code))\n}\n",
+        "load kioto\n\npub fn main: () {\n    set pid = async.spawn(\"true\")\n    set code = async.wait(pid)\n    use dasu(str(code))\n}\n",
     )
     .expect("write source");
 
