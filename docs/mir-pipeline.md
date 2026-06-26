@@ -121,7 +121,7 @@ Returns LLVM IR text + extern libs (currently always empty).
 | Phi, Select, PtrToInt, IntToPtr, BitCast | ✅ |
 | Temporary ID separation: `%e{n}` for extras, `%t{mir_id}` for results | ✅ |
 | Struct constructor calls via `Call(struct_name, ...)` | ✅ |
-| Builtins (dasu, ireru, etc.) | ❌ Not expanded inline |
+| Builtins (dasu, ireru, proc.on, etc.) | ⚠️ Mixed: some special-case wrappers exist; `lists.map/filter/fold` are handled in MIR lowering, while other builtins still rely on kioto stubs/runtime helpers |
 
 ### Phase 4: Optimizations (`src/compiler/mir/optimize.rs`)
 
@@ -177,7 +177,7 @@ Returns total number of applied transformations.
 
 ## Known Limitations
 
-1. **Builtins not expanded**: `dasu`, `ireru`, `len`, etc. emitted as regular `call` — clang can't resolve. Existing codegen in `llvm_functions.rs` handles these with special-case C wrappers. The MIR backend currently special-cases `len()` dispatch and `lists.map/filter/fold`; other builtins still rely on kioto stubs or runtime helpers.
+1. **Builtins not fully generalized**: `dasu`, `ireru`, `len`, `proc.on`, etc. still use a mix of special-case wrappers and runtime helpers instead of a single unified builtin lowering path. `lists.map/filter/fold` are now handled in MIR lowering, but the remaining builtins still depend on kioto stubs or runtime helpers.
 
 2. **Extern libs empty**: Second tuple element always `Vec::new()`. The existing codegen properly collects from `ExternLib` statements.
 
