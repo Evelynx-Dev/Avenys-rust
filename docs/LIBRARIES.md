@@ -52,7 +52,7 @@ Avenys looks for libraries in these locations (in order):
 # kioto/owl.toml
 [project]
 name = "kioto"
-version = "3.11.35"
+version = "3.11.12"
 entry = "mod.mire"
 
 [exports]

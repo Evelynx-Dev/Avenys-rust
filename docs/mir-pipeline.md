@@ -37,39 +37,39 @@ closure bodies.
 
 | AST Construct | Status |
 |---|---|
-| Function definitions | ✅ |
-| Impl blocks (methods) | ✅ (including instance method dispatch) |
-| Let/set declarations | ✅ |
-| Assignment | ✅ |
-| Return | ✅ |
-| If/else | ✅ |
-| While loops | ✅ |
-| For loops (with optional index variable) | ✅ (lowered to while-loop with counter) |
-| Binary ops (+, -, *, /, ==, !=, <, <=, >, >=, &&, \|\|) | ✅ |
-| Unary ops (-, !) | ✅ |
-| Function calls (user + builtins) | ✅ (builtins emit as regular calls) |
-| Method calls (instance dispatch) | ✅ (resolves via `method_map`, prepends receiver) |
-| First-class function values | ⚠️ `FunctionRef` symbols only; full `{fn_ptr, env_ptr}` struct value not yet materialized |
-| Match expressions | ✅ (BrCond per case with literal/enum discriminant comparison, case blocks) |
-| If-expressions (`__if_expr`) | ✅ (BrCond + phi-like store/load) |
-| Literals (int, float, bool, char, str) | ✅ |
-| Variable references | ✅ (type-aware Load via `var_types`) |
-| Extern functions | ✅ (collected as `MirExternFunction`; wrappers generated on demand in codegen)
-| Index expressions (array/map read) | ✅ (GEP + Load) |
-| Index assignment (array/map write) | ✅ (GEP + Store) |
-| Member access (struct field read) | ✅ (GEP + Load via struct metadata) |
-| Member assignment (struct field write) | ✅ (load heap ptr + GEP + Store) |
-| Struct construction via Tuple expr | ✅ (emitted as `Call(struct_name, args)`) |
-| Reference (`&expr`) | ✅ (returns alloca ptr, skips Load) |
-| Dereference (`*expr`) | ✅ (Load from pointer) |
-| Unsafe blocks | ✅ (forwards body) |
-| Closures | ⚠️ Lowered to standalone functions; captures are always empty (parser does not emit captures yet) |
-| Higher-order list functions | ✅ `lists.map`, `lists.filter`, `lists.fold` lowered to loops that call the closure function |
-| Pipeline (`|>`) | ❌ |
-| Enum variants (bare path) | ✅ Resolves to real discriminant |
-| Enum variants (with payload) | ⚠️ Returns discriminant only (payloads not bound yet) |
-| Try/Ok/Err | ❌ |
-| Dict/Map literals | ❌ (returns `Const(None)`) |
+| Function definitions | Done |
+| Impl blocks (methods) | Done (including instance method dispatch) |
+| Let/set declarations | Done |
+| Assignment | Done |
+| Return | Done |
+| If/else | Done |
+| While loops | Done |
+| For loops (with optional index variable) | Done (lowered to while-loop with counter) |
+| Binary ops (+, -, *, /, ==, !=, <, <=, >, >=, &&, \|\|) | Done |
+| Unary ops (-, !) | Done |
+| Function calls (user + builtins) | Done (builtins emit as regular calls) |
+| Method calls (instance dispatch) | Done (resolves via `method_map`, prepends receiver) |
+| First-class function values | Partial: `FunctionRef` symbols only; full `{fn_ptr, env_ptr}` struct value not yet materialized |
+| Match expressions | Done (BrCond per case with literal/enum discriminant comparison, case blocks) |
+| If-expressions (`__if_expr`) | Done (BrCond + phi-like store/load) |
+| Literals (int, float, bool, char, str) | Done |
+| Variable references | Done (type-aware Load via `var_types`) |
+| Extern functions | Done (collected as `MirExternFunction`; wrappers generated on demand in codegen)
+| Index expressions (array/map read) | Done (GEP + Load) |
+| Index assignment (array/map write) | Done (GEP + Store) |
+| Member access (struct field read) | Done (GEP + Load via struct metadata) |
+| Member assignment (struct field write) | Done (load heap ptr + GEP + Store) |
+| Struct construction via Tuple expr | Done (emitted as `Call(struct_name, args)`) |
+| Reference (`&expr`) | Done (returns alloca ptr, skips Load) |
+| Dereference (`*expr`) | Done (Load from pointer) |
+| Unsafe blocks | Done (forwards body) |
+| Closures | Partial: lowered to standalone functions; captures are always empty (parser does not emit captures yet) |
+| Higher-order list functions | Done: `lists.map`, `lists.filter`, `lists.fold` lowered to loops that call the closure function |
+| Pipeline (`|>`) | Not supported |
+| Enum variants (bare path) | Done: resolves to real discriminant |
+| Enum variants (with payload) | Partial: returns discriminant only (payloads not bound yet) |
+| Try/Ok/Err | Not supported |
+| Dict/Map literals | Not supported (returns `Const(None)`) |
 
 Var types tracked via `var_types: HashMap<String, DataType>` during lowering.
 Struct metadata collected by `extract_struct_types()` and passed as
@@ -96,32 +96,32 @@ Returns LLVM IR text + extern libs (currently always empty).
 
 | Feature | Status |
 |---|---|
-| Function defs with typed params | ✅ |
-| Alloca for locals | ✅ |
-| Load/Store with correct types | ✅ |
-| Integer arithmetic (add, sub, mul, sdiv, shl) | ✅ |
-| Float arithmetic (fadd, fsub, fmul, fdiv) | ✅ |
-| Mixed-type arithmetic (coerce i64→double via sitofp) | ✅ |
-| Integer comparison (icmp) | ✅ |
-| Float comparison (fcmp) | ✅ |
-| Boolean And/Or | ✅ (emits `and i1` / `or i1`) |
-| Branch / conditional branch | ✅ |
-| Return | ✅ |
-| Function calls (typed args) | ✅ |
-| Indirect/direct calls via `FunctionRef` | ✅ Direct call to `@fn_<name>` with implicit `env_ptr` argument |
-| Extern function wrappers | ✅ Generated on demand for extern functions used as values (direct calls, `call(...)` targets, or stored in variables) |
-| ZExt bool→i64 | ✅ |
-| Trunc i64→i32 | ✅ |
-| Extern declarations from `ExternFunction` AST | ✅ |
-| Extern function name resolution (strip root namespace) | ✅ (via `split_once('.')`) |
-| SSA temp type tracking | ✅ (`temp_types`, `param_types`, `resolve_typed`) |
-| Float hex encoding | ✅ (`to_bits()` for exact bit representation) |
-| String constants | ⚠️ Returns `ptr null` |
-| GEP (struct fields, array elements) | ✅ (2-index for structs, 1-index for arrays/pointers) |
-| Phi, Select, PtrToInt, IntToPtr, BitCast | ✅ |
-| Temporary ID separation: `%e{n}` for extras, `%t{mir_id}` for results | ✅ |
-| Struct constructor calls via `Call(struct_name, ...)` | ✅ |
-| Builtins (dasu, ireru, proc.on, etc.) | ⚠️ Mixed: some special-case wrappers exist; `lists.map/filter/fold` are handled in MIR lowering, while other builtins still rely on kioto stubs/runtime helpers |
+| Function defs with typed params | Done |
+| Alloca for locals | Done |
+| Load/Store with correct types | Done |
+| Integer arithmetic (add, sub, mul, sdiv, shl) | Done |
+| Float arithmetic (fadd, fsub, fmul, fdiv) | Done |
+| Mixed-type arithmetic (coerce i64→double via sitofp) | Done |
+| Integer comparison (icmp) | Done |
+| Float comparison (fcmp) | Done |
+| Boolean And/Or | Done (emits `and i1` / `or i1`) |
+| Branch / conditional branch | Done |
+| Return | Done |
+| Function calls (typed args) | Done |
+| Indirect/direct calls via `FunctionRef` | Done: direct call to `@fn_<name>` with implicit `env_ptr` argument |
+| Extern function wrappers | Done: generated on demand for extern functions used as values (direct calls, `call(...)` targets, or stored in variables) |
+| ZExt bool→i64 | Done |
+| Trunc i64→i32 | Done |
+| Extern declarations from `ExternFunction` AST | Done |
+| Extern function name resolution (strip root namespace) | Done (via `split_once('.')`) |
+| SSA temp type tracking | Done (`temp_types`, `param_types`, `resolve_typed`) |
+| Float hex encoding | Done (`to_bits()` for exact bit representation) |
+| String constants | Partial: returns `ptr null` |
+| GEP (struct fields, array elements) | Done (2-index for structs, 1-index for arrays/pointers) |
+| Phi, Select, PtrToInt, IntToPtr, BitCast | Done |
+| Temporary ID separation: `%e{n}` for extras, `%t{mir_id}` for results | Done |
+| Struct constructor calls via `Call(struct_name, ...)` | Done |
+| Builtins (dasu, ireru, proc.on, etc.) | Partial: some special-case wrappers exist; `lists.map/filter/fold` are handled in MIR lowering, while other builtins still rely on kioto stubs/runtime helpers |
 
 ### Phase 4: Optimizations (`src/compiler/mir/optimize.rs`)
 
@@ -161,12 +161,12 @@ Returns total number of applied transformations.
 
 | Category | Tests | Status |
 |---|---|---|
-| Algebraic: `x+0`, `0+x`, `x*1`, `1*x`, `x*0`, `0*x`, `x-0`, `x-x`, `x/1` | 9 | ✅ |
-| Copy prop: simple, transitive | 2 | ✅ |
-| DCE: removes unused, preserves Call, preserves Store, preserves void Call, mixed | 5 | ✅ |
-| BrCond fold: true, false, skip-nonconst | 3 | ✅ |
-| Dead block: simple, keeps-entry, after-branch-folding, full-pipeline | 4 | ✅ |
-| Strength reduction: `x*2→x<<1`, `x*8→x<<3`, `4*x→x<<2`, non-pow2, zero, negative, pipeline | 7 | ✅ |
+| Algebraic: `x+0`, `0+x`, `x*1`, `1*x`, `x*0`, `0*x`, `x-0`, `x-x`, `x/1` | 9 | Pass |
+| Copy prop: simple, transitive | 2 | Pass |
+| DCE: removes unused, preserves Call, preserves Store, preserves void Call, mixed | 5 | Pass |
+| BrCond fold: true, false, skip-nonconst | 3 | Pass |
+| Dead block: simple, keeps-entry, after-branch-folding, full-pipeline | 4 | Pass |
+| Strength reduction: `x*2→x<<1`, `x*8→x<<3`, `4*x→x<<2`, non-pow2, zero, negative, pipeline | 7 | Pass |
 
 ## Integration
 
