@@ -12,8 +12,7 @@ impl LlvmIrGen {
         let _ = ref_body;
         for (name, ptr) in owned_vars {
             let tmp = self.tmp();
-            self.body
-                .push(format!("  {tmp} = load ptr, ptr {ptr}"));
+            self.body.push(format!("  {tmp} = load ptr, ptr {ptr}"));
             self.body
                 .push(format!("  call void @rt_managed_free(ptr {tmp})"));
             if let Some(var) = self.vars.get_mut(&name) {
@@ -290,6 +289,7 @@ impl LlvmIrGen {
             "declare ptr @rt_f64_to_string(double)".to_string(),
             "declare ptr @rt_string_copy(ptr)".to_string(),
             "declare ptr @rt_managed_from_cstr(ptr)".to_string(),
+            "declare ptr @rt_managed_ensure_managed(ptr)".to_string(),
             "declare ptr @rt_string_concat(ptr, ptr)".to_string(),
             "declare ptr @rt_string_append_owned(ptr, ptr)".to_string(),
             "declare void @rt_managed_free(ptr)".to_string(),
@@ -392,6 +392,7 @@ impl LlvmIrGen {
             "declare i64 @pal_proc_spawn(ptr)".to_string(),
             "declare i64 @pal_proc_wait(i64)".to_string(),
             "declare i32 @pal_proc_kill(i64)".to_string(),
+            "declare void @pal_proc_on(ptr)".to_string(),
             "declare void @pal_proc_exit(i64)".to_string(),
             "declare i64 @pal_proc_exists(i64)".to_string(),
             "declare i64 @abs(i64)".to_string(),
@@ -1603,6 +1604,9 @@ impl LlvmIrGen {
             }
             Expression::Call { name, args, .. } if name == "proc_exists" => {
                 self.compile_proc_exists(args)
+            }
+            Expression::Call { name, args, .. } if name == "proc_on" || name == "proc.on" => {
+                self.compile_proc_on(args)
             }
             // ENV functions
             Expression::Call { name, args, .. } if name == "env_get" => self.compile_env_get(args),

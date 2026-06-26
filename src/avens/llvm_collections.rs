@@ -477,6 +477,16 @@ impl LlvmIrGen {
         value: &Expression,
     ) -> Result<()> {
         let target_data_type = self.expression_data_type(target);
+        let index_data_type = self.expression_data_type(index);
+        if matches!(index_data_type, DataType::Str)
+            || matches!(target_data_type, DataType::Map { .. } | DataType::Dict)
+        {
+            let updated = self.compile_dict_set(&[target.clone(), index.clone(), value.clone()])?;
+            let (target_ptr, target_dt) = self.resolve_lvalue_ptr(target)?;
+            let target_ty = self.map_type(&target_dt)?;
+            return self.store_casted(&target_ptr, target_ty, updated);
+        }
+
         let element_data_type = match &target_data_type {
             DataType::Array { element_type, .. }
             | DataType::Slice { element_type }
@@ -981,6 +991,139 @@ impl LlvmIrGen {
         }
 
         match target_data_type {
+            DataType::Map {
+                key_type,
+                value_type,
+            } => {
+                let key_kind = self.runtime_kind_code(key_type);
+                let key_i64 = if index.ty == LlType::Ptr {
+                    LlValue {
+                        ty: LlType::I64,
+                        repr: "0".to_string(),
+                        owned: false,
+                    }
+                } else {
+                    self.cast_to_i64(index.clone())?
+                };
+                let key_ptr = if index.ty == LlType::Ptr {
+                    index
+                } else {
+                    LlValue {
+                        ty: LlType::Ptr,
+                        repr: "null".to_string(),
+                        owned: false,
+                    }
+                };
+                let dict = self.ensure_ptr(target);
+                if matches!(
+                    **value_type,
+                    DataType::Map { .. }
+                        | DataType::Vector { .. }
+                        | DataType::Array { .. }
+                        | DataType::Slice { .. }
+                        | DataType::Anything
+                        | DataType::Str
+                        | DataType::List
+                ) {
+                    let result = self.tmp();
+                    self.body.push(format!(
+                        "  {result} = call ptr @rt_dict_get_ptr(ptr {}, i64 {}, i64 {}, ptr {}, ptr null)",
+                        dict.repr, key_kind, key_i64.repr, key_ptr.repr
+                    ));
+                    Ok(LlValue {
+                        ty: LlType::Ptr,
+                        repr: result,
+                        owned: false,
+                    })
+                } else {
+                    let result = self.tmp();
+                    self.body.push(format!(
+                        "  {result} = call i64 @rt_dict_get_i64(ptr {}, i64 {}, i64 {}, ptr {}, i64 0)",
+                        dict.repr, key_kind, key_i64.repr, key_ptr.repr
+                    ));
+                    if matches!(value_type.as_ref(), DataType::Bool) {
+                        let bool_val = self.tmp();
+                        self.body
+                            .push(format!("  {bool_val} = icmp ne i64 {result}, 0"));
+                        Ok(LlValue {
+                            ty: LlType::I1,
+                            repr: bool_val,
+                            owned: false,
+                        })
+                    } else {
+                        Ok(LlValue {
+                            ty: LlType::I64,
+                            repr: result,
+                            owned: false,
+                        })
+                    }
+                }
+            }
+            DataType::Dict => {
+                let key_kind = 3;
+                let key_i64 = if index.ty == LlType::Ptr {
+                    LlValue {
+                        ty: LlType::I64,
+                        repr: "0".to_string(),
+                        owned: false,
+                    }
+                } else {
+                    self.cast_to_i64(index.clone())?
+                };
+                let key_ptr = if index.ty == LlType::Ptr {
+                    index
+                } else {
+                    LlValue {
+                        ty: LlType::Ptr,
+                        repr: "null".to_string(),
+                        owned: false,
+                    }
+                };
+                let dict = self.ensure_ptr(target);
+                if matches!(
+                    result_data_type,
+                    DataType::Map { .. }
+                        | DataType::Vector { .. }
+                        | DataType::Array { .. }
+                        | DataType::Slice { .. }
+                        | DataType::Anything
+                        | DataType::Str
+                        | DataType::List
+                ) {
+                    let result = self.tmp();
+                    self.body.push(format!(
+                        "  {result} = call ptr @rt_dict_get_ptr(ptr {}, i64 {}, i64 {}, ptr {}, ptr null)",
+                        dict.repr, key_kind, key_i64.repr, key_ptr.repr
+                    ));
+                    Ok(LlValue {
+                        ty: LlType::Ptr,
+                        repr: result,
+                        owned: false,
+                    })
+                } else {
+                    let result = self.tmp();
+                    self.body.push(format!(
+                        "  {result} = call i64 @rt_dict_get_i64(ptr {}, i64 {}, i64 {}, ptr {}, i64 0)",
+                        dict.repr, key_kind, key_i64.repr, key_ptr.repr
+                    ));
+                    if matches!(result_data_type, DataType::Bool) {
+                        let bool_val = self.tmp();
+                        self.body
+                            .push(format!("  {bool_val} = icmp ne i64 {result}, 0"));
+                        Ok(LlValue {
+                            ty: LlType::I1,
+                            repr: bool_val,
+                            owned: false,
+                        })
+                    } else {
+                        Ok(LlValue {
+                            ty: LlType::I64,
+                            repr: result,
+                            owned: false,
+                        })
+                    }
+                }
+            }
             DataType::Unknown
             | DataType::List
             | DataType::Vector { .. }

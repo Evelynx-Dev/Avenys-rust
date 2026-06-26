@@ -41,26 +41,50 @@ pub(crate) fn is_map_or_dict_type(dt: &DataType) -> bool {
     matches!(dt, DataType::Map { .. } | DataType::Dict)
 }
 
+pub(crate) fn is_pointer_valued_type(dt: &DataType) -> bool {
+    matches!(
+        dt,
+        DataType::Str
+            | DataType::List
+            | DataType::Vector { .. }
+            | DataType::Dict
+            | DataType::Map { .. }
+            | DataType::Struct
+            | DataType::StructNamed(_)
+            | DataType::Ref { .. }
+            | DataType::RefMut { .. }
+            | DataType::Box
+            | DataType::Tuple
+            | DataType::Set
+            | DataType::Datetime
+            | DataType::DynTrait { .. }
+            | DataType::Result { .. }
+            | DataType::Anything
+            | DataType::Unknown
+    )
+}
+
 pub(crate) fn is_trivial_deref(source: &DataType, target: &DataType) -> bool {
     if !matches!(source, DataType::Ref { .. } | DataType::RefMut { .. }) {
         return false;
     }
-    matches!(target,
+    matches!(
+        target,
         DataType::Str
-        | DataType::List
-        | DataType::Vector { .. }
-        | DataType::Dict
-        | DataType::Map { .. }
-        | DataType::Box
-        | DataType::Struct
-        | DataType::StructNamed(_)
-        | DataType::Function
-        | DataType::Tuple
-        | DataType::Set
-        | DataType::Datetime
-        | DataType::Slice { .. }
-        | DataType::DynTrait { .. }
-        | DataType::Result { .. }
+            | DataType::List
+            | DataType::Vector { .. }
+            | DataType::Dict
+            | DataType::Map { .. }
+            | DataType::Box
+            | DataType::Struct
+            | DataType::StructNamed(_)
+            | DataType::Function
+            | DataType::Tuple
+            | DataType::Set
+            | DataType::Datetime
+            | DataType::Slice { .. }
+            | DataType::DynTrait { .. }
+            | DataType::Result { .. }
     )
 }
 

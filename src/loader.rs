@@ -10,6 +10,7 @@ use crate::incremental::{
 };
 use crate::parser::ast::{
     AssignmentTarget, DataType, EnumVariantDef, Expression, Identifier, Literal, Statement,
+    Visibility,
 };
 use crate::parser::{parse, Program};
 use std::collections::{HashMap, HashSet};
@@ -841,7 +842,7 @@ impl<'a> ModuleRenamer<'a> {
                     default,
                 }
             }
-            Statement::Type {
+            Statement::Type { visibility: _, 
                 name,
                 type_params,
                 type_param_bounds,
@@ -867,7 +868,7 @@ impl<'a> ModuleRenamer<'a> {
                     .collect();
                 let parent = parent.map(|parent| self.rename_type_name(parent, scope_stack));
                 let fields = self.rename_statement_block(fields, &mut fields_scope);
-                Statement::Type {
+                Statement::Type { visibility: Visibility::Public, 
                     name,
                     type_params,
                     type_param_bounds,
@@ -875,8 +876,9 @@ impl<'a> ModuleRenamer<'a> {
                     fields,
                 }
             }
-            Statement::Skill { name, methods } => Statement::Skill {
+            Statement::Skill { name, methods, .. } => Statement::Skill {
                 name: self.rename_decl_name(name, scope_stack, top_level),
+                visibility: Visibility::Public,
                 methods: methods
                     .into_iter()
                     .map(|mut method| {
@@ -987,7 +989,7 @@ impl<'a> ModuleRenamer<'a> {
                 target: self.rename_decl_name(target, scope_stack, top_level),
                 value: self.rename_expression(value, scope_stack),
             },
-            Statement::Enum {
+            Statement::Enum { visibility: _, 
                 name,
                 type_params,
                 type_param_bounds,
@@ -1010,7 +1012,7 @@ impl<'a> ModuleRenamer<'a> {
                     .into_iter()
                     .map(|variant| self.rename_enum_variant(variant, &name, scope_stack))
                     .collect();
-                Statement::Enum {
+                Statement::Enum { visibility: Visibility::Public, 
                     name,
                     type_params,
                     type_param_bounds,

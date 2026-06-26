@@ -163,6 +163,12 @@ char *rt_managed_from_cstr(const char *src) {
     return rt_managed_from_slice(src, strlen(src));
 }
 
+char *rt_managed_ensure_managed(char *ptr) {
+    if (ptr == NULL) return rt_managed_from_slice("", 0);
+    if (rt_managed_contains(ptr)) return ptr;
+    return rt_managed_from_cstr(ptr);
+}
+
 char *rt_managed_printf_i64(const char *fmt, long long value) {
     int needed = snprintf(NULL, 0, fmt, value);
     if (needed < 0) return rt_managed_from_slice("", 0);

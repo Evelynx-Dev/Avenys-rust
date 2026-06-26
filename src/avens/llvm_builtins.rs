@@ -661,6 +661,22 @@ impl LlvmIrGen {
         })
     }
 
+    pub(super) fn compile_proc_on(&mut self, args: &[Expression]) -> Result<LlValue> {
+        if args.len() != 1 {
+            return Err(MireError::new(ErrorKind::Runtime {
+                message: "proc_on expects 1 argument".to_string(),
+            }));
+        }
+        let signal = self.compile_expr(&args[0])?;
+        self.body
+            .push(format!("  call void @pal_proc_on(ptr {})", signal.repr));
+        Ok(LlValue {
+            ty: LlType::I64,
+            repr: "0".to_string(),
+            owned: false,
+        })
+    }
+
     pub(super) fn compile_proc_exit(&mut self, args: &[Expression]) -> Result<LlValue> {
         if args.len() != 1 {
             return Err(MireError::new(ErrorKind::Runtime {

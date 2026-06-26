@@ -99,7 +99,7 @@ pub fn mir_to_llvm(program: &MirProgram) -> (String, Vec<(String, String)>) {
     out.push(String::new());
     out.extend(function_irs);
 
-    (out.join("\n"), Vec::new())
+    (out.join("\n"), program.extern_libs.clone())
 }
 
 fn sanitize_fn_name(name: &str) -> String {
@@ -118,6 +118,7 @@ pub(crate) fn compile_function_to_llvm(func: &MirFunction, ctx: &mut LlvmCtx) ->
     let ret_type = llvm_type_str(&func.ret_type);
     let saved_vars = std::mem::take(&mut ctx.vars);
     let saved_temp_types = std::mem::take(&mut ctx.temp_types);
+    let saved_owned_string_temps = std::mem::take(&mut ctx.owned_string_temps);
     let saved_next_tmp = ctx.next_tmp;
     let saved_next_extra = ctx.next_extra;
 
@@ -175,6 +176,7 @@ pub(crate) fn compile_function_to_llvm(func: &MirFunction, ctx: &mut LlvmCtx) ->
     parts.push("}".to_string());
     ctx.vars = saved_vars;
     ctx.temp_types = saved_temp_types;
+    ctx.owned_string_temps = saved_owned_string_temps;
     ctx.next_tmp = saved_next_tmp;
     ctx.next_extra = saved_next_extra;
     ctx.param_types.clear();

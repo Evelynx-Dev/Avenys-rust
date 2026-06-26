@@ -317,3 +317,22 @@ These are always linked regardless of platform. They use only standard C
 | `str` argument is garbage | Parameter type mismatch — use `const char *` not `char *` |
 | `str` return causes leak | Not returning `malloc`'d memory — use `strdup()` or `malloc()+strcpy()` |
 | Compile fails on WASM target | Missing stub in `pal/wasm/` |
+
+## Status & Roadmap
+
+### Completed
+- Phase 0: Clippy warnings fixed
+- Phase A: runtime_support.c split into Runtime Core + PAL
+- Phase B: All runtime symbols renamed to rt_/pal_ prefix
+- kioto modules call rt_*/pal_* directly
+
+### WASM Backend
+`src/pal/wasm/` has stubs for WASM targets. Select with:
+```bash
+MIRE_PAL=wasm mire run hello.mire
+```
+
+### Planned
+- Phase C: expand WASI-backed PAL beyond safe stubs
+- Phase D: move more C logic into Mire (kioto core)
+- Phase E: promote kioto as the sole library surface

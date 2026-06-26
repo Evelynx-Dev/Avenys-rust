@@ -24,6 +24,7 @@ pub fn default_builtin_returns() -> HashMap<String, DataType> {
         "proc_kill",
         "proc_write",
         "proc_on",
+        "proc.on",
         "proc_exit",
     ] {
         builtins.insert(name.to_string(), DataType::None);
@@ -348,7 +349,19 @@ pub fn std_module_members(module: &str) -> &'static [&'static str] {
             "snapshot",
         ],
         "gpu" => &["available", "snapshot"],
-        "net" => &["connect", "send", "recv", "close", "poll", "resolve", "http_get", "http_post", "recv_all", "set_nonblock", "connect_timeout"],
+        "net" => &[
+            "connect",
+            "send",
+            "recv",
+            "close",
+            "poll",
+            "resolve",
+            "http_get",
+            "http_post",
+            "recv_all",
+            "set_nonblock",
+            "connect_timeout",
+        ],
         "fs" => &[
             "read", "write", "append", "exists", "size", "copy", "move", "drop", "list", "mkdir",
             "rmdir", "join", "dir", "name", "ext", "is_file", "walk",

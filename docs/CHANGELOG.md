@@ -2,6 +2,24 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.11.35] - 2026-06-26
+
+### Added
+- **MIR collections lowering**: `lists.map`, `lists.filter`, and
+  `lists.fold` now lower through MIR instead of relying on ad hoc frontend
+  handling.
+- **`proc.on` plumbing**: wired in MIR codegen, Avenys LLVM codegen, and the
+  build pipeline declaration so signal handlers resolve end to end.
+
+### Fixed
+- **OWL regression test**: `owl_build_run_info_cycle` is enabled again and
+  covered by the test suite.
+- **Version metadata**: package/version docs aligned to `3.11.35`.
+
+### Docs
+- **MIR pipeline**: updated builtin and collections notes to match current
+  lowering/codegen behavior.
+
 ## [3.11.32] - 2026-06-24
 
 ### Fixed

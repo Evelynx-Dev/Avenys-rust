@@ -330,8 +330,14 @@ void *rt_get_args(int argc, char **argv) {
     return list;
 }
 
+static int64_t monotonic_ns(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (int64_t)ts.tv_sec * 1000000000LL + (int64_t)ts.tv_nsec;
+}
+
 char *rt_time_elapsed_ms_str(int64_t start_ns) {
-    int64_t ms = (int64_t)(clock() / (CLOCKS_PER_SEC / 1000)) - start_ns;
+    int64_t ms = (monotonic_ns() - start_ns) / 1000000;
     return rt_managed_printf_i64("%lld", (long long)ms);
 }
 

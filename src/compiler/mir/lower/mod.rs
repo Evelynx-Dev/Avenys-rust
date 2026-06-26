@@ -3,9 +3,10 @@ use crate::parser::ast::{DataType, Program, Statement};
 use std::collections::HashMap;
 use std::collections::HashSet;
 
+mod decl;
+mod collections;
 mod expr;
 mod stmt;
-mod decl;
 mod types;
 
 struct MirLower {
@@ -28,7 +29,10 @@ fn extract_struct_types(program: &Program) -> HashMap<String, Vec<(String, DataT
         if let Statement::Type { name, fields, .. } = stmt {
             let mut field_list = Vec::new();
             for f in fields {
-                if let Statement::Let { name, data_type, .. } = f {
+                if let Statement::Let {
+                    name, data_type, ..
+                } = f
+                {
                     field_list.push((name.clone(), data_type.clone()));
                 }
             }
@@ -56,8 +60,12 @@ fn extract_enum_types(program: &Program) -> HashMap<String, Vec<(String, usize)>
 fn extract_method_map(program: &Program) -> HashMap<String, HashMap<String, String>> {
     let mut map: HashMap<String, HashMap<String, String>> = HashMap::new();
     for stmt in &program.statements {
-        if let Statement::Impl { type_name, methods, .. } = stmt {
-            let norm = type_name.split_once('[')
+        if let Statement::Impl {
+            type_name, methods, ..
+        } = stmt
+        {
+            let norm = type_name
+                .split_once('[')
                 .map(|(b, _)| b.to_string())
                 .unwrap_or_else(|| type_name.clone());
             let entry = map.entry(norm).or_default();
@@ -93,18 +101,31 @@ pub fn lower_program(program: &Program) -> MirProgram {
     let mut functions = Vec::new();
     let mut entry_point = None;
     let mut extern_functions = Vec::new();
+    let mut extern_libs = Vec::new();
     let mut seen_functions = HashSet::new();
     let mut struct_types = extract_struct_types(program);
     let enum_types = extract_enum_types(program);
     let method_map = extract_method_map(program);
 
     for stmt in &program.statements {
-        if let Statement::ExternFunction { name, params, return_type, .. } = stmt {
+        if let Statement::ExternFunction {
+            name,
+            params,
+            return_type,
+            lib_name,
+            ..
+        } = stmt
+        {
             extern_functions.push(MirExternFunction {
                 name: name.clone(),
+                lib_name: lib_name.clone(),
                 params: params.iter().map(|(_, t)| t.clone()).collect(),
                 return_type: return_type.clone(),
             });
+        }
+        if let Statement::ExternLib { name, path } = stmt {
+            let clean = name.rsplit('.').next().unwrap_or(name);
+            extern_libs.push((clean.to_string(), path.clone()));
         }
     }
 
@@ -112,11 +133,13 @@ pub fn lower_program(program: &Program) -> MirProgram {
     let builtin_runtime_externs: Vec<MirExternFunction> = vec![
         MirExternFunction {
             name: "rt_strings_contains".to_string(),
+            lib_name: "c".to_string(),
             params: vec![DataType::Str, DataType::Str],
             return_type: DataType::Bool,
         },
         MirExternFunction {
             name: "rt_lists_contains_i64".to_string(),
+            lib_name: "c".to_string(),
             params: vec![
                 DataType::Vector {
                     element_type: Box::new(DataType::I64),
@@ -137,7 +160,10 @@ pub fn lower_program(program: &Program) -> MirProgram {
         if let Statement::Function { name, .. } = stmt {
             seen_functions.insert(name.clone());
         }
-        if let Statement::Impl { type_name, methods, .. } = stmt {
+        if let Statement::Impl {
+            type_name, methods, ..
+        } = stmt
+        {
             for method in methods {
                 if let Statement::Function { name, .. } = method {
                     seen_functions.insert(format!("{}.{}", type_name, name));
@@ -198,9 +224,7 @@ pub fn lower_program(program: &Program) -> MirProgram {
                 }
             }
             Statement::Impl {
-                type_name,
-                methods,
-                ..
+                type_name, methods, ..
             } => {
                 for method in methods {
                     if let Statement::Function {
@@ -230,19 +254,19 @@ pub fn lower_program(program: &Program) -> MirProgram {
                             })
                             .collect();
 
-                            let mut lower = MirLower {
-                                func: MirFunction::new(full_name, mir_params, return_type.clone()),
-                                next_temp: 0,
-                                vars: HashMap::new(),
-                                var_types: HashMap::new(),
-                                struct_types: struct_types.clone(),
-                                enum_types: enum_types.clone(),
-                                bare_to_qualified: bare_to_qualified.clone(),
-                                method_map: method_map.clone(),
-                                current_block: 0,
-                                closure_functions: Vec::new(),
-                                closure_counter: 0,
-                            };
+                        let mut lower = MirLower {
+                            func: MirFunction::new(full_name, mir_params, return_type.clone()),
+                            next_temp: 0,
+                            vars: HashMap::new(),
+                            var_types: HashMap::new(),
+                            struct_types: struct_types.clone(),
+                            enum_types: enum_types.clone(),
+                            bare_to_qualified: bare_to_qualified.clone(),
+                            method_map: method_map.clone(),
+                            current_block: 0,
+                            closure_functions: Vec::new(),
+                            closure_counter: 0,
+                        };
 
                         lower.lower_function_body(body);
                         struct_types.extend(lower.struct_types.clone());
@@ -261,6 +285,7 @@ pub fn lower_program(program: &Program) -> MirProgram {
 
     let mut mp = MirProgram::new(functions, entry_point);
     mp.extern_functions = extern_functions;
+    mp.extern_libs = extern_libs;
     mp.struct_types = struct_types;
     mp
 }

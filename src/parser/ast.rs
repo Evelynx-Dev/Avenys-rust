@@ -542,6 +542,7 @@ pub enum Statement {
     },
     Type {
         name: String,
+        visibility: Visibility,
         #[serde(default)]
         type_params: Vec<String>,
         #[serde(default)]
@@ -551,6 +552,7 @@ pub enum Statement {
     },
     Skill {
         name: String,
+        visibility: Visibility,
         methods: Vec<TraitMethodSig>,
     },
     Impl {
@@ -604,6 +606,7 @@ pub enum Statement {
     },
     Enum {
         name: String,
+        visibility: Visibility,
         #[serde(default)]
         type_params: Vec<String>,
         #[serde(default)]

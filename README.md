@@ -51,7 +51,7 @@ Prerequisites are installed automatically (`clang`, `llvm`, `curl`, `tar`) via y
 # Build the compiler (dev)
 cargo build --release
 
-# Run all tests (286 passing)
+# Run the test suite
 cargo test
 
 # Compile and run a program
@@ -89,10 +89,10 @@ dead code elimination, branch folding, block merging, inlining, and more.
 
 **Stage 3 — Codegen:** MIR translates to LLVM IR text. The compiler invokes
 LLVM's `opt` for further optimization (at O1+), then `clang` links the IR with
-17 C runtime files into a native binary.
+the C runtime and PAL objects into a native binary.
 
 **Incremental compilation:** On your second build of the same source, the
-compiler checks a fingerprint and returns in **2 milliseconds** if nothing
+compiler checks a fingerprint and returns in **single-digit milliseconds** if nothing
 changed. On partial changes, only the affected units are re-analyzed.
 
 ---

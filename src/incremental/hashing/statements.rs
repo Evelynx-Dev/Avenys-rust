@@ -113,7 +113,7 @@ pub(super) fn hash_statement(statement: &Statement, hasher: &mut FxHasher) {
             }
             hash_statements(default, hasher);
         }
-        Statement::Type {
+        Statement::Type { visibility: _, 
             name,
             type_params,
             type_param_bounds,
@@ -127,7 +127,7 @@ pub(super) fn hash_statement(statement: &Statement, hasher: &mut FxHasher) {
             parent.hash(hasher);
             hash_statements(fields, hasher);
         }
-        Statement::Skill { name, methods } => {
+        Statement::Skill { name, methods, .. } => {
             hasher.write_u8(13);
             name.hash(hasher);
             hash_trait_methods(methods, hasher);
@@ -212,7 +212,7 @@ pub(super) fn hash_statement(statement: &Statement, hasher: &mut FxHasher) {
             hash_option_expr(value, hasher);
             hash_data_type(inner_type, hasher);
         }
-        Statement::Enum {
+        Statement::Enum { visibility: _, 
             name,
             type_params,
             type_param_bounds,
