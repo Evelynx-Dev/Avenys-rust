@@ -3,9 +3,10 @@ use crate::parser::ast::{DataType, Program, Statement};
 use std::collections::HashMap;
 use std::collections::HashSet;
 
+mod decl;
+mod collections;
 mod expr;
 mod stmt;
-mod decl;
 mod types;
 
 struct MirLower {
@@ -28,7 +29,10 @@ fn extract_struct_types(program: &Program) -> HashMap<String, Vec<(String, DataT
         if let Statement::Type { name, fields, .. } = stmt {
             let mut field_list = Vec::new();
             for f in fields {
-                if let Statement::Let { name, data_type, .. } = f {
+                if let Statement::Let {
+                    name, data_type, ..
+                } = f
+                {
                     field_list.push((name.clone(), data_type.clone()));
                 }
             }
@@ -56,8 +60,12 @@ fn extract_enum_types(program: &Program) -> HashMap<String, Vec<(String, usize)>
 fn extract_method_map(program: &Program) -> HashMap<String, HashMap<String, String>> {
     let mut map: HashMap<String, HashMap<String, String>> = HashMap::new();
     for stmt in &program.statements {
-        if let Statement::Impl { type_name, methods, .. } = stmt {
-            let norm = type_name.split_once('[')
+        if let Statement::Impl {
+            type_name, methods, ..
+        } = stmt
+        {
+            let norm = type_name
+                .split_once('[')
                 .map(|(b, _)| b.to_string())
                 .unwrap_or_else(|| type_name.clone());
             let entry = map.entry(norm).or_default();
@@ -100,7 +108,14 @@ pub fn lower_program(program: &Program) -> MirProgram {
     let method_map = extract_method_map(program);
 
     for stmt in &program.statements {
-        if let Statement::ExternFunction { name, params, return_type, lib_name, .. } = stmt {
+        if let Statement::ExternFunction {
+            name,
+            params,
+            return_type,
+            lib_name,
+            ..
+        } = stmt
+        {
             extern_functions.push(MirExternFunction {
                 name: name.clone(),
                 lib_name: lib_name.clone(),
@@ -145,7 +160,10 @@ pub fn lower_program(program: &Program) -> MirProgram {
         if let Statement::Function { name, .. } = stmt {
             seen_functions.insert(name.clone());
         }
-        if let Statement::Impl { type_name, methods, .. } = stmt {
+        if let Statement::Impl {
+            type_name, methods, ..
+        } = stmt
+        {
             for method in methods {
                 if let Statement::Function { name, .. } = method {
                     seen_functions.insert(format!("{}.{}", type_name, name));
@@ -206,9 +224,7 @@ pub fn lower_program(program: &Program) -> MirProgram {
                 }
             }
             Statement::Impl {
-                type_name,
-                methods,
-                ..
+                type_name, methods, ..
             } => {
                 for method in methods {
                     if let Statement::Function {
@@ -238,19 +254,19 @@ pub fn lower_program(program: &Program) -> MirProgram {
                             })
                             .collect();
 
-                            let mut lower = MirLower {
-                                func: MirFunction::new(full_name, mir_params, return_type.clone()),
-                                next_temp: 0,
-                                vars: HashMap::new(),
-                                var_types: HashMap::new(),
-                                struct_types: struct_types.clone(),
-                                enum_types: enum_types.clone(),
-                                bare_to_qualified: bare_to_qualified.clone(),
-                                method_map: method_map.clone(),
-                                current_block: 0,
-                                closure_functions: Vec::new(),
-                                closure_counter: 0,
-                            };
+                        let mut lower = MirLower {
+                            func: MirFunction::new(full_name, mir_params, return_type.clone()),
+                            next_temp: 0,
+                            vars: HashMap::new(),
+                            var_types: HashMap::new(),
+                            struct_types: struct_types.clone(),
+                            enum_types: enum_types.clone(),
+                            bare_to_qualified: bare_to_qualified.clone(),
+                            method_map: method_map.clone(),
+                            current_block: 0,
+                            closure_functions: Vec::new(),
+                            closure_counter: 0,
+                        };
 
                         lower.lower_function_body(body);
                         struct_types.extend(lower.struct_types.clone());

@@ -1500,9 +1500,16 @@ impl Parser {
             AssignmentTarget::Variable(target)
         };
 
-        if self.check(TokenType::At) {
-            self.advance();
-            let index = self.parse_additive()?;
+        if self.check(TokenType::At) || self.check(TokenType::Lbracket) {
+            let index = if self.check(TokenType::At) {
+                self.advance();
+                self.parse_additive()?
+            } else {
+                self.advance();
+                let index = self.parse_expression()?;
+                self.expect(TokenType::Rbracket)?;
+                index
+            };
             Ok(AssignmentTarget::Index {
                 target: Box::new(base.as_expression()),
                 index: Box::new(index),

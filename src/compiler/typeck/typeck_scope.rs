@@ -241,18 +241,33 @@ impl TypeChecker {
                 let mut index_expr = index.clone();
                 let target_type = self.check_expression(&mut target_expr)?;
                 let index_type = self.check_expression(&mut index_expr)?;
-                if !Self::is_numeric(&index_type) && index_type != DataType::Unknown {
-                    return Err(type_error(format!(
-                        "Index must be numeric for indexed assignment, got {:?}",
-                        index_type
-                    )));
-                }
 
                 let element_type = match target_type {
                     DataType::Array { element_type, .. }
                     | DataType::Slice { element_type }
-                    | DataType::Vector { element_type, .. } => *element_type,
-                    DataType::Map { value_type, .. } => *value_type,
+                    | DataType::Vector { element_type, .. } => {
+                        if !Self::is_numeric(&index_type) && index_type != DataType::Unknown {
+                            return Err(type_error(format!(
+                                "Index must be numeric for indexed assignment, got {:?}",
+                                index_type
+                            )));
+                        }
+                        *element_type
+                    }
+                    DataType::Map {
+                        key_type,
+                        value_type,
+                    } => {
+                        if index_type != DataType::Unknown
+                            && !self.is_assignable(&key_type, &index_type)
+                        {
+                            return Err(type_error(format!(
+                                "Index type {:?} is not assignable to map key type {:?}",
+                                index_type, key_type
+                            )));
+                        }
+                        *value_type
+                    }
                     DataType::List | DataType::Tuple | DataType::Dict => DataType::Anything,
                     DataType::Unknown => DataType::Unknown,
                     other => {
@@ -353,16 +368,15 @@ impl TypeChecker {
 
     pub(super) fn referenced_type_for_expr(&self, expr: &Expression) -> Option<DataType> {
         match expr {
-            Expression::Identifier(Identifier { name, .. }) => self
-                .lookup_ref_type(name)
-                .or_else(|| {
-                    self.lookup_var(name).map(|(data_type, _)| match &data_type {
-                        DataType::Ref { inner } | DataType::RefMut { inner } => {
-                            *inner.clone()
-                        }
-                        _ => data_type,
-                    })
-                }),
+            Expression::Identifier(Identifier { name, .. }) => {
+                self.lookup_ref_type(name).or_else(|| {
+                    self.lookup_var(name)
+                        .map(|(data_type, _)| match &data_type {
+                            DataType::Ref { inner } | DataType::RefMut { inner } => *inner.clone(),
+                            _ => data_type,
+                        })
+                })
+            }
             Expression::Reference { expr, .. } => self.referenced_type_for_expr(expr),
             Expression::Dereference { expr, .. } => self.referenced_type_for_expr(expr),
             _ => Some(self.expression_type_hint(expr)),
@@ -474,9 +488,10 @@ fn collect_used_identifiers_in_statement(
             collect_used_identifiers_in_assignment_target(target, declared, used);
             collect_used_identifiers_in_expr(value, declared, used);
             if let AssignmentTarget::Variable(n) = target
-                && !declared.contains(n) {
-                    used.insert(n.clone());
-                }
+                && !declared.contains(n)
+            {
+                used.insert(n.clone());
+            }
         }
         Statement::Return(Some(expr))
         | Statement::Expression(expr)
@@ -546,8 +561,7 @@ fn collect_used_identifiers_in_statement(
             name, params, body, ..
         } => {
             declared.insert(name.clone());
-            let mut fn_declared: HashSet<String> =
-                params.iter().map(|(n, _)| n.clone()).collect();
+            let mut fn_declared: HashSet<String> = params.iter().map(|(n, _)| n.clone()).collect();
             collect_used_identifiers_in_statements(body, &mut fn_declared, used);
         }
         Statement::Unsafe { body } => {
@@ -636,9 +650,11 @@ fn collect_used_identifiers_in_expr(
                 used.insert(name.clone());
             }
             if let Some((prefix, _)) = name.split_once('.')
-                && prefix != "self" && !declared.contains(prefix) {
-                    used.insert(prefix.to_string());
-                }
+                && prefix != "self"
+                && !declared.contains(prefix)
+            {
+                used.insert(prefix.to_string());
+            }
             for arg in args {
                 collect_used_identifiers_in_expr(arg, declared, used);
             }
