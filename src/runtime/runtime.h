@@ -15,6 +15,7 @@ typedef struct {
 char *rt_managed_alloc(size_t len);
 char *rt_managed_from_slice(const char *src, size_t len);
 char *rt_managed_from_cstr(const char *src);
+char *rt_managed_ensure_managed(char *ptr);
 char *rt_managed_printf_i64(const char *fmt, long long value);
 char *rt_managed_printf_f64(const char *fmt, double value);
 void  rt_managed_free(char *value);

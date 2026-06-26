@@ -1,6 +1,6 @@
-use super::{LlvmCtx, tmp_result, tmp_extra};
 use super::resolve::resolve_typed;
 use super::types::llvm_type_str;
+use super::{LlvmCtx, tmp_extra, tmp_result};
 use crate::compiler::mir::{MirInst, MirOp, MirValue};
 
 /// Maps a builtin function name to its PAL/LLVM callee name.
@@ -40,6 +40,7 @@ pub(crate) fn builtin_to_pal(name: &str) -> Option<&'static str> {
         "proc_kill" => Some("pal_proc_kill"),
         "proc_exit" => Some("pal_proc_exit"),
         "proc_exists" => Some("pal_proc_exists"),
+        "proc_on" | "proc.on" => Some("pal_proc_on"),
         // Environment
         "env_get" => Some("pal_env_get"),
         "env_set" => Some("pal_env_set"),
@@ -67,12 +68,21 @@ pub(crate) fn compile_pal_builtin(
     } else {
         Some(tmp_result(ctx, pal_ret, inst.result))
     };
-    let arg_strs: Vec<String> = args.iter().map(|a| {
-        let (v, t) = resolve_typed(a, ctx);
-        format!("{} {}", t, v)
-    }).collect();
+    let arg_strs: Vec<String> = args
+        .iter()
+        .map(|a| {
+            let (v, t) = resolve_typed(a, ctx);
+            format!("{} {}", t, v)
+        })
+        .collect();
     let call_line = match result {
-        Some(r) => format!("%t{} = call {} @{}({})", r, pal_ret, pal_name, arg_strs.join(", ")),
+        Some(r) => format!(
+            "%t{} = call {} @{}({})",
+            r,
+            pal_ret,
+            pal_name,
+            arg_strs.join(", ")
+        ),
         None => format!("call {} @{}({})", pal_ret, pal_name, arg_strs.join(", ")),
     };
     if expect_bool {
@@ -97,6 +107,7 @@ pub(crate) fn pal_extern_decls() -> Vec<String> {
         "declare ptr @rt_get_args(i32, ptr)".to_string(),
         "declare ptr @rt_bool_to_string(i64)".to_string(),
         "declare ptr @rt_managed_from_cstr(ptr)".to_string(),
+        "declare ptr @rt_managed_ensure_managed(ptr)".to_string(),
         "declare void @rt_managed_free(ptr)".to_string(),
         "declare void @free(ptr)".to_string(),
         "declare ptr @malloc(i64)".to_string(),
@@ -112,6 +123,10 @@ pub(crate) fn pal_extern_decls() -> Vec<String> {
         "declare i64 @pal_fs_delete(ptr)".to_string(),
         "declare ptr @rt_read_line(ptr)".to_string(),
         "declare void @pal_time_sleep_ms(i64)".to_string(),
+        "declare i64 @rt_dict_get_i64(ptr, i64, i64, ptr, i64)".to_string(),
+        "declare ptr @rt_dict_get_ptr(ptr, i64, i64, ptr, ptr)".to_string(),
+        "declare ptr @rt_dict_set_i64(ptr, i64, i64, i64, ptr, i64)".to_string(),
+        "declare ptr @rt_dict_set_ptr(ptr, i64, i64, i64, ptr, ptr)".to_string(),
         "declare i64 @pal_fs_write(ptr, ptr)".to_string(),
         "declare i64 @pal_fs_append(ptr, ptr)".to_string(),
         "declare ptr @pal_fs_read(ptr)".to_string(),
@@ -135,6 +150,7 @@ pub(crate) fn pal_extern_decls() -> Vec<String> {
         "declare i64 @pal_proc_kill(i64)".to_string(),
         "declare void @pal_proc_exit(i64)".to_string(),
         "declare i64 @pal_proc_exists(i64)".to_string(),
+        "declare void @pal_proc_on(ptr)".to_string(),
         "declare ptr @pal_env_get(ptr)".to_string(),
         "declare i32 @pal_env_set(ptr, ptr)".to_string(),
         "declare ptr @pal_env_cwd()".to_string(),

@@ -18,14 +18,15 @@ fn runtime_base() -> PathBuf {
         return manifest_dir.join("src");
     }
     if let Ok(exe) = std::env::current_exe()
-        && let Some(parent) = exe.parent() {
-            if parent.join("runtime").exists() {
-                return parent.to_path_buf();
-            }
-            if parent.join("../lib/mire/runtime").exists() {
-                return parent.join("../lib/mire");
-            }
+        && let Some(parent) = exe.parent()
+    {
+        if parent.join("runtime").exists() {
+            return parent.to_path_buf();
         }
+        if parent.join("../lib/mire/runtime").exists() {
+            return parent.join("../lib/mire");
+        }
+    }
     manifest_dir.join("src")
 }
 
@@ -73,40 +74,137 @@ fn generate_runtime_declarations(ir: &str) -> String {
     let needed: &[(&str, &str)] = &[
         ("declare ptr @dasu(", "declare ptr @dasu(i64)"),
         ("declare i64 @rt_list_len(", "declare i64 @rt_list_len(ptr)"),
-        ("declare i64 @rt_strings_len(", "declare i64 @rt_strings_len(ptr)"),
-        ("declare i64 @rt_dicts_len(", "declare i64 @rt_dicts_len(ptr)"),
-        ("declare ptr @rt_list_create(", "declare ptr @rt_list_create(i64, i64)"),
-        ("declare ptr @rt_list_push_i64(", "declare ptr @rt_list_push_i64(ptr, i64)"),
-        ("declare ptr @rt_list_push_ptr(", "declare ptr @rt_list_push_ptr(ptr, ptr)"),
-        ("declare ptr @rt_dicts_set_i64(", "declare ptr @rt_dicts_set_i64(ptr, ptr, i64)"),
-        ("declare ptr @rt_dicts_set(", "declare ptr @rt_dicts_set(ptr, ptr, ptr)"),
-        ("declare ptr @rt_dicts_set_with_kind(", "declare ptr @rt_dicts_set_with_kind(ptr, ptr, ptr, i64)"),
-        ("declare ptr @rt_dicts_keys(", "declare ptr @rt_dicts_keys(ptr)"),
-        ("declare ptr @rt_dicts_values(", "declare ptr @rt_dicts_values(ptr)"),
-        ("declare ptr @rt_dict_to_string(", "declare ptr @rt_dict_to_string(ptr)"),
-        ("declare void @rt_panic_division_by_zero(", "declare void @rt_panic_division_by_zero()"),
-        ("declare void @rt_panic_out_of_bounds(", "declare void @rt_panic_out_of_bounds()"),
-        ("declare i64 @rt_div_i64(", "declare i64 @rt_div_i64(i64, i64)"),
-        ("declare i64 @rt_rem_i64(", "declare i64 @rt_rem_i64(i64, i64)"),
-        ("declare void @rt_check_bounds_i64(", "declare void @rt_check_bounds_i64(i64, i64)"),
-        ("declare ptr @rt_closure_env_alloc(", "declare ptr @rt_closure_env_alloc(i64)"),
-        ("declare ptr @rt_math_range_i64(", "declare ptr @rt_math_range_i64(i64)"),
-        ("@.fmt_str =", "@.fmt_str = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\""),
-        ("@.fmt_i64 =", "@.fmt_i64 = private unnamed_addr constant [5 x i8] c\"%ld\\0A\\00\""),
-        ("@.fmt_f64 =", "@.fmt_f64 = private unnamed_addr constant [6 x i8] c\"%.6g\\0A\\00\""),
-        ("@.fmt_float =", "@.fmt_float = private unnamed_addr constant [4 x i8] c\"%f\\0A\\00\""),
-        ("@.fmt_bool_true =", "@.fmt_bool_true = private unnamed_addr constant [5 x i8] c\"true\\00\""),
-        ("@.fmt_bool_false =", "@.fmt_bool_false = private unnamed_addr constant [6 x i8] c\"false\\00\""),
-        ("@.fmt_i32 =", "@.fmt_i32 = private unnamed_addr constant [4 x i8] c\"%d\\0A\\00\""),
-        ("declare ptr @rt_i64_to_string(", "declare ptr @rt_i64_to_string(i64)"),
-        ("declare ptr @rt_f64_to_string(", "declare ptr @rt_f64_to_string(double)"),
-        ("declare ptr @rt_bool_to_string(", "declare ptr @rt_bool_to_string(i64)"),
-        ("declare ptr @rt_get_args(", "declare ptr @rt_get_args(i32, ptr)"),
+        (
+            "declare i64 @rt_strings_len(",
+            "declare i64 @rt_strings_len(ptr)",
+        ),
+        (
+            "declare i64 @rt_dicts_len(",
+            "declare i64 @rt_dicts_len(ptr)",
+        ),
+        (
+            "declare ptr @rt_list_create(",
+            "declare ptr @rt_list_create(i64, i64)",
+        ),
+        (
+            "declare ptr @rt_list_push_i64(",
+            "declare ptr @rt_list_push_i64(ptr, i64)",
+        ),
+        (
+            "declare ptr @rt_list_push_ptr(",
+            "declare ptr @rt_list_push_ptr(ptr, ptr)",
+        ),
+        (
+            "declare ptr @rt_dicts_set_i64(",
+            "declare ptr @rt_dicts_set_i64(ptr, ptr, i64)",
+        ),
+        (
+            "declare ptr @rt_dicts_set(",
+            "declare ptr @rt_dicts_set(ptr, ptr, ptr)",
+        ),
+        (
+            "declare ptr @rt_dicts_set_with_kind(",
+            "declare ptr @rt_dicts_set_with_kind(ptr, ptr, ptr, i64)",
+        ),
+        (
+            "declare ptr @rt_dicts_keys(",
+            "declare ptr @rt_dicts_keys(ptr)",
+        ),
+        (
+            "declare ptr @rt_dicts_values(",
+            "declare ptr @rt_dicts_values(ptr)",
+        ),
+        (
+            "declare ptr @rt_dict_to_string(",
+            "declare ptr @rt_dict_to_string(ptr)",
+        ),
+        (
+            "declare void @rt_panic_division_by_zero(",
+            "declare void @rt_panic_division_by_zero()",
+        ),
+        (
+            "declare void @rt_panic_out_of_bounds(",
+            "declare void @rt_panic_out_of_bounds()",
+        ),
+        (
+            "declare i64 @rt_div_i64(",
+            "declare i64 @rt_div_i64(i64, i64)",
+        ),
+        (
+            "declare i64 @rt_rem_i64(",
+            "declare i64 @rt_rem_i64(i64, i64)",
+        ),
+        (
+            "declare void @rt_check_bounds_i64(",
+            "declare void @rt_check_bounds_i64(i64, i64)",
+        ),
+        (
+            "declare ptr @rt_closure_env_alloc(",
+            "declare ptr @rt_closure_env_alloc(i64)",
+        ),
+        (
+            "declare ptr @rt_math_range_i64(",
+            "declare ptr @rt_math_range_i64(i64)",
+        ),
+        (
+            "@.fmt_str =",
+            "@.fmt_str = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\"",
+        ),
+        (
+            "@.fmt_i64 =",
+            "@.fmt_i64 = private unnamed_addr constant [5 x i8] c\"%ld\\0A\\00\"",
+        ),
+        (
+            "@.fmt_f64 =",
+            "@.fmt_f64 = private unnamed_addr constant [6 x i8] c\"%.6g\\0A\\00\"",
+        ),
+        (
+            "@.fmt_float =",
+            "@.fmt_float = private unnamed_addr constant [4 x i8] c\"%f\\0A\\00\"",
+        ),
+        (
+            "@.fmt_bool_true =",
+            "@.fmt_bool_true = private unnamed_addr constant [5 x i8] c\"true\\00\"",
+        ),
+        (
+            "@.fmt_bool_false =",
+            "@.fmt_bool_false = private unnamed_addr constant [6 x i8] c\"false\\00\"",
+        ),
+        (
+            "@.fmt_i32 =",
+            "@.fmt_i32 = private unnamed_addr constant [4 x i8] c\"%d\\0A\\00\"",
+        ),
+        (
+            "declare ptr @rt_i64_to_string(",
+            "declare ptr @rt_i64_to_string(i64)",
+        ),
+        (
+            "declare ptr @rt_f64_to_string(",
+            "declare ptr @rt_f64_to_string(double)",
+        ),
+        (
+            "declare ptr @rt_bool_to_string(",
+            "declare ptr @rt_bool_to_string(i64)",
+        ),
+        (
+            "declare ptr @rt_get_args(",
+            "declare ptr @rt_get_args(i32, ptr)",
+        ),
         ("declare i32 @printf(", "declare i32 @printf(ptr, ...)"),
         ("declare i32 @fflush(", "declare i32 @fflush(ptr)"),
         ("declare i32 @strcmp(", "declare i32 @strcmp(ptr, ptr)"),
-        ("declare void @rt_managed_free(", "declare void @rt_managed_free(ptr)"),
-        ("declare ptr @rt_string_concat(", "declare ptr @rt_string_concat(ptr, ptr)"),
+        (
+            "declare void @rt_managed_free(",
+            "declare void @rt_managed_free(ptr)",
+        ),
+        (
+            "declare ptr @rt_string_concat(",
+            "declare ptr @rt_string_concat(ptr, ptr)",
+        ),
+        (
+            "declare void @pal_proc_on(",
+            "declare void @pal_proc_on(ptr)",
+        ),
         ("@.argc =", "@.argc = global i32 0"),
         ("@.argv =", "@.argv = global ptr null"),
     ];
@@ -128,20 +226,26 @@ fn generate_struct_constructors(program: &crate::parser::ast::Program) -> String
                 continue;
             }
 
-            let param_types: Vec<&str> = fields.iter().filter_map(|f| {
-                if let Statement::Let { data_type, .. } = f {
-                    Some(struct_field_llvm_type(data_type))
-                } else {
-                    None
-                }
-            }).collect();
-            let body_types: Vec<String> = fields.iter().filter_map(|f| {
-                if let Statement::Let { data_type, .. } = f {
-                    Some(struct_field_llvm_body_type(data_type))
-                } else {
-                    None
-                }
-            }).collect();
+            let param_types: Vec<&str> = fields
+                .iter()
+                .filter_map(|f| {
+                    if let Statement::Let { data_type, .. } = f {
+                        Some(struct_field_llvm_type(data_type))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let body_types: Vec<String> = fields
+                .iter()
+                .filter_map(|f| {
+                    if let Statement::Let { data_type, .. } = f {
+                        Some(struct_field_llvm_body_type(data_type))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
 
             let mut total_size = 0usize;
             for field in fields {
@@ -171,12 +275,8 @@ fn generate_struct_constructors(program: &crate::parser::ast::Program) -> String
                     ));
                     match data_type {
                         DataType::Array { .. } => {
-                            body.push_str(&format!(
-                                "  %f{i}_loaded = load {bty}, ptr %{i}\n"
-                            ));
-                            body.push_str(&format!(
-                                "  store {bty} %f{i}_loaded, ptr %f{i}_ptr\n"
-                            ));
+                            body.push_str(&format!("  %f{i}_loaded = load {bty}, ptr %{i}\n"));
+                            body.push_str(&format!("  store {bty} %f{i}_loaded, ptr %f{i}_ptr\n"));
                         }
                         _ => {
                             body.push_str(&format!(
@@ -260,7 +360,11 @@ fn precompile_c_object(c_path: &str, cache_dir: &Path, runtime_base: &Path) -> R
     let obj_path = cache_dir.join(format!("{:x}.o", hash));
     if !obj_path.exists() {
         if std::env::var("MIRE_DEBUG_CACHE").is_ok() {
-            eprintln!("[MIR] compiling C object: {} -> {}", c_path, obj_path.display());
+            eprintln!(
+                "[MIR] compiling C object: {} -> {}",
+                c_path,
+                obj_path.display()
+            );
         }
         let status = std::process::Command::new("clang")
             .args(["-c", "-O0", "-o"])
@@ -342,8 +446,8 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
                 files.push(path.to_string_lossy().to_string());
             }
         }
-        for entry in std::fs::read_dir(runtime_base.join(format!("pal/{pal_backend}")))
-            .map_err(|err| {
+        for entry in
+            std::fs::read_dir(runtime_base.join(format!("pal/{pal_backend}"))).map_err(|err| {
                 MireError::new(ErrorKind::Runtime {
                     message: format!("Could not read pal/{pal_backend}: {}", err),
                 })
@@ -384,7 +488,8 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
     progress_phase("load", &source_filename, phase_load, phase_load);
     let source_file_hash = source_hash(&source);
     if options.debug_dump
-        && let Some(report) = cache.analysis_invalidation_report(source_path, source_file_hash, &loaded.program)
+        && let Some(report) =
+            cache.analysis_invalidation_report(source_path, source_file_hash, &loaded.program)
     {
         eprintln!(
             "[AVENYS][incremental] changed_units={} invalidated_units={} added_units={} removed_units={}",
@@ -453,7 +558,9 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
         }
     } else {
         let mut program = loaded.program;
-        let analysis_result = if let Some(cached) = cache.latest_successful_analysis(source_path, source_file_hash) {
+        let analysis_result = if let Some(cached) =
+            cache.latest_successful_analysis(source_path, source_file_hash)
+        {
             let (selection, _) = prepare_program_with_partial_analysis_reuse(&mut program, cached);
             if selection
                 .statement_mask
@@ -498,7 +605,12 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
         }
         cache.store_analysis(source_path, source_file_hash, &program)?;
         phase_analyse_time = build_start.elapsed().as_millis() as u64;
-        progress_phase("analyse", &source_filename, phase_analyse_time - phase_load, phase_analyse_time);
+        progress_phase(
+            "analyse",
+            &source_filename,
+            phase_analyse_time - phase_load,
+            phase_analyse_time,
+        );
         program
     };
 
@@ -550,16 +662,15 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
         };
 
         // Check MIR program cache
-        let cached_program_ir = cache.get_cached_mir_fn(
-            source_path,
-            "_program",
-            mir_hash,
-            options.opt_level,
-        );
+        let cached_program_ir =
+            cache.get_cached_mir_fn(source_path, "_program", mir_hash, options.opt_level);
 
         if let Some(cached_ir) = cached_program_ir {
             if options.debug_dump {
-                eprintln!("[MIR] program cache hit ({} functions)", mir.functions.len());
+                eprintln!(
+                    "[MIR] program cache hit ({} functions)",
+                    mir.functions.len()
+                );
             }
             (cached_ir, mir.extern_libs.clone())
         } else {
@@ -581,17 +692,18 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
             }
             let (ir, extern_libs) = mir_to_llvm(&mir);
             phase_mir_time = build_start.elapsed().as_millis() as u64;
-            progress_phase("mir", &source_filename, phase_mir_time - phase_analyse_time, phase_mir_time);
-            if let Err(e) = cache.store_cached_mir_fn(
-                source_path,
-                "_program",
-                mir_hash,
-                options.opt_level,
-                &ir,
-            )
-                && options.debug_dump {
-                    eprintln!("[MIR] cache store error: {}", e);
-                }
+            progress_phase(
+                "mir",
+                &source_filename,
+                phase_mir_time - phase_analyse_time,
+                phase_mir_time,
+            );
+            if let Err(e) =
+                cache.store_cached_mir_fn(source_path, "_program", mir_hash, options.opt_level, &ir)
+                && options.debug_dump
+            {
+                eprintln!("[MIR] cache store error: {}", e);
+            }
             (ir, extern_libs)
         }
     };
@@ -621,15 +733,14 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
             }
         }
         // Add @main entry point wrapper if the program defines @fn_main
-        if ir.contains("define") && ir.contains("@fn_main")
-            && !ir.contains("define i32 @main(") {
-                ir.push_str("\n\ndefine i32 @main(i32 %argc, ptr %argv) {\n");
-                ir.push_str("  store i32 %argc, ptr @.argc\n");
-                ir.push_str("  store ptr %argv, ptr @.argv\n");
-                ir.push_str("  %call_main = call i64 @fn_main(ptr null)\n");
-                ir.push_str("  ret i32 0\n");
-                ir.push_str("}\n");
-            }
+        if ir.contains("define") && ir.contains("@fn_main") && !ir.contains("define i32 @main(") {
+            ir.push_str("\n\ndefine i32 @main(i32 %argc, ptr %argv) {\n");
+            ir.push_str("  store i32 %argc, ptr @.argc\n");
+            ir.push_str("  store ptr %argv, ptr @.argv\n");
+            ir.push_str("  %call_main = call i64 @fn_main(ptr null)\n");
+            ir.push_str("  ret i32 0\n");
+            ir.push_str("}\n");
+        }
         ir = dedup_llvm_declarations(&ir);
     }
     if let Some(path) = &ir_path {
@@ -649,7 +760,12 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
         optimize_ir(&ir, options.opt_level)?
     };
     let phase_llvm = build_start.elapsed().as_millis() as u64;
-    progress_phase("llvm", &source_filename, phase_llvm - phase_mir_time, phase_llvm);
+    progress_phase(
+        "llvm",
+        &source_filename,
+        phase_llvm - phase_mir_time,
+        phase_llvm,
+    );
 
     if let Some(path) = &optimized_ir_path {
         fs::write(path, &final_ir).map_err(|err| {
@@ -671,7 +787,10 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
             fallback
         };
         let c_objects: Vec<String> = if c_source_files.len() <= 1 {
-            c_source_files.iter().map(|src| precompile_c_object(src, &cache_dir, &runtime_base)).collect::<Result<_>>()?
+            c_source_files
+                .iter()
+                .map(|src| precompile_c_object(src, &cache_dir, &runtime_base))
+                .collect::<Result<_>>()?
         } else {
             let results = std::sync::Mutex::new(vec![String::new(); c_source_files.len()]);
             std::thread::scope(|s| {
@@ -679,26 +798,30 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
                     let results = &results;
                     let cache_dir = &cache_dir;
                     let runtime_base = &runtime_base;
-                    s.spawn(move || {
-                        match precompile_c_object(src, cache_dir, runtime_base) {
-                            Ok(obj) => { results.lock().unwrap()[i] = obj; }
+                    s.spawn(
+                        move || match precompile_c_object(src, cache_dir, runtime_base) {
+                            Ok(obj) => {
+                                results.lock().unwrap()[i] = obj;
+                            }
                             Err(e) => {
                                 let mut results = results.lock().unwrap();
                                 results[i] = format!("<{}: {}>", src, e);
                             }
-                        }
-                    });
+                        },
+                    );
                 }
             });
             let results = results.into_inner().unwrap();
             if results.iter().any(|s| s.is_empty() || s.starts_with('<')) {
-                let failures: Vec<&str> = results.iter()
+                let failures: Vec<&str> = results
+                    .iter()
                     .filter(|s| s.is_empty() || s.starts_with('<'))
                     .map(|s| s.as_str())
                     .collect();
-                return Err(MireError::runtime(
-                    format!("C object compilation failed for: {}", failures.join(", "))
-                ));
+                return Err(MireError::runtime(format!(
+                    "C object compilation failed for: {}",
+                    failures.join(", ")
+                )));
             }
             results
         };
@@ -710,7 +833,12 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
             &pal_backend,
         )?;
         let phase_link = build_start.elapsed().as_millis() as u64;
-        progress_phase("link", &source_filename, phase_link - phase_llvm, phase_link);
+        progress_phase(
+            "link",
+            &source_filename,
+            phase_link - phase_llvm,
+            phase_link,
+        );
     }
     let phase_done = build_start.elapsed().as_millis() as u64;
     progress_phase("done", &source_filename, 0, phase_done);
