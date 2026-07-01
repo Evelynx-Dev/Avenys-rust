@@ -1,7 +1,18 @@
 [project]
 name = "mire"
-version = "3.11.35"
+version = "3.11.36"
 entry = "mod.mire"
+
+[build]
+compiler = "mire"
+profile = "debug"
+opt-level = 0
+
+[paths]
+sources = "code"
+tests = "tests"
+output = "bin"
+cache = "bin/.cache"
 
 [dependencies]
 kioto = { path = "../kioto" }

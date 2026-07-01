@@ -4259,12 +4259,12 @@ fn owl_build_run_info_cycle() {
     let source_path = root.join("main.mire");
     fs::write(
         root.join("owl.toml"),
-        "[project]\nname = \"owl-cycle\"\nversion = \"0.1.0\"\nentry = \"main.mire\"\n",
+        "[project]\nname = \"owl-cycle\"\nversion = \"0.1.0\"\nentry = \"main.mire\"\n\n[build]\ncompiler = \"mire\"\nprofile = \"debug\"\nopt-level = 0\n\n[paths]\nsources = \"code\"\ntests = \"tests\"\noutput = \"bin\"\ncache = \"bin/.cache\"\n",
     )
     .expect("write project");
     fs::write(
         &source_path,
-        "load kioto\n\npub fn main: () {\n    use dasu(\"owl_build_ok\")\n}\n",
+        "pub fn main: () {\n    use dasu(\"owl_build_ok\")\n}\n",
     )
     .expect("write source");
 
