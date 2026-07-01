@@ -11,19 +11,44 @@ impl TypeChecker {
 
     pub(super) fn pop_scope(&mut self) {
         if self.scopes.len() > 1 {
-            self.scopes.pop();
+            let vars = self.scopes.pop().unwrap();
+            if let Some(parent) = self.scopes.last_mut() {
+                for (name, entry) in vars {
+                    parent.insert(name, entry);
+                }
+            }
         }
         if self.struct_scopes.len() > 1 {
-            self.struct_scopes.pop();
+            let vars = self.struct_scopes.pop().unwrap();
+            if let Some(parent) = self.struct_scopes.last_mut() {
+                for (name, entry) in vars {
+                    parent.insert(name, entry);
+                }
+            }
         }
         if self.ref_scopes.len() > 1 {
-            self.ref_scopes.pop();
+            let vars = self.ref_scopes.pop().unwrap();
+            if let Some(parent) = self.ref_scopes.last_mut() {
+                for (name, entry) in vars {
+                    parent.insert(name, entry);
+                }
+            }
         }
         if self.function_alias_scopes.len() > 1 {
-            self.function_alias_scopes.pop();
+            let vars = self.function_alias_scopes.pop().unwrap();
+            if let Some(parent) = self.function_alias_scopes.last_mut() {
+                for (name, entry) in vars {
+                    parent.insert(name, entry);
+                }
+            }
         }
         if self.function_value_sig_scopes.len() > 1 {
-            self.function_value_sig_scopes.pop();
+            let vars = self.function_value_sig_scopes.pop().unwrap();
+            if let Some(parent) = self.function_value_sig_scopes.last_mut() {
+                for (name, entry) in vars {
+                    parent.insert(name, entry);
+                }
+            }
         }
     }
 

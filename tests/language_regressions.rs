@@ -51,7 +51,7 @@ fn undefined_identifier_in_regular_call_is_not_coerced_to_string() {
 fn immutable_reassignment_still_errors() {
     let err = expect_analysis_error("pub fn main: () {\nset x = 1\nset x = 2\n}\n");
     assert!(
-        err.contains("Cannot reassign immutable variable 'x'"),
+        err.contains("Variable 'x' is not mutable, maybe you meant to use 'mut'"),
         "{err}"
     );
 }
@@ -820,8 +820,8 @@ fn immutable_struct_field_assignment_still_errors() {
     );
 
     assert!(
-        err.contains("Cannot reassign immutable variable 'counter.value'")
-            || err.contains("Cannot reassign immutable variable 'counter'"),
+        err.contains("Variable 'counter.value' is not mutable, maybe you meant to use 'mut'")
+            || err.contains("Variable 'counter' is not mutable, maybe you meant to use 'mut'"),
         "{err}"
     );
 }

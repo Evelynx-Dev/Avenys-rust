@@ -55,7 +55,7 @@ impl TypeChecker {
         let value_type = self.check_expression(value)?;
         let (mut target_type, is_target_mutable) = self
             .resolve_assignment_target(target)?
-            .ok_or_else(|| type_error("Assignment to undefined variable".to_string()))?;
+            .ok_or_else(|| type_error(format!("Assignment to undefined variable '{}'", target)))?;
 
         if !self.is_assignable(&target_type, &value_type) {
             return Err(type_error(format!(
@@ -66,7 +66,7 @@ impl TypeChecker {
 
         if !is_target_mutable {
             return Err(type_error(format!(
-                "Cannot reassign immutable variable '{}'",
+                "Variable '{}' is not mutable, maybe you meant to use 'mut'",
                 target
             )));
         }
