@@ -113,7 +113,7 @@ detect_pkg_manager() {
 install_deps() {
     local pm="$1"
     echo ""
-    echo "  installing: curl tar clang llvm"
+    echo "  installing: curl tar clang llvm libssl libsdl2"
     echo "  manager: ${pm}"
 
     if [ "$YES" != "1" ]; then
@@ -126,21 +126,21 @@ install_deps() {
     case "$pm" in
         apt)
             sudo apt-get update -qq
-            sudo apt-get install -y -qq curl tar clang llvm-dev 2>/dev/null || \
-            sudo apt-get install -y -qq curl tar clang llvm-18-dev 2>/dev/null || \
-            sudo apt-get install -y -qq curl tar clang
+            sudo apt-get install -y -qq curl tar clang llvm-dev libssl-dev libsdl2-dev 2>/dev/null || \
+            sudo apt-get install -y -qq curl tar clang llvm-18-dev libssl-dev libsdl2-dev 2>/dev/null || \
+            sudo apt-get install -y -qq curl tar clang libssl-dev libsdl2-dev
             ;;
         pacman)
-            sudo pacman -Sy --noconfirm curl tar clang llvm
+            sudo pacman -Sy --noconfirm curl tar clang llvm openssl sdl2
             ;;
         dnf|yum)
-            sudo "$pm" install -y curl tar clang llvm-devel
+            sudo "$pm" install -y curl tar clang llvm-devel openssl-devel SDL2-devel
             ;;
         apk)
-            sudo apk add curl tar clang llvm-dev
+            sudo apk add curl tar clang llvm-dev openssl-dev sdl2-dev
             ;;
         zypper)
-            sudo zypper install -y curl tar clang llvm-devel
+            sudo zypper install -y curl tar clang llvm-devel libopenssl-devel libSDL2-devel
             ;;
     esac
 }
