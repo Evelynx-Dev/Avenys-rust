@@ -12,7 +12,7 @@ set -e
 #   curl -fsSL <url> | sh -s -- --no-profile         # skip PATH setup
 #   curl -fsSL <url> | sh -s -- --tag B1.1           # specific release
 
-REPO="mire-lang/Avenys-rust"
+REPO="${MIRE_REPO:-mire-lang/Avenys-rust}"
 TARBALL="mire-linux-x86_64.tar.gz"
 PREFIX=""
 TAG=""
