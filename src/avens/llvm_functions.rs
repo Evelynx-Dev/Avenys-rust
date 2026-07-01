@@ -113,9 +113,14 @@ impl LlvmIrGen {
                     .collect::<Vec<_>>()
                     .join(", ");
                 let llvm_name = format!("@{}", sanitize_symbol(name));
+                let ret_str = if *return_type == DataType::None {
+                    "void".to_string()
+                } else {
+                    self.ty(ret.clone())
+                };
                 self.extern_decls.push(format!(
                     "declare {} {}({})",
-                    self.ty(ret.clone()),
+                    ret_str,
                     llvm_name,
                     sig
                 ));

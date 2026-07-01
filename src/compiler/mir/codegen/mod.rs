@@ -38,7 +38,11 @@ pub fn mir_to_llvm(program: &MirProgram) -> (String, Vec<(String, String)>) {
         if !declared.insert(ext.name.clone()) {
             continue;
         }
-        let ret = llvm_type_str(&ext.return_type);
+        let ret = if matches!(ext.return_type, DataType::None) {
+            "void".to_string()
+        } else {
+            llvm_type_str(&ext.return_type)
+        };
         let params: Vec<String> = ext.params.iter().map(llvm_type_str).collect();
         let sig = params.join(", ");
         extern_decls.push(format!("declare {} @{}({})", ret, ext.name, sig));

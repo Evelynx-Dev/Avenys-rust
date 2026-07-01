@@ -73,13 +73,17 @@ pub(super) fn hash_data_type(data_type: &DataType, hasher: &mut FxHasher) {
             hasher.write_u8(34);
             hash_data_type(element_type, hasher);
         }
-        DataType::Result { ok, err } => {
+        DataType::Pointer(inner) => {
             hasher.write_u8(35);
+            hash_data_type(inner, hasher);
+        }
+        DataType::Result { ok, err } => {
+            hasher.write_u8(36);
             hash_data_type(ok, hasher);
             hash_data_type(err, hasher);
         }
         DataType::Generic(name) => {
-            hasher.write_u8(36);
+            hasher.write_u8(37);
             name.hash(hasher);
         }
     }

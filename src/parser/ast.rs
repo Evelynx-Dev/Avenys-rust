@@ -66,6 +66,8 @@ pub enum DataType {
     Slice {
         element_type: Box<DataType>,
     },
+    /// FFI pointer type (`*mut i8`, `*const i8`, etc.)
+    Pointer(Box<DataType>),
     /// Represents an operation that may succeed with `ok` or fail with `err`.
     Result {
         ok: Box<DataType>,

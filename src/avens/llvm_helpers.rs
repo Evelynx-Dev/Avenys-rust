@@ -148,7 +148,8 @@ impl LlvmIrGen {
             | DataType::EnumNamed(_)
             | DataType::Ref { .. }
             | DataType::RefMut { .. } => Ok(LlType::Ptr),
-            DataType::Function
+            DataType::Pointer(_)
+            | DataType::Function
             | DataType::Db
             | DataType::Datetime
             | DataType::Box

@@ -695,10 +695,8 @@ impl Parser {
             if self.check(TokenType::Mut) {
                 self.advance();
             }
-            if self.check(TokenType::Ident) {
-                self.advance();
-            }
-            return Ok(DataType::I64);
+            let inner = self.parse_type()?;
+            return Ok(DataType::Pointer(Box::new(inner)));
         }
         self.parse_type()
     }

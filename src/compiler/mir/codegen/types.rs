@@ -14,6 +14,7 @@ pub(crate) fn llvm_type_str(dt: &DataType) -> String {
             format!("[{} x {}]", size, llvm_type_str(element_type))
         }
         DataType::Slice { element_type } => llvm_type_str(element_type),
+        DataType::Pointer(_) => "ptr".to_string(),
         DataType::EnumNamed(_) => "i64".to_string(),
         DataType::Generic(_) => "i64".to_string(),
         _ => "ptr".to_string(),
