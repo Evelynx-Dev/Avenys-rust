@@ -24,3 +24,7 @@ tests/loads/bin/
 
 # Local tool state
 .codex
+
+# Local workspace files
+.branch
+TODO.md

@@ -29,18 +29,18 @@ Hello, world!
 
 ```bash
 # Quick install (mire + owl + kioto → /usr/local)
-curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh
 
 # Auditable: review before executing
-curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh -o install.sh
 less install.sh
 chmod +x install.sh && ./install.sh
 
 # User-local install
-curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install.sh | sh -s -- --prefix ~/.local
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --prefix ~/.local
 
 # Compiler only (no owl)
-curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install.sh | sh -s -- --no-owl
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --no-owl
 ```
 
 Prerequisites are installed automatically (`clang`, `llvm`, `curl`, `tar`) via your package manager.
@@ -141,7 +141,8 @@ mire/
 │   ├── incremental/     # Incremental cache (LRU, WAL, fingerprinting)
 │   ├── loader.rs        # Module resolution (packages, imports, exports)
 │   └── pal/             # Platform Abstraction Layer (Linux C backend)
-├── tests/               # integration tests + compiler benchmarks
+├── install/             # Installation script
+├── tests/               # Integration tests + compiler benchmarks
 ├── docs/                # CHANGELOG, error codes, architecture docs
 └── SYNTAX.md            # Complete language reference
 ```

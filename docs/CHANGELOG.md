@@ -2,6 +2,22 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.11.36] - 2026-07-01
+
+### Changed
+- **Repository reorganization**: install script moved to `install/install.sh`,
+  README URLs updated accordingly.
+- **CHANGELOG consolidated**: root `CHANGELOG.md` removed; all version history
+  is now in `docs/CHANGELOG.md` only.
+- **Project renamed**: repository directory renamed from `mire/` to `avenys/`.
+- **Build artifacts**: `target/`, `bin/`, and `.cobject_cache/` cleaned from
+  version control and local workspace; `.gitignore` entries ensure they stay
+  out.
+
+### Fixed
+- **Release workflow**: GH release `body_path` now points to `docs/CHANGELOG.md`
+  instead of the removed root `CHANGELOG.md`.
+
 ## [3.11.35] - 2026-06-26
 
 ### Added
