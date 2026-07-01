@@ -119,11 +119,6 @@ target = "@rt_strings_pad_right"
 kind = "runtime"
 header = "runtime.h"
 
-[entry.mire_read_line]
-target = "@rt_read_line"
-kind = "runtime"
-header = "runtime.h"
-
 [entry.mire_get_args]
 target = "@rt_get_args"
 kind = "runtime"
@@ -363,11 +358,6 @@ header = "pal.h"
 target = "@pal_cpu_elapsed_ms"
 kind = "pal"
 header = "pal.h"
-
-[entry.mire_cpu_elapsed_ms_str]
-target = "@pal_cpu_elapsed_ms_str"
-kind = "pal"
-note = "Returns string via rt_managed_printf_i64 internally"
 
 [entry.mire_cpu_cycles_est]
 target = "@pal_cpu_cycles_est"

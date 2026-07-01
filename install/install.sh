@@ -82,6 +82,12 @@ banner() {
 
 banner
 
+# When piped via curl URL | sh, stdin is the pipe and read gets EOF.
+# Reopen the terminal so interactive prompts work.
+if [ ! -t 0 ]; then
+    { exec </dev/tty; } 2>/dev/null || true
+fi
+
 # ── Flags for sudo ────────────────────────────────────────────────────
 needs_sudo() {
     # System prefixes (need sudo) vs user prefixes (don't)
@@ -231,7 +237,6 @@ if [ "$YES" != "1" ]; then
     fi
     echo "    • kioto stdlib   → ~/.owl/modules/kioto/"
     if [ "$NO_PROFILE" != "1" ]; then
-        local profile
         profile="$(detect_shell_profile)"
         echo "    • PATH update    → ${profile}"
     fi
@@ -377,7 +382,7 @@ if [ "$NO_PROFILE" != "1" ]; then
                 esac
             fi
 
-            BACKUP="${PROFILE_FILE}.opencode-backup-$(date +%Y%m%d-%H%M%S)"
+            BACKUP="${PROFILE_FILE}.mire-backup-$(date +%Y%m%d-%H%M%S)"
             if [ -f "$PROFILE_FILE" ]; then
                 cp "$PROFILE_FILE" "$BACKUP"
             else
