@@ -141,7 +141,7 @@ mire/
 │   ├── incremental/     # Incremental cache (LRU, WAL, fingerprinting)
 │   ├── loader.rs        # Module resolution (packages, imports, exports)
 │   └── pal/             # Platform Abstraction Layer (Linux C backend)
-├── tests/               # 151 integration tests + 14 compiler benchmarks
+├── tests/               # integration tests + compiler benchmarks
 ├── docs/                # CHANGELOG, error codes, architecture docs
 └── SYNTAX.md            # Complete language reference
 ```
