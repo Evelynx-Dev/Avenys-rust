@@ -255,13 +255,14 @@ pub(crate) fn lsp_command(cwd: &Path, args: &[String]) -> Result<i32, MireError>
         }
     };
     let source = fs::read_to_string(&path).map_err(runtime_err)?;
+    set_lib_dir_env(&None);
 
     let tokens = mire::lexer::tokenize(&source).map_err(|err| {
         err.with_source(source.clone())
             .with_filename(path.display().to_string())
     })?;
 
-    // Manual JSON (no extra deps): tokens only for now (Capa 1).
+    // Manual JSON (no extra deps): Capa 1 lexical tokens + Capa 2 diagnostics.
     let mut s = String::from("{\"tokens\":[");
     for (idx, tok) in tokens.iter().enumerate() {
         if idx > 0 {
@@ -329,7 +330,64 @@ pub(crate) fn lsp_command(cwd: &Path, args: &[String]) -> Result<i32, MireError>
             kind, v, tok.line, tok.column
         ));
     }
-    s.push_str("],\"diagnostics\":[]}");
+    s.push_str("],\"diagnostics\":[");
+
+    // Capa 2 — run the analysis pipeline and surface diagnostics. Errors during
+    // analysis (e.g. unresolved imports) are themselves reported as a diagnostic
+    // so the editor always gets a structured result.
+    let diag_result: Result<Vec<String>, MireError> = (|| {
+        let loaded = load_program_with_metadata(&path)?;
+        let mut program = loaded.program;
+        let mut analysis_program = program.clone();
+        let _ = analyze_program(&mut analysis_program, &source);
+        let report = analyze_program_with_warnings_and_origins(
+            &mut program,
+            &source,
+            Some(&path.display().to_string()),
+            WarningConfig {
+                filter: WarningFilter::All,
+                deny: std::collections::HashSet::new(),
+            },
+            &loaded.statement_origins,
+            &path,
+        )?;
+        let mut out = Vec::new();
+        for d in &report.diagnostics {
+            if d.span.is_unknown() {
+                continue;
+            }
+            let sev = match d.severity {
+                Severity::Error => "error",
+                Severity::Warning => "warning",
+                _ => "info",
+            };
+            let code = d.code.name();
+            let msg = d.message.replace('\\', "\\\\").replace('"', "\\\"");
+            out.push(format!(
+                "{{\"sev\":\"{}\",\"code\":\"{}\",\"msg\":\"{}\",\"l\":{},\"c\":{},\"len\":1}}",
+                sev, code, msg, d.span.line, d.span.column
+            ));
+        }
+        Ok(out)
+    })();
+    match diag_result {
+        Ok(items) => {
+            for (idx, item) in items.iter().enumerate() {
+                if idx > 0 {
+                    s.push(',');
+                }
+                s.push_str(item);
+            }
+        }
+        Err(err) => {
+            let msg = format!("{}", err).replace('\\', "\\\\").replace('"', "\\\"");
+            s.push_str(&format!(
+                "{{\"sev\":\"error\",\"code\":\"pipeline\",\"msg\":\"{}\",\"l\":1,\"c\":1,\"len\":1}}",
+                msg
+            ));
+        }
+    }
+    s.push_str("]}");
     println!("{}", s);
     Ok(0)
 }
