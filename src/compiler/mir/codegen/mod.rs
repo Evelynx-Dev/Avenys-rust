@@ -171,13 +171,36 @@ pub(crate) fn compile_function_to_llvm(func: &MirFunction, ctx: &mut LlvmCtx) ->
         noinline_attr
     ));
 
+    // LLVM re-executes `alloca` at runtime, so allocas inside loops allocate
+    // stack every iteration and are never freed until the function returns.
+    // Hoist every alloca to the entry block so loop-local locals allocate once.
+    let mut hoisted_allocas: Vec<String> = Vec::new();
+    for block in &func.blocks {
+        for inst in &block.insts {
+            if matches!(inst.op, MirOp::Alloca(_)) {
+                for line in compile_inst(inst, ctx) {
+                    if !line.is_empty() {
+                        hoisted_allocas.push(format!("  {}", line));
+                    }
+                }
+            }
+        }
+    }
+
     for block in &func.blocks {
         if block.id > 0 {
             parts.push(String::new());
         }
         parts.push(format!("bb_{}:", block.id));
 
+        if block.id == 0 {
+            parts.extend(hoisted_allocas.iter().cloned());
+        }
+
         for inst in &block.insts {
+            if matches!(inst.op, MirOp::Alloca(_)) {
+                continue;
+            }
             for line in compile_inst(inst, ctx) {
                 if !line.is_empty() {
                     parts.push(format!("  {}", line));

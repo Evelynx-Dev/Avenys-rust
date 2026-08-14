@@ -211,6 +211,7 @@ char *rt_managed_alloc(size_t len) {
     header->cap = cap;
     header->flags = MIRE_STR_MANAGED;
     header->utf8_cp = 0;
+    header->refs = 1;
     header->data[len] = '\0';
     rt_managed_register(header->data);
     return header->data;
@@ -264,9 +265,24 @@ char *rt_alloc_printf_raw_i64(const char *fmt, long long value) {
 void rt_managed_free(char *value) {
     if (value == NULL) return;
     if (!rt_managed_contains(value)) return;
-    rt_managed_unregister(value);
+    // rt_managed_free is the reference-count release: it is emitted by the
+    // compiler on slot reassignment and after an owned temp's last use, and
+    // by containers when they drop a stored element. Only the last reference
+    // frees the string, so aliasing through vec/map getters can never
+    // double-free a container element.
     MireManagedString *header = rt_string_header(value);
-    if (header) free(header);
+    if (header == NULL) return;
+    header->refs--;
+    if (header->refs > 0) return;
+    rt_managed_unregister(value);
+    free(header);
+}
+
+void rt_managed_retain(char *data_ptr) {
+    if (data_ptr == NULL) return;
+    if (!rt_managed_contains(data_ptr)) return;
+    MireManagedString *header = rt_string_header(data_ptr);
+    if (header) header->refs++;
 }
 
 void rt_managed_cleanup_all(void) {

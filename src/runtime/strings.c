@@ -372,6 +372,10 @@ int64_t rt_string_to_i64(const char *value) {
     return (int64_t)atoll(value);
 }
 
+int64_t rt_f64_to_i64(double value) {
+    return (int64_t)value;
+}
+
 void *rt_get_args(int argc, char **argv) {
     void *list = rt_list_create(argc > 0 ? argc : 4, 8);
     for (int i = 0; i < argc; i++) {

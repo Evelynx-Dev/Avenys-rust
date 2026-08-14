@@ -53,11 +53,18 @@
 #define MIRE_STR_MANAGED     1  // allocated via managed allocator
 #define MIRE_STR_UTF8_KNOWN  2  // utf8_cp field is valid
 
+// Managed strings are reference counted. Every owner holds one reference:
+//   - the slot/temp that received a freshly created string
+//   - a vec/map container that stored the pointer (retained on store)
+//   - a getter's caller (retained when a container-owned pointer is returned)
+// rt_managed_free() (emitted by codegen on slot reassign) releases ONE
+// reference; the string is freed only when the count reaches zero.
 typedef struct {
     size_t len;       // byte length (excluding NUL)
     size_t cap;       // allocated capacity (bytes)
     uint32_t flags;   // MIRE_STR_* flags
     uint32_t utf8_cp; // cached codepoint count (valid when MIRE_STR_UTF8_KNOWN set)
+    int32_t refs;     // reference count; freed when it drops to 0
     char data[];      // flexible array member — UTF-8 bytes + NUL
 } MireManagedString;
 
@@ -74,6 +81,7 @@ size_t rt_managed_len(const char *value);
 int   rt_managed_contains(const char *data_ptr);
 void  rt_managed_register(char *data_ptr);
 void  rt_managed_unregister(char *data_ptr);
+void  rt_managed_retain(char *data_ptr);
 
 char *rt_strdup_raw(const char *src);
 char *rt_strdup_raw_n(const char *src, size_t len);
@@ -91,6 +99,7 @@ char *rt_strings_repeat(const char *input, int64_t count);
 char *rt_string_append_owned(char *value, const char *suffix);
 int64_t rt_strings_len(const char *s);
 int64_t rt_string_to_i64(const char *value);
+int64_t rt_f64_to_i64(double value);
 
 // UTF-8 aware operations (work on codepoints, not bytes)
 int64_t rt_strings_len_utf8(const char *s);
@@ -234,10 +243,28 @@ void    rt_free_raw(void *ptr);
 int64_t rt_read_u8(const void *ptr);
 int64_t rt_read_u16(const void *ptr);
 int64_t rt_read_u32(const void *ptr);
+void    rt_blend_u32(void *ptr, int64_t color, int64_t alpha);
 int64_t rt_read_i32(const void *ptr);
 int64_t rt_read_u64(const void *ptr);
-int64_t rt_read_ptr(const void *ptr);
+ int64_t rt_read_ptr(const void *ptr);
 double  rt_read_f64(const void *ptr);
+double  rt_read_f32(const void *ptr);
+
+// ── C-string → managed string ────────────────────────────────────────
+// Reads a null-terminated C string at `ptr` and returns a managed copy.
+// Used by FFI bindings to decode `const char *` fields inside C structs
+// (e.g. SDL_TextInputEvent.text in SDL3).
+char   *rt_read_cstr(const void *ptr);
+
+// ── 5x7 bitmap font (public domain, standard font5x7) ────────────────
+// Returns 1 if pixel (col, row) of character `ch` is lit. Accepts ASCII
+// 32..126, Latin-1 Spanish (0xA1..0xFF with accent overlays), and '?' for
+// anything else. col: 0..4, row: 0..6 (bit 0 = top).
+int64_t rt_font_get_pixel(int64_t ch, int64_t col, int64_t row);
+// Decode the UTF-8 codepoint at byte offset i; returns the codepoint.
+int64_t rt_font_char_at(const char *s, int64_t i);
+// Byte-length (1..4) of the UTF-8 sequence starting at byte offset i.
+int64_t rt_font_char_len(const char *s, int64_t i);
 
 // ── Raw memory writers (little-endian) ──────────────────────────────
 // Used by FFI bindings to encode C structs before passing to C.
