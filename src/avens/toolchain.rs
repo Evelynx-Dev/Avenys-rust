@@ -116,6 +116,16 @@ pub(super) fn compile_binary_from_ir(
         clang.arg(clean_name);
     }
 
+    for lib in super::build_support::c_defs().libs.iter() {
+        let clean_name = if lib.contains('.') {
+            lib.rsplit('.').next().unwrap_or(lib)
+        } else {
+            lib
+        };
+        clang.arg("-l");
+        clang.arg(clean_name);
+    }
+
     let mut child = clang.spawn().map_err(|err| {
         MireError::new(ErrorKind::Runtime {
             span: crate::error::Span::new(1, 1),

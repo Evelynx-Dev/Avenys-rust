@@ -23,7 +23,7 @@ mod reuse;
 mod toolchain;
 pub use build_pipeline::{compile_file_with_avenys, default_output_dir};
 pub use config::{
-    BootstrapConfig, BuildMode, BuildOptions, BuildResult, ExportsSection, ImportMode,
+    BootstrapConfig, BuildMode, BuildOptions, BuildResult, CDefs, ExportsSection, ImportMode,
     MireCacheConfig, MireDependencies, MireDependency, MireLock, MireLockBuild, MireLockProject,
     MireMacros, MireManifest, MireProject, OptLevel, SecurityConfig, SecurityMode, TrustTier,
 };

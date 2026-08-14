@@ -37,6 +37,7 @@ pub(crate) fn run_cli() -> Result<i32, MireError> {
         "build" => commands::build_command(&cwd, &args[2..]),
         "check" => commands::check_command(&cwd, &args[2..]),
         "debug" => commands::debug_command(&cwd, &args[2..]),
+        "lsp" | "--lsp" => commands::lsp_command(&cwd, &args[2..]),
         "test" => test::test_command(&cwd, &args[2..]),
 
         "help" | "--help" | "-h" => {
@@ -56,7 +57,7 @@ pub(crate) fn run_cli() -> Result<i32, MireError> {
 
 pub(crate) fn print_help() {
     println!("Mire / Avenys v{}", env!("CARGO_PKG_VERSION"));
-    println!("Usage: mire <run|build|check|debug> [file] [options]\n");
+    println!("Usage: mire <run|build|check|debug|lsp> [file] [options]\n");
     println!("Mire is the Avenys compiler. For project management, dependencies,");
     println!("and scaffolding, use Owl (owl new / owl run / owl import).\n");
     println!("Profiles:");

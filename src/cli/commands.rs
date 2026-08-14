@@ -15,6 +15,7 @@ pub(crate) fn run_command(cwd: &Path, args: &[String]) -> Result<i32, MireError>
     let (common, file, pass_through) = parse_run_options(cwd, args)?;
     let path = resolve_source_path(cwd, file)?;
     set_lib_dir_env(&common.lib_dir);
+    let c_defs = c_defs_for(cwd);
     let test_roots = read_test_roots(cwd);
     let suppress_warn = is_under_test_path(&path, &test_roots);
     let options = BuildOptions {
@@ -33,6 +34,7 @@ pub(crate) fn run_command(cwd: &Path, args: &[String]) -> Result<i32, MireError>
         deny_warnings: common.warn.deny,
         test_mode: false,
         module_paths: Vec::new(),
+        c_defs,
     };
     let build = compile_file_with_avenys(&path, &options)?;
     if !suppress_warn && !matches!(options.warning_filter, WarningFilter::Off) {
@@ -90,6 +92,7 @@ pub(crate) fn build_command(cwd: &Path, args: &[String]) -> Result<i32, MireErro
         deny_warnings: common.warn.deny,
         test_mode: false,
         module_paths: Vec::new(),
+        c_defs: c_defs_for(cwd),
     };
     let build = compile_file_with_avenys(&path, &options)?;
     if !suppress_warn && !matches!(options.warning_filter, WarningFilter::Off) {
@@ -160,6 +163,7 @@ pub(crate) fn debug_command(cwd: &Path, args: &[String]) -> Result<i32, MireErro
     let options = parse_debug_options(cwd, args)?;
     let path = resolve_source_path(cwd, options.file.clone())?;
     set_lib_dir_env(&options.common.lib_dir);
+    let c_defs = c_defs_for(cwd);
     let source = fs::read_to_string(&path).map_err(runtime_err)?;
 
     if options.show_tokens {
@@ -199,6 +203,7 @@ pub(crate) fn debug_command(cwd: &Path, args: &[String]) -> Result<i32, MireErro
             deny_warnings: options.common.warn.deny,
             test_mode: false,
             module_paths: Vec::new(),
+            c_defs,
         },
     )?;
 
@@ -214,5 +219,117 @@ pub(crate) fn debug_command(cwd: &Path, args: &[String]) -> Result<i32, MireErro
             .map_err(runtime_err)?;
         return Ok(status.code().unwrap_or(1));
     }
+    Ok(0)
+}
+
+/// LSP foundation (Capa 1 — lexical). Emits a JSON document with the raw
+/// token stream so editors (e.g. token) can paint lexical highlighting
+/// immediately without running the full pipeline. This is the read-only,
+/// additive API surface that owl/LSP connectors will build on.
+///
+/// Usage: `mire --lsp [file] [--root <path>]`
+///   - no file: project mode (resolve owl.toml root) — reserved for later.
+///   - file given: focus mode — tokenize that single file only.
+pub(crate) fn lsp_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
+    let mut file: Option<String> = None;
+    let mut _root: Option<String> = None;
+    let mut i = 0;
+    while i < args.len() {
+        let a = &args[i];
+        if a == "--root" && i + 1 < args.len() {
+            _root = Some(args[i + 1].clone());
+            i += 2;
+            continue;
+        }
+        if !a.starts_with('-') && file.is_none() {
+            file = Some(a.clone());
+        }
+        i += 1;
+    }
+
+    let path = match &file {
+        Some(f) => resolve_source_path(cwd, Some(f.clone()))?,
+        None => {
+            eprintln!("lsp: project mode not yet implemented; pass a file");
+            return Ok(1);
+        }
+    };
+    let source = fs::read_to_string(&path).map_err(runtime_err)?;
+
+    let tokens = mire::lexer::tokenize(&source).map_err(|err| {
+        err.with_source(source.clone())
+            .with_filename(path.display().to_string())
+    })?;
+
+    // Manual JSON (no extra deps): tokens only for now (Capa 1).
+    let mut s = String::from("{\"tokens\":[");
+    for (idx, tok) in tokens.iter().enumerate() {
+        if idx > 0 {
+            s.push(',');
+        }
+        let kind = match tok.ttype {
+            mire::lexer::TokenType::Ident => "ident",
+            mire::lexer::TokenType::IntLit
+            | mire::lexer::TokenType::FloatLit
+            | mire::lexer::TokenType::BoolLit => "number",
+            mire::lexer::TokenType::StrLit
+            | mire::lexer::TokenType::CharLit
+            | mire::lexer::TokenType::NoneLit => "string",
+            mire::lexer::TokenType::Load
+            | mire::lexer::TokenType::Use
+            | mire::lexer::TokenType::Module => "loaduse",
+            mire::lexer::TokenType::If
+            | mire::lexer::TokenType::Elif
+            | mire::lexer::TokenType::Else
+            | mire::lexer::TokenType::While
+            | mire::lexer::TokenType::For
+            | mire::lexer::TokenType::Fn
+            | mire::lexer::TokenType::Struct
+            | mire::lexer::TokenType::Skill
+            | mire::lexer::TokenType::Enum
+            | mire::lexer::TokenType::Impl
+            | mire::lexer::TokenType::Trait
+            | mire::lexer::TokenType::Match
+            | mire::lexer::TokenType::Return
+            | mire::lexer::TokenType::Pub
+            | mire::lexer::TokenType::Priv
+            | mire::lexer::TokenType::Const
+            | mire::lexer::TokenType::Cons
+            | mire::lexer::TokenType::Mut
+            | mire::lexer::TokenType::Extern
+            | mire::lexer::TokenType::Lib
+            | mire::lexer::TokenType::Set
+            | mire::lexer::TokenType::Type
+            | mire::lexer::TokenType::In
+            | mire::lexer::TokenType::Do
+            | mire::lexer::TokenType::As
+            | mire::lexer::TokenType::Is
+            | mire::lexer::TokenType::Of
+            | mire::lexer::TokenType::To
+            | mire::lexer::TokenType::At
+            | mire::lexer::TokenType::SelfToken
+            | mire::lexer::TokenType::Extends
+            | mire::lexer::TokenType::Super
+            | mire::lexer::TokenType::Break
+            | mire::lexer::TokenType::Continue
+            | mire::lexer::TokenType::Unsafe
+            | mire::lexer::TokenType::Asm
+            | mire::lexer::TokenType::NewKw
+            | mire::lexer::TokenType::DropKw
+            | mire::lexer::TokenType::MoveKw
+            | mire::lexer::TokenType::OwnKw => "keyword",
+            _ => "operator",
+        };
+        let v = match &tok.value {
+            Some(x) => format!("\"{}\"", x.replace('\\', "\\\\").replace('"', "\\\"")),
+            None => "null".to_string(),
+        };
+        s.push_str(&format!(
+            "{{\"k\":\"{}\",\"v\":{},\"l\":{},\"c\":{}}}",
+            kind, v, tok.line, tok.column
+        ));
+    }
+    s.push_str("],\"diagnostics\":[]}");
+    println!("{}", s);
     Ok(0)
 }

@@ -65,8 +65,9 @@ pub struct BuildOptions {
     pub cache: CacheOverrides,
     pub warning_filter: WarningFilter,
     pub deny_warnings: HashSet<DiagnosticCode>,
-    pub module_paths: Vec<PathBuf>,
-    pub test_mode: bool,
+     pub module_paths: Vec<PathBuf>,
+     pub test_mode: bool,
+     pub c_defs: CDefs,
 }
 
 #[derive(Debug, Clone)]
@@ -99,6 +100,20 @@ pub struct MireManifest {
     pub macros: Option<MireMacros>,
     #[serde(default)]
     pub security: Option<SecurityConfig>,
+    #[serde(default)]
+    pub c: CDefs,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CDefs {
+    #[serde(default)]
+    pub sources: Vec<String>,
+    #[serde(default)]
+    pub include: Vec<PathBuf>,
+    #[serde(default)]
+    pub cflags: Vec<String>,
+    #[serde(default)]
+    pub libs: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

@@ -7,8 +7,7 @@ use crate::parser::ast::Statement;
 use super::build_support::{
     apply_cfg_filter, dedup_llvm_declarations, generate_runtime_declarations,
     generate_enum_constructors, generate_struct_constructors, inject_test_harness, precompile_c_object,
-    inject_macros, progress_phase,
-    runtime_base,
+    inject_macros, progress_phase, runtime_base, set_c_defs,
 };
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
@@ -62,6 +61,7 @@ fn compile_file_inner(
         .persist_ir
         .then(|| output_dir.join(format!("{stem}.opt.ll")));
     let runtime_base = runtime_base();
+    set_c_defs(options.c_defs.clone());
     let (c_source_files, c_sources_hash) = if options.emit_binary {
         let mut files = Vec::new();
         for directory in ["runtime", "pal/core", "pal/linux"] {
@@ -72,6 +72,26 @@ fn compile_file_inner(
                         message: format!("Could not collect C sources from {directory}: {err}"),
                     })
                 })?;
+        }
+        for proj_src in &options.c_defs.sources {
+            let root = crate::avens::manifest::find_project_root(source_path)
+                .unwrap_or_else(|| std::path::PathBuf::from("."));
+            let p = if std::path::Path::new(proj_src).is_absolute() {
+                std::path::PathBuf::from(proj_src)
+            } else {
+                root.join(proj_src)
+            };
+            if p.exists() {
+                files.push(p.to_string_lossy().into_owned());
+            } else {
+                return Err(MireError::new(ErrorKind::Runtime {
+                    span: crate::error::Span::unknown(),
+                    message: format!(
+                        "C source '{}' declared in [c] was not found",
+                        p.display()
+                    ),
+                }));
+            }
         }
         files.sort();
         files.dedup();

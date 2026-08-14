@@ -9,7 +9,7 @@ pub mod parser;
 pub mod types;
 
 pub use avens::{
-    BuildMode, BuildOptions, BuildResult, EntryContainment, ImportMode, MireCacheConfig,
+    BuildMode, BuildOptions, BuildResult, CDefs, EntryContainment, ImportMode, MireCacheConfig,
     MireDependencies, MireDependency, MireLock, MireManifest, MireProject, OptLevel,
     check_entry_containment, compile_file_with_avenys, default_output_dir, find_project_root,
     load_exports, load_manifest_dependencies, load_project_manifest, project_lock_path,

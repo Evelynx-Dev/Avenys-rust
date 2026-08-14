@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub(crate) fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
+    let c_defs = c_defs_for(cwd);
     let mut run = true;
     let mut verbose = false;
     let mut jobs: usize = 0;
@@ -450,6 +451,7 @@ pub(crate) fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError
                         deny_warnings: HashSet::new(),
                         test_mode: true,
                         module_paths: Vec::new(),
+                        c_defs: c_defs.clone(),
                         ..Default::default()
                     };
                     handles.push(s.spawn(move || compile_file_with_avenys(&u.target_file, &options)));

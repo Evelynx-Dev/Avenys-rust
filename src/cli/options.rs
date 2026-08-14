@@ -238,6 +238,15 @@ pub(crate) fn parse_debug_options(cwd: &Path, args: &[String]) -> Result<DebugOp
     })
 }
 
+pub(crate) fn c_defs_for(cwd: &Path) -> mire::CDefs {
+    if let Some(root) = find_project_root(cwd) {
+        if let Ok(Some(manifest)) = load_project_manifest(&root) {
+            return manifest.c;
+        }
+    }
+    mire::CDefs::default()
+}
+
 pub(crate) fn default_entry_from_manifest(cwd: &Path) -> Result<Option<String>, MireError> {
     use mire::{check_entry_containment, EntryContainment};
     let project_root = match find_project_root(cwd) {

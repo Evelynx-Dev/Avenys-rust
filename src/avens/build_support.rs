@@ -1,9 +1,21 @@
 use super::*;
 use crate::parser::ast::DataType;
+use crate::avens::config::CDefs;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::OnceLock;
 
 static C_PRECOMPILE_SEQ: AtomicU64 = AtomicU64::new(0);
+
+static C_EXTRA: OnceLock<CDefs> = OnceLock::new();
+
+pub(super) fn set_c_defs(d: CDefs) {
+    let _ = C_EXTRA.set(d);
+}
+
+pub(super) fn c_defs() -> &'static CDefs {
+    C_EXTRA.get_or_init(CDefs::default)
+}
 
 pub(super) fn runtime_base() -> PathBuf {
     if let Ok(dir) = std::env::var("MIRE_RUNTIME_DIR") {
@@ -444,14 +456,18 @@ pub(super) fn precompile_c_object(c_path: &str, cache_dir: &Path, runtime_base: 
         .wrapping_mul(0x9E3779B97F4A7C15)
         .wrapping_add(C_PRECOMPILE_SEQ.fetch_add(1, Ordering::Relaxed));
     let tmp_path = cache_dir.join(format!("{:x}.{:016x}.o", hash, unique));
-    let status = std::process::Command::new("clang")
-        .args(["-c", "-O0", "-o"])
-        .arg(&tmp_path)
-        .arg(c_path)
-        .arg("-I")
-        .arg(runtime_base.join("runtime"))
-        .arg("-I")
-        .arg(runtime_base.join("pal"))
+    let extra = c_defs();
+    let mut cmd = std::process::Command::new("clang");
+    cmd.args(["-c", "-O0", "-o"]).arg(&tmp_path).arg(c_path);
+    cmd.arg("-I").arg(runtime_base.join("runtime"));
+    cmd.arg("-I").arg(runtime_base.join("pal"));
+    for inc in &extra.include {
+        cmd.arg("-I").arg(inc);
+    }
+    for flag in &extra.cflags {
+        cmd.arg(flag);
+    }
+    let status = cmd
         .status()
         .map_err(|err| {
             MireError::new(ErrorKind::Runtime {
