@@ -3,131 +3,45 @@
 #include <stdlib.h>
 #include <string.h>
 
-// ── Managed string tracking (linked list + hash table) ────────────────
+// ── Arena allocator (bump pointer, no per-object free) ────────────────
+//
+// All managed strings are allocated from a single contiguous arena.
+// Individual rt_managed_free() calls are no-ops; the entire arena is
+// released at program exit via rt_managed_cleanup_all().
+//
+// "Is this pointer managed?" is answered by a simple address-range
+// check against [arena_base, arena_base + arena_pos), replacing the
+// old linked-list + hash-table registry.
 
-typedef struct MireManagedStringNode {
-    char *data_ptr;
-    struct MireManagedStringNode *next;
-} MireManagedStringNode;
+#define ARENA_INITIAL_SIZE (4 * 1024 * 1024)  // 4 MB
+#define ARENA_MAX_SIZE     (256 * 1024 * 1024) // 256 MB cap
 
-static MireManagedStringNode *managed_strings = NULL;
+static char *arena_base = NULL;
+static size_t arena_pos = 0;    // bytes used
+static size_t arena_cap = 0;    // bytes allocated
 
-// Hash table for O(1) contains / unregister (replaces linear scan).
-#define MANAGED_HT_INITIAL 64
-
-static char **managed_ht_keys = NULL;
-static size_t managed_ht_cap = 0;
-static size_t managed_ht_len = 0;
-
-static size_t managed_ht_hash(const char *key) {
-    size_t h = (size_t)key;
-    h ^= h >> 33;
-    h *= 0xff51afd7ed558ccdULL;
-    h ^= h >> 33;
-    return h;
+static int arena_grow(size_t need) {
+    size_t new_cap = arena_cap ? arena_cap : ARENA_INITIAL_SIZE;
+    while (new_cap < arena_pos + need) {
+        if (new_cap >= ARENA_MAX_SIZE) return 0;
+        new_cap += new_cap >> 1; // grow by 1.5x
+    }
+    char *new_base = (char *)realloc(arena_base, new_cap);
+    if (!new_base) return 0;
+    arena_base = new_base;
+    arena_cap = new_cap;
+    return 1;
 }
 
-static int managed_ht_put(const char *key) {
-    if (!managed_ht_keys || managed_ht_len * 2 >= managed_ht_cap) {
-        size_t new_cap = managed_ht_cap ? managed_ht_cap * 2 : MANAGED_HT_INITIAL;
-        char **new_keys = (char **)calloc(new_cap, sizeof(char *));
-        if (!new_keys) return 0;
-        for (size_t i = 0; i < managed_ht_cap; i++) {
-            if (managed_ht_keys[i]) {
-                size_t h = managed_ht_hash(managed_ht_keys[i]);
-                for (size_t j = 0; j < new_cap; j++) {
-                    size_t idx = (h + j) % new_cap;
-                    if (!new_keys[idx]) { new_keys[idx] = managed_ht_keys[i]; break; }
-                }
-            }
-        }
-        free(managed_ht_keys);
-        managed_ht_keys = new_keys;
-        managed_ht_cap = new_cap;
-    }
-    size_t h = managed_ht_hash(key);
-    for (size_t j = 0; j < managed_ht_cap; j++) {
-        size_t idx = (h + j) % managed_ht_cap;
-        if (!managed_ht_keys[idx]) {
-            managed_ht_keys[idx] = (char *)key;
-            managed_ht_len++;
-            return 1;
-        }
-        if (managed_ht_keys[idx] == key) return 1;
-    }
-    return 0;
-}
+// ── Managed pointer detection ─────────────────────────────────────────
 
-static void managed_ht_remove(const char *key) {
-    if (!managed_ht_keys) return;
-    size_t h = managed_ht_hash(key);
-    for (size_t j = 0; j < managed_ht_cap; j++) {
-        size_t idx = (h + j) % managed_ht_cap;
-        if (!managed_ht_keys[idx]) return;
-        if (managed_ht_keys[idx] == key) {
-            managed_ht_keys[idx] = NULL;
-            managed_ht_len--;
-
-            // Reinsert the following probe cluster. Leaving a hole would
-            // make later entries unreachable to managed_ht_contains().
-            size_t next = (idx + 1) % managed_ht_cap;
-            while (managed_ht_keys[next]) {
-                const char *cluster_key = managed_ht_keys[next];
-                managed_ht_keys[next] = NULL;
-                managed_ht_len--;
-                managed_ht_put(cluster_key);
-                next = (next + 1) % managed_ht_cap;
-            }
-            return;
-        }
-    }
-}
-
-static int managed_ht_contains(const char *key) {
-    if (!managed_ht_keys) return 0;
-    size_t h = managed_ht_hash(key);
-    for (size_t j = 0; j < managed_ht_cap; j++) {
-        size_t idx = (h + j) % managed_ht_cap;
-        if (!managed_ht_keys[idx]) return 0;
-        if (managed_ht_keys[idx] == key) return 1;
-    }
-    return 0;
-}
-
-void rt_managed_register(char *data_ptr) {
-    if (data_ptr == NULL) return;
-    if (managed_ht_contains(data_ptr)) return;
-    MireManagedStringNode *node = (MireManagedStringNode *)malloc(sizeof(MireManagedStringNode));
-    if (node == NULL) return;
-    if (!managed_ht_put(data_ptr)) {
-        free(node);
-        return;
-    }
-    node->data_ptr = data_ptr;
-    node->next = managed_strings;
-    managed_strings = node;
-}
-
-void rt_managed_unregister(char *data_ptr) {
-    managed_ht_remove(data_ptr);
-    MireManagedStringNode **cursor = &managed_strings;
-    while (*cursor != NULL) {
-        if ((*cursor)->data_ptr == data_ptr) {
-            MireManagedStringNode *node = *cursor;
-            *cursor = node->next;
-            free(node);
-            return;
-        }
-        cursor = &(*cursor)->next;
-    }
+int rt_managed_is_managed(const char *data_ptr) {
+    if (!data_ptr || !arena_base) return 0;
+    return (size_t)(data_ptr - arena_base) < arena_pos;
 }
 
 int rt_managed_contains(const char *data_ptr) {
-    return managed_ht_contains(data_ptr);
-}
-
-int rt_managed_is_managed(const char *data_ptr) {
-    return data_ptr != NULL && managed_ht_contains(data_ptr);
+    return rt_managed_is_managed(data_ptr);
 }
 
 // ── Header helpers ────────────────────────────────────────────────────
@@ -179,7 +93,7 @@ static size_t utf8_codepoint_count(const char *s, size_t byte_len) {
     return count;
 }
 
-// ── String growth ────────────────────────────────────────────────────
+// ── String helpers (raw malloc, not arena) ────────────────────────────
 
 size_t rt_string_growth_cap(size_t min_cap) {
     size_t cap = 16;
@@ -203,17 +117,23 @@ char *rt_strdup_raw_n(const char *src, size_t len) {
     return out;
 }
 
+// ── Arena allocation ──────────────────────────────────────────────────
+
 char *rt_managed_alloc(size_t len) {
     size_t cap = rt_string_growth_cap(len);
-    MireManagedString *header = (MireManagedString *)malloc(sizeof(MireManagedString) + cap + 1);
-    if (header == NULL) return NULL;
+    size_t total = sizeof(MireManagedString) + cap + 1;
+    // Align to 16 bytes for performance
+    total = (total + 15) & ~(size_t)15;
+    if (!arena_base || arena_pos + total > arena_cap) {
+        if (!arena_grow(total)) return NULL;
+    }
+    MireManagedString *header = (MireManagedString *)(arena_base + arena_pos);
+    arena_pos += total;
     header->len = len;
     header->cap = cap;
     header->flags = MIRE_STR_MANAGED;
     header->utf8_cp = 0;
-    header->refs = 1;
     header->data[len] = '\0';
-    rt_managed_register(header->data);
     return header->data;
 }
 
@@ -262,43 +182,38 @@ char *rt_alloc_printf_raw_i64(const char *fmt, long long value) {
     return out;
 }
 
+// ── No-op free / retain (arena lifetime) ─────────────────────────────
+//
+// With arena allocation, individual strings are never freed. The entire
+// arena is released at program exit via rt_managed_cleanup_all().
+// These functions are kept as no-ops for ABI compatibility with existing
+// compiled code and runtime callers.
+
 void rt_managed_free(char *value) {
-    if (value == NULL) return;
-    if (!rt_managed_contains(value)) return;
-    // rt_managed_free is the reference-count release: it is emitted by the
-    // compiler on slot reassignment and after an owned temp's last use, and
-    // by containers when they drop a stored element. Only the last reference
-    // frees the string, so aliasing through vec/map getters can never
-    // double-free a container element.
-    MireManagedString *header = rt_string_header(value);
-    if (header == NULL) return;
-    header->refs--;
-    if (header->refs > 0) return;
-    rt_managed_unregister(value);
-    free(header);
+    (void)value;
 }
 
 void rt_managed_retain(char *data_ptr) {
-    if (data_ptr == NULL) return;
-    if (!rt_managed_contains(data_ptr)) return;
-    MireManagedString *header = rt_string_header(data_ptr);
-    if (header) header->refs++;
+    (void)data_ptr;
 }
 
 void rt_managed_cleanup_all(void) {
-    MireManagedStringNode *node = managed_strings;
-    while (node != NULL) {
-        MireManagedStringNode *next = node->next;
-        MireManagedString *header = rt_string_header(node->data_ptr);
-        if (header) free(header);
-        free(node);
-        node = next;
+    if (arena_base) {
+        free(arena_base);
+        arena_base = NULL;
     }
-    managed_strings = NULL;
-    free(managed_ht_keys);
-    managed_ht_keys = NULL;
-    managed_ht_cap = 0;
-    managed_ht_len = 0;
+    arena_pos = 0;
+    arena_cap = 0;
+}
+
+// ── Register / unregister stubs (ABI compat, no-ops) ──────────────────
+
+void rt_managed_register(char *data_ptr) {
+    (void)data_ptr;
+}
+
+void rt_managed_unregister(char *data_ptr) {
+    (void)data_ptr;
 }
 
 // ── Optimized len: uses cached header length instead of strlen ────────

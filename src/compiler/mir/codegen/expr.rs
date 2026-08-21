@@ -23,7 +23,6 @@ fn float_result_ty(lt: &str, rt: &str) -> Option<&'static str> {
 
 pub(crate) fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
     let mut extra = Vec::new();
-    let mut after = Vec::new();
     let line = match &inst.op {
         MirOp::Alloca(ty) => {
             let llty = llvm_type_str(&ty.data_type);
@@ -67,16 +66,6 @@ pub(crate) fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
                 _ => {
                     let (src_s, src_ty) = resolve_typed(src, ctx);
                     let (dst_s, _) = resolve_typed(dst, ctx);
-                    if src_ty == "ptr" && !matches!(dst, MirValue::Global(_)) {
-                        let old_ptr = tmp_extra(ctx, "ptr");
-                        extra.push(format!("{} = load ptr, ptr {}", old_ptr, dst_s));
-                        extra.push(format!("call void @rt_managed_free(ptr {})", old_ptr));
-                    }
-                    if src_ty == "ptr"
-                        && let MirValue::Temp(s_id) = src
-                    {
-                        ctx.owned_string_temps.remove(s_id);
-                    }
                     format!("store {} {}, ptr {}", src_ty, src_s, dst_s)
                 }
             }
@@ -101,20 +90,6 @@ pub(crate) fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
                 } else {
                     r_str.clone()
                 };
-                // Free owned operand temps AFTER the concat call (must be alive when concat reads them)
-                if let MirValue::Temp(l_id) = l
-                    && ctx.owned_string_temps.remove(l_id)
-                {
-                    after.push(format!("call void @rt_managed_free(ptr {})", l_str));
-                }
-                if let MirValue::Temp(r_id) = r
-                    && ctx.owned_string_temps.remove(r_id)
-                {
-                    after.push(format!("call void @rt_managed_free(ptr {})", r_str));
-                }
-                if let Some(id) = inst.result {
-                    ctx.owned_string_temps.insert(id);
-                }
                 format!(
                     "%t{} = call ptr @rt_string_concat(ptr {}, ptr {})",
                     result, lhs, rhs
@@ -857,9 +832,8 @@ pub(crate) fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
             format!("%t{} = phi {} {}", result, ll_ty, incoming.join(", "))
         }
     };
-    let mut result = Vec::with_capacity(extra.len() + 1 + after.len());
+    let mut result = Vec::with_capacity(extra.len() + 1);
     result.extend(extra);
     result.push(line);
-    result.extend(after);
     result
 }

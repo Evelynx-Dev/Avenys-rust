@@ -87,11 +87,6 @@ void *rt_dict_get_ptr(void *dict_ptr, int64_t key_kind, int64_t key_i64,
     int64_t idx = mire_dict_find(dict, key_i64, key_ptr, h);
     if (idx < 0) return default_value;
     void *value = mire_read_ptr(dict, idx);
-    // Retain so the caller's owned temp (released after last use) does not
-    // drop the map's own reference — a later map remove/replace/free releases
-    // the map's reference, so the caller's copy stays alive until its slot
-    // is reassigned.
-    rt_managed_retain((char *)value);
     return value;
 }
 

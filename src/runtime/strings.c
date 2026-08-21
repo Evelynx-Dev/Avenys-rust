@@ -65,31 +65,13 @@ char *rt_string_append_owned(char *value, const char *suffix) {
     if (suffix == NULL) return value;
     size_t vlen = str_byte_len(value);
     size_t slen = str_byte_len(suffix);
-    if (rt_managed_is_managed(value)) {
-        MireManagedString *hdr = rt_string_header(value);
-        size_t needed = vlen + slen;
-        if (hdr->cap >= needed) {
-            memcpy(value + vlen, suffix, slen);
-            value[needed] = '\0';
-            hdr->len = needed;
-            hdr->flags &= ~MIRE_STR_UTF8_KNOWN; // invalidate UTF-8 cache
-            return value;
-        }
-    }
     char *result = rt_managed_alloc(vlen + slen);
     if (result == NULL) {
-        char *fallback = rt_string_concat(value, suffix);
-        if (!rt_managed_is_managed(value)) free(value);
-        return fallback;
+        return rt_string_concat(value, suffix);
     }
     if (vlen > 0) memcpy(result, value, vlen);
     if (slen > 0) memcpy(result + vlen, suffix, slen);
     result[vlen + slen] = '\0';
-    if (rt_managed_is_managed(value)) {
-        rt_managed_free(value);
-    } else {
-        free(value);
-    }
     return result;
 }
 

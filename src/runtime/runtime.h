@@ -45,26 +45,21 @@
 // ═══════════════════════════════════════════════════════════════════════
 //  1. Managed memory
 //
-//  Mire uses a managed allocator for all heap strings. Every string
-//  returned by the runtime is managed unless noted otherwise. Managed
-//  strings have a hidden header with length/capacity metadata.
+//  Mire uses a bump-pointer arena allocator for all heap strings. Every
+//  string returned by the runtime is managed unless noted otherwise.
+//  Managed strings have a hidden header with length/capacity metadata.
+//  Individual rt_managed_free() calls are no-ops; the entire arena is
+//  released at program exit via rt_managed_cleanup_all().
 // ═══════════════════════════════════════════════════════════════════════
 
 #define MIRE_STR_MANAGED     1  // allocated via managed allocator
 #define MIRE_STR_UTF8_KNOWN  2  // utf8_cp field is valid
 
-// Managed strings are reference counted. Every owner holds one reference:
-//   - the slot/temp that received a freshly created string
-//   - a vec/map container that stored the pointer (retained on store)
-//   - a getter's caller (retained when a container-owned pointer is returned)
-// rt_managed_free() (emitted by codegen on slot reassign) releases ONE
-// reference; the string is freed only when the count reaches zero.
 typedef struct {
     size_t len;       // byte length (excluding NUL)
     size_t cap;       // allocated capacity (bytes)
     uint32_t flags;   // MIRE_STR_* flags
     uint32_t utf8_cp; // cached codepoint count (valid when MIRE_STR_UTF8_KNOWN set)
-    int32_t refs;     // reference count; freed when it drops to 0
     char data[];      // flexible array member — UTF-8 bytes + NUL
 } MireManagedString;
 
@@ -74,14 +69,14 @@ char *rt_managed_from_cstr(const char *src);
 char *rt_managed_ensure_managed(char *ptr);
 char *rt_managed_printf_i64(const char *fmt, long long value);
 char *rt_managed_printf_f64(const char *fmt, double value);
-void  rt_managed_free(char *value);
-void  rt_managed_cleanup_all(void);
+void  rt_managed_free(char *value);    // no-op (arena lifetime)
+void  rt_managed_cleanup_all(void);    // releases the entire arena
 int   rt_managed_is_managed(const char *value);
 size_t rt_managed_len(const char *value);
 int   rt_managed_contains(const char *data_ptr);
-void  rt_managed_register(char *data_ptr);
-void  rt_managed_unregister(char *data_ptr);
-void  rt_managed_retain(char *data_ptr);
+void  rt_managed_register(char *data_ptr);   // no-op (ABI compat)
+void  rt_managed_unregister(char *data_ptr); // no-op (ABI compat)
+void  rt_managed_retain(char *data_ptr);     // no-op (ABI compat)
 
 char *rt_strdup_raw(const char *src);
 char *rt_strdup_raw_n(const char *src, size_t len);

@@ -1,6 +1,6 @@
 # Mire Language Reference
 
-Version: **3.24.24**
+Version: **3.24.27**
 
 ---
 
@@ -12,7 +12,7 @@ pub fn main: () {
 }
 ```
 
-Save as `hello.mire` and run: `mire run hello.mire`
+Save as `hello.mire` and run: `mire run hello.mire` or `owl run` (in an owl project)
 
 ---
 
@@ -75,7 +75,7 @@ pub fn slow_test: () :bool { ... }
 | `@[allow(dead_code)]` | Suppress dead code warning for this function. |
 | `@[deny(unsafe)]` | Error if function contains `unsafe { }` block. |
 
-Run tests with: `mire test` or `owl test [--verbose]`
+Run tests with: `mire test` or `owl test [--verbose]` (in an owl project)
 
 ```mire
 test code/main.mire ... ok
@@ -191,9 +191,11 @@ declared type, so `u8 + u8` yields a `u8` and `f32 * f32` yields an `f32`.
 
 ## 4. Ownership & borrowing
 
-Ownership is the memory model that makes Mire safe without a garbage collector.
-Every value has exactly one owner at a time. When the owner goes out of scope,
-the value is freed.
+Mire uses a **bump-pointer arena allocator** for all heap strings. Individual
+strings are never freed — the entire arena is released at program exit. The
+ownership model still applies at the type system level: the compiler tracks
+which variable "owns" a value to prevent use-after-move bugs, even though the
+underlying memory is arena-allocated.
 
 ### 4.1 Owned values (`str`)
 
@@ -639,6 +641,8 @@ set v = first(nums) // T inferred as i64
 ## 8. Strings
 
 ```mire
+load kioto
+
 set s = "hello" :str mut
 
 // Transformation
@@ -658,7 +662,7 @@ set pos = strings::index_of(s "ll") // 2
 
 // Length and conversion
 set n = strings::len(s) // 5
-set num_str = strings::from_i64(42) // "42"
+set num_str = strings::from::i64(42) // "42"
 set val = strings::to_i64("42") // 42
 
 // Concatenation
@@ -1119,8 +1123,9 @@ pub fn version: () :str {
 
 ```mire
 load kioto // the standard library
+load mire // core types (vec, map, str)
 load mylib // a user library
-load kioto::crypto // a specific submodule
+load kioto::fs // a specific submodule
 ```
 
 ### 13.3 Namespace access
@@ -1366,10 +1371,11 @@ The rest of the standard library uses English names: `strings::*`, `vec::*`,
 
 | Function | Description |
 |----------|-------------|
-| `proc_run(cmd)` | Run shell command, capture stdout |
-| `proc::spawn_shell(cmd)` | Spawn background process (returns pid) |
+| `proc::run::output(cmd args)` | Run command via argv (no shell), capture stdout |
+| `proc::run::shell(cmd)` | Run command via shell (use sparingly) |
+| `proc::run::spawn(cmd args)` | Spawn background process (returns pid) |
 | `proc::wait(pid)` | Wait for spawned process |
-| `strings::from_i64(n)` | i64 → str |
+| `strings::from::i64(n)` | i64 → str |
 | `strings::to_i64(s)` | str → i64 |
 | `strings::len(s)` | String length |
 | `strings::trim(s)` | Trim whitespace |
@@ -1393,7 +1399,7 @@ The rest of the standard library uses English names: `strings::*`, `vec::*`,
 | `map::keys(m)` | All keys |
 | `map::values(m)` | All values |
 | `fs::read(path)` | Read file contents |
-| `fs::write(path, data)` | Write string to file |
+| `fs::write(path data)` | Write string to file |
 | `fs::exists(path)` | Check if file exists |
 
 ---
@@ -1401,7 +1407,7 @@ The rest of the standard library uses English names: `strings::*`, `vec::*`,
 ## 17. Common patterns — Basic
 
 ```mire
-load mire
+load kioto
 
 pub fn main: () :i64 {
  // ── Vec ──
@@ -1438,7 +1444,7 @@ pub fn main: () :i64 {
 ## 18. Common patterns — Advanced
 
 ```mire
-load mire
+load kioto
 
 fn safe_divide: (a :i64, b :i64) : result[i64 str] {
  if b == 0 {

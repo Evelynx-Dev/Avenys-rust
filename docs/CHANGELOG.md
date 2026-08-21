@@ -2,6 +2,42 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.24.28] - 2026-08-21 (Arena allocator replaces per-string refcount)
+
+### Changed
+
+- **Managed string allocator replaced**: the per-string `malloc` + refcount
+  system (`MireManagedString.refs`, linked-list registry, hash table) has
+  been replaced by a **bump-pointer arena allocator**. All managed strings
+  are now allocated from a contiguous arena (initial 4 MB, grows to 256 MB
+  cap). Individual `rt_managed_free()` / `rt_managed_retain()` calls are
+  now no-ops; the entire arena is released at program exit via
+  `rt_managed_cleanup_all()`.
+- **Container retain/release removed**: `rt_list_push_ptr`,
+  `rt_list_get_ptr`, `rt_list_concat`, `rt_list_slice`,
+  `rt_lists_reverse`, `rt_lists_unique`, `rt_dict_get_ptr`, and the map
+  `mire_store_key`/`mire_store_value` MAP/PTR branches no longer call
+  `rt_managed_retain`. `rt_list_remove`, `rt_list_clear`, `rt_list_free`
+  no longer call `rt_managed_free`.
+- **`rt_string_append_owned` simplified**: removed the in-place capacity
+  reuse path (arena doesn't support realloc); now always allocates fresh
+  and copies.
+- **Codegen no longer emits refcount operations**: `rt_managed_free` is no
+  longer emitted on slot reassignment or after owned-temp last use.
+  `owned_string_temps` tracking removed from `LlvmCtx` and all codegen
+  paths. The `after` vec in `compile_inst` (previously used for post-concat
+  free) is removed entirely.
+- **`MireManagedString` struct shrunk**: removed the `int32_t refs` field
+  (28 → 24 bytes header on 64-bit). ABI-compatible for all runtime callers.
+
+### Rationale
+
+Arena allocation eliminates the entire class of use-after-free / double-free
+through vec/map getters that required the session-18b/20 refcount system.
+Strings stored in containers are never individually freed; the trade-off is
+bounded lifetime (program exit) in exchange for zero per-object allocator
+overhead and simpler codegen.
+
 ## [3.24.27] - 2026-08-06 (PAL FS removal API: pal_root_remove / pal_fs_remove)
 
 ### Added

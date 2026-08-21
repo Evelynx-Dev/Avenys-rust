@@ -123,7 +123,6 @@ void mire_store_key(MireDict *dict, int64_t entry_index,
         return;
     }
     if (dict->key_kind == MIRE_KIND_MAP || dict->key_kind == MIRE_KIND_PTR) {
-        rt_managed_retain((char *)key_ptr);
         memcpy(slot, &key_ptr, sizeof(void *));
         return;
     }
@@ -148,7 +147,6 @@ void mire_store_value(MireDict *dict, int64_t entry_index,
         return;
     }
     if (dict->value_kind == MIRE_KIND_MAP || dict->value_kind == MIRE_KIND_PTR) {
-        rt_managed_retain((char *)value_ptr);
         memcpy(slot, &value_ptr, sizeof(void *));
         return;
     }

@@ -139,9 +139,6 @@ pub(crate) fn resolve_named_call(
             result, raw_tmp
         ));
         extra.push(format!("call void @free(ptr {})", raw_tmp));
-        if let Some(id) = result_id {
-            ctx.owned_string_temps.insert(id);
-        }
         String::new() // The result id was already registered by tmp_result
     } else if is_str_return && ll_ret == "ptr" {
         // Regular function returning str: ensure result is managed (copy if literal)
@@ -158,9 +155,6 @@ pub(crate) fn resolve_named_call(
             "%t{} = call ptr @rt_managed_ensure_managed(ptr {})",
             result, raw_tmp
         ));
-        if let Some(id) = result_id {
-            ctx.owned_string_temps.insert(id);
-        }
         String::new()
     } else {
         let result = tmp_result(ctx, ll_ret, result_id);

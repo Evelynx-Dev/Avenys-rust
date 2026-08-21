@@ -30,9 +30,6 @@ pub(crate) struct LlvmCtx<'a> {
     /// Maps extern function name -> its mire-wrapper LLVM name (e.g. "abs" -> "@fn_abs_wrapper").
     extern_wrapper_names: HashMap<String, String>,
     struct_types: &'a HashMap<String, Vec<(String, DataType)>>,
-    /// Temp IDs that own heap-allocated strings (results of rt_string_concat, pal calls, etc.).
-    /// Freed when consumed by another concat or stored to a variable.
-    pub(crate) owned_string_temps: HashSet<usize>,
     pub(crate) source_filename: String,
 }
 
@@ -88,7 +85,6 @@ pub fn mir_to_llvm_with_filename(program: &MirProgram, source_filename: &str) ->
         extern_fn_names,
         extern_wrapper_names,
         struct_types: &program.struct_types,
-        owned_string_temps: HashSet::new(),
         source_filename: source_filename.to_string(),
     };
     for func in &program.functions {
@@ -144,7 +140,6 @@ pub(crate) fn compile_function_to_llvm(func: &MirFunction, ctx: &mut LlvmCtx) ->
     let ret_type = llvm_type_str(&func.ret_type);
     let saved_vars = std::mem::take(&mut ctx.vars);
     let saved_temp_types = std::mem::take(&mut ctx.temp_types);
-    let saved_owned_string_temps = std::mem::take(&mut ctx.owned_string_temps);
     let saved_next_tmp = ctx.next_tmp;
     let saved_next_extra = ctx.next_extra;
 
@@ -225,7 +220,6 @@ pub(crate) fn compile_function_to_llvm(func: &MirFunction, ctx: &mut LlvmCtx) ->
     parts.push("}".to_string());
     ctx.vars = saved_vars;
     ctx.temp_types = saved_temp_types;
-    ctx.owned_string_temps = saved_owned_string_temps;
     ctx.next_tmp = saved_next_tmp;
     ctx.next_extra = saved_next_extra;
     ctx.param_types.clear();
@@ -273,7 +267,13 @@ fn const_str(c: &MirConst, ctx: &mut LlvmCtx) -> String {
                     '"' => "\\22".chars().collect(),
                     '\0' => "\\00".chars().collect(),
                     c if c.is_ascii_graphic() || c == ' ' => vec![c],
-                    _ => format!("\\{:02X}", c as u8).chars().collect(),
+                    _ => {
+                        let mut buf = [0u8; 4];
+                        c.encode_utf8(&mut buf)
+                            .bytes()
+                            .flat_map(|b| format!("\\{:02X}", b).chars().collect::<Vec<char>>())
+                            .collect()
+                    }
                 })
                 .collect::<String>();
             let len = s.len() + 1;

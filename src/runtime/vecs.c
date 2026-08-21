@@ -79,10 +79,6 @@ void *rt_list_push_ptr(void *list_ptr, void *value) {
         list_ptr = list_grow(list_ptr, 8);
         if (!list_ptr) return NULL;
     }
-    // The list now references this value: retain it so the compiler's
-    // free-on-reassign (a release of the creator's reference) can never
-    // drop the element out from under the list.
-    rt_managed_retain((char *)value);
     ((void **)list_ptr)[len + 1] = value;
     ((int64_t *)list_ptr)[0] = len + 1;
     return list_ptr;
@@ -138,14 +134,12 @@ void *rt_list_concat(void *left_ptr, void *right_ptr) {
         int64_t *larr = (int64_t *)left_ptr + 1;
         for (int64_t i = 0; i < llen; i++) {
             out[i] = larr[i];
-            rt_managed_retain((char *)out[i]);
         }
     }
     if (right_ptr) {
         int64_t *rarr = (int64_t *)right_ptr + 1;
         for (int64_t i = 0; i < rlen; i++) {
             out[llen + i] = rarr[i];
-            rt_managed_retain((char *)out[llen + i]);
         }
     }
     // Return a pointer that conforms to the list layout:
@@ -170,7 +164,6 @@ void *rt_list_slice(void *list_ptr, int64_t start, int64_t end) {
     int64_t *arr = (int64_t *)list_ptr + 1;
     for (int64_t i = 0; i < new_len; i++) {
         out[i] = arr[start + i];
-        rt_managed_retain((char *)out[i]);
     }
     return result + 1;
 }
@@ -179,7 +172,6 @@ void *rt_list_remove(void *list_ptr, int64_t index) {
     int64_t len = rt_list_len(list_ptr);
     if (index < 0 || index >= len) return list_ptr;
     int64_t *data = (int64_t *)list_ptr + 1;
-    rt_managed_free((char *)data[index]);
     for (int64_t i = index; i < len - 1; i++) data[i] = data[i + 1];
     ((int64_t *)list_ptr)[0] = len - 1;
     return list_ptr;
@@ -187,17 +179,11 @@ void *rt_list_remove(void *list_ptr, int64_t index) {
 
 void rt_list_free(void *list_ptr) {
     if (!list_ptr) return;
-    int64_t len = rt_list_len(list_ptr);
-    int64_t *data = (int64_t *)list_ptr + 1;
-    for (int64_t i = 0; i < len; i++) rt_managed_free((char *)data[i]);
     free(((int64_t *)list_ptr) - 1);
 }
 
 void *rt_list_clear(void *list_ptr) {
     if (list_ptr) {
-        int64_t len = rt_list_len(list_ptr);
-        int64_t *data = (int64_t *)list_ptr + 1;
-        for (int64_t i = 0; i < len; i++) rt_managed_free((char *)data[i]);
         ((int64_t *)list_ptr)[0] = 0;
     }
     return list_ptr;
@@ -213,9 +199,6 @@ void *rt_list_get_ptr(void *list_ptr, int64_t index) {
     int64_t len = rt_list_len(list_ptr);
     if (index < 0 || index >= len) return NULL;
     void *value = ((void **)list_ptr)[index + 1];
-    // Retain so the caller's owned temp (released after last use, e.g. when
-    // used as a concat operand) does not drop the list's own reference.
-    rt_managed_retain((char *)value);
     return value;
 }
 
@@ -301,7 +284,6 @@ void *rt_lists_reverse(void *list) {
     int64_t *data = (int64_t *)list + 1;
     for (int64_t i = 0; i < len; i++) {
         out[i] = data[len - 1 - i];
-        rt_managed_retain((char *)out[i]);
     }
     ((int64_t *)result)[0] = len;
     return result;
@@ -325,7 +307,6 @@ void *rt_lists_unique(void *list) {
         }
         if (!seen) {
             out[out_len++] = value;
-            rt_managed_retain((char *)value);
         }
     }
     ((int64_t *)result)[0] = out_len;
