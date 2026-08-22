@@ -528,6 +528,8 @@ static int64_t utf8_decode_at(const char *s, int64_t i, int64_t *seq_len) {
 // Codepoint at UTF-8 byte offset i (for Mire draw loops).
 int64_t rt_font_char_at(const char *s, int64_t i) {
     if (!s || i < 0) return '?';
+    int64_t slen = rt_strings_len(s);
+    if (i >= slen) return '?';
     int64_t len = 0;
     return utf8_decode_at(s, i, &len);
 }
@@ -535,6 +537,8 @@ int64_t rt_font_char_at(const char *s, int64_t i) {
 // Byte-length of the UTF-8 sequence starting at byte offset i (1..4).
 int64_t rt_font_char_len(const char *s, int64_t i) {
     if (!s || i < 0) return 1;
+    int64_t slen = rt_strings_len(s);
+    if (i >= slen) return 1;
     int64_t len = 0;
     utf8_decode_at(s, i, &len);
     return len;

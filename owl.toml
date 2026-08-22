@@ -1,6 +1,6 @@
 [project]
 name = "avenys"
-version = "3.24.3"
+version = "3.24.28"
 entry = "mod.mire"
 
 [build]
