@@ -504,19 +504,20 @@ static const uint8_t s_font5x7[95][5] = {
 // Decode the codepoint whose UTF-8 sequence starts at byte index `i` in
 // `s`. Returns the codepoint and writes the sequence length (1..4) to
 // *seq_len. Invalid/truncated sequences degrade to the raw byte.
+// Assumes `s` is a valid NUL-terminated string (Mire managed strings are).
 static int64_t utf8_decode_at(const char *s, int64_t i, int64_t *seq_len) {
     const unsigned char *u = (const unsigned char *)s;
     unsigned char b = u[i];
     if (b < 0x80) { *seq_len = 1; return b; }
-    if ((b & 0xE0) == 0xC0 && (u[i+1] & 0xC0) == 0x80) {
+    if (u[i+1] && (b & 0xE0) == 0xC0 && (u[i+1] & 0xC0) == 0x80) {
         *seq_len = 2;
         return ((int64_t)(b & 0x1F) << 6) | (u[i+1] & 0x3F);
     }
-    if ((b & 0xF0) == 0xE0 && (u[i+1] & 0xC0) == 0x80 && (u[i+2] & 0xC0) == 0x80) {
+    if (u[i+1] && u[i+2] && (b & 0xF0) == 0xE0 && (u[i+1] & 0xC0) == 0x80 && (u[i+2] & 0xC0) == 0x80) {
         *seq_len = 3;
         return ((int64_t)(b & 0x0F) << 12) | ((int64_t)(u[i+1] & 0x3F) << 6) | (u[i+2] & 0x3F);
     }
-    if ((b & 0xF8) == 0xF0 && (u[i+1] & 0xC0) == 0x80 && (u[i+2] & 0xC0) == 0x80 && (u[i+3] & 0xC0) == 0x80) {
+    if (u[i+1] && u[i+2] && u[i+3] && (b & 0xF8) == 0xF0 && (u[i+1] & 0xC0) == 0x80 && (u[i+2] & 0xC0) == 0x80 && (u[i+3] & 0xC0) == 0x80) {
         *seq_len = 4;
         return ((int64_t)(b & 0x07) << 18) | ((int64_t)(u[i+1] & 0x3F) << 12) |
                ((int64_t)(u[i+2] & 0x3F) << 6) | (u[i+3] & 0x3F);
@@ -528,8 +529,6 @@ static int64_t utf8_decode_at(const char *s, int64_t i, int64_t *seq_len) {
 // Codepoint at UTF-8 byte offset i (for Mire draw loops).
 int64_t rt_font_char_at(const char *s, int64_t i) {
     if (!s || i < 0) return '?';
-    int64_t slen = rt_strings_len(s);
-    if (i >= slen) return '?';
     int64_t len = 0;
     return utf8_decode_at(s, i, &len);
 }
@@ -537,8 +536,6 @@ int64_t rt_font_char_at(const char *s, int64_t i) {
 // Byte-length of the UTF-8 sequence starting at byte offset i (1..4).
 int64_t rt_font_char_len(const char *s, int64_t i) {
     if (!s || i < 0) return 1;
-    int64_t slen = rt_strings_len(s);
-    if (i >= slen) return 1;
     int64_t len = 0;
     utf8_decode_at(s, i, &len);
     return len;
