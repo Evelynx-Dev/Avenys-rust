@@ -17,9 +17,30 @@ pub fn main: () {
  use dasu("Hello, world!")
 }
 
-$ mire run hello.mire
+$ owl run hello.mire
 Hello, world!
 ```
+
+---
+
+## Important: Always Use owl CLI
+
+**Always use `owl` CLI (package manager). Never use `mire` CLI directly except for compiler development.**
+
+| Task | Use this | NOT this |
+|------|----------|----------|
+| Create project | `owl new myproject` | — |
+| Build | `owl build` | `mire build` |
+| Run | `owl run` | `mire run` |
+| Test | `owl test` | `mire test` |
+| Check | `owl check` | `mire check` |
+| Debug | `owl debug` | `mire debug` |
+| Dependencies | `owl load <name>` | — |
+| Package install | `owl install <name>` | — |
+
+The `mire` CLI is the raw compiler interface; `owl` handles project management,
+dependency resolution, build caching, test orchestration, and delegates to `mire`
+internally. Use `owl` for all day-to-day work.
 
 ---
 
@@ -108,17 +129,185 @@ cd myproject
 owl run
 ```
 
-## Quick start
+## Quick start (owl CLI)
 
 ```bash
-# Build the compiler
+# Build the compiler (compiler development only)
 cargo build --release
 
 # Run the test suite
 cargo test
 
-# Compile and run a program
-cargo run -- run examples/hello.mire
+# Create a new project (use owl!)
+owl new myproject
+cd myproject
+owl run
+
+# Build and run a program (use owl!)
+owl build
+owl run
+owl test
+```
+
+---
+
+## How it works
+
+Every Mire program passes through five stages:
+
+```
+Source (.mire)
+ │
+ ▼
+ Lexer ──► Parser ──► Type checker ──► Borrow checker
+ │
+ ┌───────────────────────────────────────┘
+ ▼
+ MIR lowering ──► MIR optimization (9 passes to fixed point)
+ │
+ ▼
+ LLVM IR generation ──► opt (O1-O3) ──► clang ──► Native binary
+```
+
+**Stage 1 — Frontend:** The lexer tokenizes, the parser builds an AST. The type
+checker infers and verifies every expression. The borrow checker enforces
+ownership rules: no use-after-move, no mutation during shared borrows, no
+dangling references.
+
+**Stage 2 — MIR:** The AST lowers to a Mid-level Intermediate Representation.
+Nine optimization passes run to fixed point: constant folding, copy propagation,
+dead code elimination, branch folding, block merging, inlining, and more.
+
+**Stage 3 — Codegen:** MIR translates to LLVM IR text. The compiler invokes
+LLVM's `opt` for further optimization (at O1+), then `clang` links the IR with
+the C runtime and PAL objects into a native binary.
+
+**Incremental compilation:** On your second build of the same source, the
+compiler checks a fingerprint and returns in **single-digit milliseconds** if nothing
+changed. On partial changes, only the affected units are re-analyzed.
+
+---
+
+## The language at a glance
+
+```mire
+// Functions with inferred or explicit return types
+fn fib: (n: i64) :i64 {
+ if n <= 1 { return n }
+ return fib(n - 1) + fib(n - 2)
+}
+
+// Structs and methods
+struct Point { x: i64, y: i64 }
+
+impl Point {
+ fn dist: (self) :f64 {
+ return sqrt((self.x * self.x + self.y * self.y) :f64)
+ }
+}
+
+// Struct inheritance (extends)
+pub struct Animal { name: str }
+pub struct Dog extends Animal { breed: str }
+
+impl Dog {
+ fn greet: (self) :str {
+  return self.name + " the " + self.breed
+ }
+}
+
+// Skills (traits) with inheritance (super)
+pub skill Greeter { fn greet: (self) :str }
+pub skill Named super Greeter { fn get_name: (self) :str }
+
+// Enums with pattern matching
+enum Option[T] { None, Some(value: T) }
+
+pub fn main: () {
+ set p = Point::new(3, 4)
+ set d = p.dist()
+ use dasu("Distance: {d}")
+
+ set dog = (Dog name: "Rex" breed: "Husky")
+ use dasu(dog.greet())
+}
+```
+
+[Full syntax reference →](./SYNTAX.md)
+
+---
+
+## Project structure
+
+```
+avenys/
+├── src/
+│ ├── lexer/ # UTF-8 source scanning and tokenization
+│ ├── parser/ # Recursive descent parser and AST
+│ ├── compiler/ # Type checker, borrow checker, semantic analysis
+│ │ └── mir/ # MIR lowering, optimization, and LLVM codegen
+│ ├── avens/ # Build pipeline, codegen, CLI integration
+│ ├── incremental/ # Incremental cache (LRU, WAL, fingerprinting)
+│ ├── loader/ # Module resolution and symbol renaming
+│ └── pal/ # PAL ABI, core dispatch, and Linux host adapter
+├── install/ # Installation script
+├── tests/ # Integration tests + compiler benchmarks
+├── docs/ # CHANGELOG, error codes, architecture docs
+└── SYNTAX.md # Complete language reference
+```
+
+---
+
+## Standard library (Kioto)
+
+Kioto lives at `~/.owl/libs/kioto/` and provides:
+
+| Module | What it does |
+|--------|-------------|
+| `strings` | upper/lower, split/join, replace, trim, pad, substr |
+| `math` | trig, log, powers, statistics, random, complex numbers |
+| `fs` | read, write, exists, mkdir, remove/remove_all, dir/file handles |
+| `env` | get, cwd, args |
+| `proc` | create, spawn (argv-safe, no shell), wait, kill, stdio channels |
+| `async` | channels, Task, ready/value, spawn/wait |
+| `time` | now_ms, now_ns, mark, elapsed |
+| `mem` / `cpu` | system resource queries |
+| `net` | TCP sockets and listeners |
+| `log` / `cli` | logging and CLI parsing |
+| `crypto` | SHA-256/512, hex/base64, CSPRNG, Ed25519 |
+
+`fs::remove` removes a single entry (file, symlink, or empty dir) without ever
+following symlinks; `fs::remove_all` recursively removes a tree (still
+symlink-safe — external targets are never entered). On failure,
+`fs::last_error()` returns the PAL error code (`11` = directory not empty).
+See `kioto/README.md` for examples.
+
+Dynamic collections (`vec`, `map`) are provided by the `mire` standard library,
+loaded with `load mire::vec` / `load mire::map`. See `mire/README.md`.
+
+---
+
+## CLI (owl commands — use these!)
+
+```bash
+# Build & run
+owl build [--release] [-O<0-3|s|z>]
+owl run [FILE] [--release] [-O<0-3|s|z>] [-- <args>]
+owl run hello.mire
+
+# Test
+owl test [--verbose] [--no-run] [-j N]
+
+# Check & debug
+owl check
+owl debug [FILE] [--tokens] [--ast] [--ir] [--run]
+
+# Compiler development only (use mire directly)
+# mire build [file] [--release] [-O<0-3|s|z>]
+# mire run [file] [--release] [-O<0-3|s|z>] [-- <args>]
+# mire check [file] [--show-warn] [-W <code>] [--deny <code>]
+# mire debug [file] [--tokens] [--ast] [--ir]
+# mire test [paths...] [--no-run] [--verbose] [--show-warn] [-O<0-3|s|z>] [-r] [-d]
 ```
 
 ---
@@ -262,11 +451,19 @@ loaded with `load mire::vec` / `load mire::map`. See `mire/README.md`.
 ## CLI
 
 ```bash
-mire run [file] [--release] [-O<0-3|s|z>] [-- args...]
-mire build [file] [--release] [-O<0-3|s|z>]
-mire check [file] [--show-warn] [-W <code>] [--deny <code>]
-mire debug [file] [--tokens] [--ast] [--ir]
-mire test [paths...] [--no-run] [--verbose] [--show-warn] [-O<0-3|s|z>] [-r] [-d]
+# Use owl for all project work
+owl build [--release] [-O<0-3|s|z>]
+owl run [FILE] [--release] [-O<0-3|s|z>] [-- <args>]
+owl test [--verbose] [--no-run] [-j N]
+owl check
+owl debug [FILE] [--tokens] [--ast] [--ir] [--run]
+
+# Compiler development only (use mire directly)
+# mire build [file] [--release] [-O<0-3|s|z>]
+# mire run [file] [--release] [-O<0-3|s|z>] [-- <args>]
+# mire check [file] [--show-warn] [-W <code>] [--deny <code>]
+# mire debug [file] [--tokens] [--ast] [--ir]
+# mire test [paths...] [--no-run] [--verbose] [--show-warn] [-O<0-3|s|z>] [-r] [-d]
 ```
 
 Warnings are **off by default**. Enable with:
