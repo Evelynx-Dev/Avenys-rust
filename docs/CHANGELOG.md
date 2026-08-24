@@ -2,6 +2,30 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.24.29] - 2026-08-24 (PAL filesystem backend + runtime fixes)
+
+### Added
+
+- **PAL filesystem backend implementations**: `linux_fs_exists`,
+  `linux_fs_mkdir`, `linux_fs_rmdir`, `linux_fs_unlink`, and `linux_fs_remove`
+  are now implemented in `pal_linux.c` and wired into the `linux_ops` table.
+  These were previously declared in `pal_core.h` but had no backend
+  implementations — the ops table fields were NULL. All five functions are
+  gated behind `PAL_ALLOW_UNSANDBOXED` like the other `pal_fs_*` primitives.
+
+### Fixed
+
+- **`rt_vec_get_str` managed-string guarantee**: the function now wraps the
+  raw pointer from `rt_list_get_ptr` with `rt_managed_ensure_managed()`, so
+  strings returned from `vec::get::str` are always valid managed strings
+  even when sourced from external/inline storage. This fixes type errors when
+  the result is passed to string-manipulation functions that expect managed
+  pointers.
+- **`rt_strings_split` tail-length bug**: after pointer advance in the
+  split loop, `str_byte_len(p)` could read past the original string when the
+  separator was found near the end. Fixed to use `s_len - (p - s)`, the
+  correct remaining length.
+
 ## [3.24.28] - 2026-08-21 (Arena allocator replaces per-string refcount)
 
 ### Changed

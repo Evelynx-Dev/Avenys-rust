@@ -437,7 +437,7 @@ void *rt_strings_split(const char *s, const char *sep) {
     while (*p) {
         const char *found = strstr(p, sep);
         if (!found) {
-            list = rt_list_push_ptr(list, rt_managed_from_slice(p, str_byte_len(p)));
+            list = rt_list_push_ptr(list, rt_managed_from_slice(p, s_len - (p - s)));
             break;
         }
         list = rt_list_push_ptr(list, rt_managed_from_slice(p, found - p));

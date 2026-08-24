@@ -74,6 +74,8 @@ Two legacy groups opt out of that model and are **compile-time gated** in
 - `PAL_ALLOW_UNSANDBOXED` — `pal_fs_*` absolute-path operations
   (`pal_fs_exists/mkdir/rmdir/unlink/read_file/remove`). They bypass root
   capabilities entirely and exist only for the runtime's own internal use.
+  As of v3.24.29, the Linux backend implements all five (`linux_fs_*`) in
+  `pal_linux.c`; previously the ops table fields were NULL.
 - `PAL_ALLOW_LEGACY_SHELL` — `pal_proc_system`, `pal_proc_capture`,
   `pal_proc_capture_output`. They invoke `/bin/sh -c` and are a
   command-injection surface. Use `pal_proc_create` (argv-safe, no shell)

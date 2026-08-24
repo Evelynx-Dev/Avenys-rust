@@ -789,6 +789,30 @@ static bool linux_random_fill(void *buf, int64_t length) {
 
 /* ─── Path / filesystem utility functions (PAL_ALLOW_UNSANDBOXED) ─── */
 
+static bool linux_fs_exists(const char *path) {
+    struct stat st;
+    return stat(path, &st) == 0;
+}
+
+static bool linux_fs_mkdir(const char *path) {
+    return mkdir(path, 0755) == 0;
+}
+
+static bool linux_fs_rmdir(const char *path) {
+    return rmdir(path) == 0;
+}
+
+static bool linux_fs_unlink(const char *path) {
+    return unlink(path) == 0;
+}
+
+static bool linux_fs_remove(const char *path) {
+    struct stat st;
+    if (stat(path, &st) != 0) return false;
+    if (S_ISDIR(st.st_mode)) return rmdir(path) == 0;
+    return unlink(path) == 0;
+}
+
 static const char *linux_fs_ext(const char *path) {
     const char *dot = strrchr(path, '.');
     if (!dot || dot == path) return strdup("");
@@ -1024,6 +1048,11 @@ static const pal_ops_t linux_ops = {
     .mem_available = linux_mem_available,
     .mem_process = linux_mem_process,
     .random_fill = linux_random_fill,
+    .fs_exists = linux_fs_exists,
+    .fs_mkdir = linux_fs_mkdir,
+    .fs_rmdir = linux_fs_rmdir,
+    .fs_unlink = linux_fs_unlink,
+    .fs_remove = linux_fs_remove,
     .fs_ext = linux_fs_ext,
     .fs_dir = linux_fs_dir,
     .fs_name = linux_fs_name,

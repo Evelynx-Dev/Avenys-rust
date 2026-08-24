@@ -120,6 +120,11 @@ bool (*proc_exists)(int64_t pid);
 int64_t (*proc_run)(const char *cmd, const char **argv);
 
 // Extended filesystem (UNSANBOXED)
+bool (*fs_exists)(const char *path);
+bool (*fs_mkdir)(const char *path);
+bool (*fs_rmdir)(const char *path);
+bool (*fs_unlink)(const char *path);
+bool (*fs_remove)(const char *path);
 const char *(*fs_ext)(const char *path);
 const char *(*fs_dir)(const char *path);
 const char *(*fs_name)(const char *path);
