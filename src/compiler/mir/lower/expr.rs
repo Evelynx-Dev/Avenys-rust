@@ -835,25 +835,10 @@ impl MirLower {
                 let target_type = extract_data_type(target);
                 let last = self.current_block;
 
-                match &target_type {
+                // Determine the upper bound (array size constant or vec len)
+                let upper_bound = match &target_type {
                     DataType::Array { size, .. } => {
-                        self.func.blocks[last].push(
-                            None,
-                            MirOp::Call(
-                                MirValue::Global("rt_check_bounds_i64".to_string()),
-                                vec![
-                                    index_val.clone(),
-                                    MirValue::Const(MirConst::Int(*size as i64)),
-                                    MirValue::Const(MirConst::Int(loc.0 as i64)),
-                                    MirValue::Const(MirConst::Int(loc.1 as i64)),
-                                    MirValue::Const(MirConst::Str(self.filename.clone())),
-                                ],
-                                MirType {
-                                    data_type: DataType::None,
-                                },
-                            ),
-                            loc,
-                        );
+                        MirValue::Const(MirConst::Int(*size as i64))
                     }
                     DataType::Vector { .. } | DataType::List => {
                         let len_val = self.new_temp();
@@ -868,65 +853,137 @@ impl MirLower {
                             ),
                             loc,
                         );
-                        self.func.blocks[last].push(
-                            None,
-                            MirOp::Call(
-                                MirValue::Global("rt_check_bounds_i64".to_string()),
-                                vec![
-                                    index_val.clone(),
-                                    MirValue::temp(len_val),
-                                    MirValue::Const(MirConst::Int(loc.0 as i64)),
-                                    MirValue::Const(MirConst::Int(loc.1 as i64)),
-                                    MirValue::Const(MirConst::Str(self.filename.clone())),
-                                ],
-                                MirType {
-                                    data_type: DataType::None,
-                                },
-                            ),
-                            loc,
-                        );
+                        MirValue::temp(len_val)
                     }
-                    _ => {}
-                }
+                    _ => {
+                        // Non-indexable type; skip bounds check (code already type-checked)
+                        MirValue::Const(MirConst::Int(0))
+                    }
+                };
 
-                let gep = self.new_temp();
-                let elem_llvm = llvm_elem_type_str(data_type);
-                let adjusted_index = if matches!(
-                    target_type,
-                    DataType::Vector { .. } | DataType::List
-                ) {
-                    let elem_size = llvm_type_byte_size(&elem_llvm);
-                    let header_offset = 8 / elem_size;
-                    let adj = self.new_temp();
-                    self.func.blocks[last].push(
-                        Some(adj),
-                        MirOp::Add(
+                let need_check = matches!(
+                    &target_type,
+                    DataType::Array { .. } | DataType::Vector { .. } | DataType::List
+                );
+
+                if need_check {
+                    let pre_block = self.current_block;
+
+                    // Create blocks: check_upper (index < upper), bounds_panic, bounds_ok, bounds_cont
+                    let check_upper_block = self.new_block("bounds_upper");
+                    let panic_block = self.new_block("bounds_panic");
+                    let ok_block = self.new_block("bounds_ok");
+                    let cont_block = self.new_block("bounds_cont");
+
+                    // Check 1: index < 0
+                    let is_neg = self.new_temp();
+                    self.func.blocks[pre_block].push(
+                        Some(is_neg),
+                        MirOp::ICmp(
+                            MirCmp::Lt,
                             index_val.clone(),
-                            MirValue::Const(MirConst::Int(header_offset)),
+                            MirValue::Const(MirConst::Int(0)),
                         ),
                         loc,
                     );
-                    MirValue::temp(adj)
+                    self.func.blocks[pre_block].terminator =
+                        MirTerminator::BrCond(MirValue::temp(is_neg), panic_block, check_upper_block);
+
+                    // Check 2: index >= upper_bound
+                    self.current_block = check_upper_block;
+                    let is_oob = self.new_temp();
+                    self.func.blocks[check_upper_block].push(
+                        Some(is_oob),
+                        MirOp::ICmp(MirCmp::Ge, index_val.clone(), upper_bound),
+                        loc,
+                    );
+                    self.func.blocks[check_upper_block].terminator =
+                        MirTerminator::BrCond(MirValue::temp(is_oob), panic_block, ok_block);
+
+                    // Panic block: call rt_panic_loc then unreachable
+                    self.current_block = panic_block;
+                    self.func.blocks[panic_block].push(
+                        None,
+                        MirOp::Call(
+                            MirValue::Global("rt_panic_loc".to_string()),
+                            vec![
+                                MirValue::Const(MirConst::Str("index out of bounds".to_string())),
+                                MirValue::Const(MirConst::Int(loc.0 as i64)),
+                                MirValue::Const(MirConst::Int(loc.1 as i64)),
+                                MirValue::Const(MirConst::Str(self.filename.clone())),
+                            ],
+                            MirType {
+                                data_type: DataType::None,
+                            },
+                        ),
+                        loc,
+                    );
+                    self.func.blocks[panic_block].terminator = MirTerminator::Unreachable;
+
+                    // OK block: GEP + Load (the actual memory access)
+                    self.current_block = ok_block;
+                    let gep = self.new_temp();
+                    let elem_llvm = llvm_elem_type_str(data_type);
+                    let adjusted_index = if matches!(
+                        target_type,
+                        DataType::Vector { .. } | DataType::List
+                    ) {
+                        let elem_size = llvm_type_byte_size(&elem_llvm);
+                        let header_offset = 8 / elem_size;
+                        let adj = self.new_temp();
+                        self.func.blocks[ok_block].push(
+                            Some(adj),
+                            MirOp::Add(
+                                index_val.clone(),
+                                MirValue::Const(MirConst::Int(header_offset)),
+                            ),
+                            loc,
+                        );
+                        MirValue::temp(adj)
+                    } else {
+                        index_val.clone()
+                    };
+                    self.func.blocks[ok_block].push(
+                        Some(gep),
+                        MirOp::Gep(target_val, vec![adjusted_index], elem_llvm),
+                        loc,
+                    );
+                    let loaded = self.new_temp();
+                    self.func.blocks[ok_block].push(
+                        Some(loaded),
+                        MirOp::Load(
+                            MirValue::temp(gep),
+                            MirType {
+                                data_type: data_type.clone(),
+                            },
+                        ),
+                        loc,
+                    );
+                    self.func.blocks[ok_block].terminator = MirTerminator::Br(cont_block);
+
+                    self.current_block = cont_block;
+                    MirValue::temp(loaded)
                 } else {
-                    index_val.clone()
-                };
-                self.func.blocks[last].push(
-                    Some(gep),
-                    MirOp::Gep(target_val, vec![adjusted_index], elem_llvm),
-                    loc,
-                );
-                let loaded = self.new_temp();
-                self.func.blocks[last].push(
-                    Some(loaded),
-                    MirOp::Load(
-                        MirValue::temp(gep),
-                        MirType {
-                            data_type: data_type.clone(),
-                        },
-                    ),
-                    loc,
-                );
-                MirValue::temp(loaded)
+                    let gep = self.new_temp();
+                    let elem_llvm = llvm_elem_type_str(data_type);
+                    self.func.blocks[last].push(
+                        Some(gep),
+                        MirOp::Gep(target_val, vec![index_val], elem_llvm),
+                        loc,
+                    );
+                    let loaded = self.new_temp();
+                    self.func.blocks[last].push(
+                        Some(loaded),
+                        MirOp::Load(
+                            MirValue::temp(gep),
+                            MirType {
+                                data_type: data_type.clone(),
+                            },
+                        ),
+                        loc,
+                    );
+                    MirValue::temp(loaded)
+                }
             }
             Expression::Reference { expr, .. } => {
                 if let Expression::Identifier(id) = expr.as_ref() {
