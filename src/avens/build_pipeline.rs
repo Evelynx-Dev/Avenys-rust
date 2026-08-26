@@ -461,8 +461,15 @@ fn compile_file_inner(
             }
         }
         // Add @main entry point wrapper if the program defines @fn_main
-        // Respect @[no_main] file attribute to skip wrapper generation (freestanding mode)
-        let has_no_main = program.file_attributes.iter().any(|a| a.name == "no_main");
+        // Respect @[no_main] attribute to skip wrapper generation (freestanding mode)
+        let has_no_main = program.file_attributes.iter().any(|a| a.name == "no_main")
+            || program.statements.iter().any(|s| {
+                if let Statement::Function { attributes, .. } = s {
+                    attributes.iter().any(|a| a.name == "no_main")
+                } else {
+                    false
+                }
+            });
         if !has_no_main && ir.contains("define") && ir.contains("@fn_main") && !ir.contains("define i32 @main(") {
             ir.push_str("\n\ndefine i32 @main(i32 %argc, ptr %argv) {\n");
             ir.push_str("  store i32 %argc, ptr @.argc\n");

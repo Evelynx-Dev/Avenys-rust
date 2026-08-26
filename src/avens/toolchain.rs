@@ -91,10 +91,18 @@ pub(super) fn compile_binary_from_ir(
     clang.arg("-o").arg(binary_path);
     clang.arg(opt_level.as_opt_flag());
 
-    clang.arg("-lm");
-    clang.arg("-lssl");
-    clang.arg("-lcrypto");
-    clang.arg("-lsodium");
+    // In freestanding mode (none tier), skip runtime libraries — the program
+    // provides its own implementations.  In full/minimal tiers, link the
+    // standard runtime dependencies.
+    if !matches!(
+        super::build_support::c_defs().runtime,
+        super::config::RuntimeTier::None
+    ) {
+        clang.arg("-lm");
+        clang.arg("-lssl");
+        clang.arg("-lcrypto");
+        clang.arg("-lsodium");
+    }
     clang.arg("-pthread");
 
     for (lib_name, lib_path) in extern_libs {
