@@ -232,6 +232,44 @@ the authoritative `docs/abi_map.toml`. Do not copy declarations from historical
 PAL documents or add shell/convenience functions to PAL; those belong in
 Kioto when they can be composed from primitives.
 
+## `[c]` Configuration
+
+The `[c]` section in `owl.toml` controls how the C runtime and PAL are compiled
+and linked:
+
+```toml
+[c]
+# Additional C source files to compile (e.g. for SDL, TTF, or custom runtime)
+sources = ["code/font_ttf.c", "code/svg_icons.c"]
+# Header include paths for C compilation
+include = ["/usr/include/freetype2"]
+# Extra C compiler flags
+cflags = ["-O2"]
+# Extra libraries to link
+libs = ["freetype", "m", "SDL2"]
+
+# Runtime tier: how much of the Mire runtime to compile
+#   "full"    — compile all runtime + PAL C sources (default, backward-compatible)
+#   "minimal" — compile all but emit only used PAL declarations (demand-driven)
+#   "none"    — compile no runtime/PAL C sources (freestanding; user provides their own)
+runtime = "full"
+
+# LLVM target triple override for cross-compilation
+# When omitted, defaults to the host triple (x86_64-unknown-linux-gnu)
+# The PAL platform directory is auto-selected from the triple:
+#   *linux* → pal/linux, *darwin*/*apple* → pal/darwin,
+#   *windows*/*mingw* → pal/windows, *freebsd* → pal/freebsd
+# target = "aarch64-unknown-linux-gnu"
+```
+
+### Runtime Tiers
+
+| Tier | C files compiled | PAL declarations | Use case |
+|------|-----------------|-----------------|----------|
+| `full` | All runtime + PAL | All symbols | Default, backward-compatible |
+| `minimal` | All runtime + PAL | Only used symbols | Toward zero-cost runtime |
+| `none` | None | Only used PAL | Freestanding, user provides panic handler |
+
 > **Two kinds of `pal_*` symbols.** Symbols the compiler emits as builtins
 > (e.g. `pal_time_now_ms`, `pal_file_size`) are catalogued in
 > `docs/abi_map.toml` and checked by `tests/abi_consistency.rs`. Symbols kioto

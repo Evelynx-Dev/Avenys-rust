@@ -36,6 +36,10 @@ All notable changes to Mire are documented in this file.
 - **Runtime symbol→C-file mapping** (`runtime_symbol_to_c_file`,
   `minimal_runtime_c_files`): maps `rt_*` symbols to their C source files,
   ready for future selective `.c` compilation in `Minimal` tier.
+- **`[c] target` config**: configurable LLVM target triple for
+  cross-compilation (e.g. `[c] target = "aarch64-unknown-linux-gnu"`).
+  PAL platform directory is auto-selected from the target triple
+  (`pal/linux`, `pal/darwin`, `pal/windows`, `pal/freebsd`).
 
 ### Changed
 
