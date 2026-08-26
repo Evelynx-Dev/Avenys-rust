@@ -68,6 +68,7 @@ pub(super) fn compile_binary_from_ir(
     extern_libs: &[(String, String)],
     opt_level: OptLevel,
     source_filename: &str,
+    link_crypto_libs: bool,
 ) -> Result<()> {
     let mut clang = Command::new("clang");
     let mut seen_objects = std::collections::HashSet::new();
@@ -93,15 +94,18 @@ pub(super) fn compile_binary_from_ir(
 
     // In freestanding mode (none tier), skip runtime libraries — the program
     // provides its own implementations.  In full/minimal tiers, link the
-    // standard runtime dependencies.
+    // standard runtime dependencies.  Crypto libs (libssl/libcrypto/libsodium)
+    // are only linked when PAL files are actually compiled.
     if !matches!(
         super::build_support::c_defs().runtime,
         super::config::RuntimeTier::None
     ) {
         clang.arg("-lm");
-        clang.arg("-lssl");
-        clang.arg("-lcrypto");
-        clang.arg("-lsodium");
+        if link_crypto_libs {
+            clang.arg("-lssl");
+            clang.arg("-lcrypto");
+            clang.arg("-lsodium");
+        }
     }
     clang.arg("-pthread");
 

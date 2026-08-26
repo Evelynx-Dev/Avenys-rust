@@ -5,8 +5,9 @@ use crate::error::diagnostic::Diagnostic;
 use crate::loader::load_program_with_cache;
 use crate::parser::ast::Statement;
 use super::build_support::{
-    apply_cfg_filter, dedup_llvm_declarations, generate_runtime_declarations,
-    generate_enum_constructors, generate_struct_constructors, inject_test_harness, precompile_c_object,
+    apply_cfg_filter, collect_used_symbols, dedup_llvm_declarations,
+    generate_runtime_declarations, generate_enum_constructors, generate_struct_constructors,
+    inject_test_harness, minimal_runtime_c_files, precompile_c_object,
     inject_macros, progress_phase, runtime_base, set_c_defs,
 };
 use std::hash::{Hash, Hasher};
@@ -78,7 +79,7 @@ fn compile_file_inner(
         .then(|| output_dir.join(format!("{stem}.opt.ll")));
     let runtime_base = runtime_base();
     set_c_defs(options.c_defs.clone());
-    let (c_source_files, c_sources_hash) = if options.emit_binary {
+    let (mut c_source_files, c_sources_hash) = if options.emit_binary {
         let mut files = Vec::new();
         // Tier-aware C file collection:
         //   full:    compile all runtime + PAL C sources (backward-compatible)
@@ -101,21 +102,17 @@ fn compile_file_inner(
                         })?;
                 }
             } else {
-                // Minimal tier: compile PAL + all runtime sources.
-                // TODO: selective runtime .c compilation requires a two-pass approach
-                // (IR generation first, then symbol→file lookup for the C sources hash).
-                let pal_platform = pal_platform_for_target(
-                    options.c_defs.target.as_deref().unwrap_or("x86_64-unknown-linux-gnu"),
-                );
-                for directory in ["runtime", "pal/core"].iter().chain(std::iter::once(&pal_platform)) {
-                    super::toolchain::collect_c_files(&runtime_base.join(directory), &mut files)
-                        .map_err(|err| {
-                            MireError::new(ErrorKind::Runtime {
-                                span: crate::error::Span::unknown(),
-                                message: format!("Could not collect C sources from {directory}: {err}"),
-                            })
-                        })?;
-                }
+                // Minimal tier: collect only runtime sources (PAL added on demand).
+                // After IR generation, R3.2 filters runtime .c to only needed files,
+                // and adds PAL .c files only if the program uses PAL symbols.
+                // The full hash is kept for conservative cache invalidation.
+                super::toolchain::collect_c_files(&runtime_base.join("runtime"), &mut files)
+                    .map_err(|err| {
+                        MireError::new(ErrorKind::Runtime {
+                            span: crate::error::Span::unknown(),
+                            message: format!("Could not collect C sources from runtime: {err}"),
+                        })
+                    })?;
             }
         }
         for proj_src in &options.c_defs.sources {
@@ -403,20 +400,81 @@ fn compile_file_inner(
             (ir, extern_libs)
         }
     };
+    // Scan IR for used symbols (used for both tier enforcement and selective .c compilation).
+    let used = collect_used_symbols(&ir);
     // Enforce runtime tier contract: runtime="none" means no rt_* calls are allowed.
-    {
-        let used = crate::avens::build_support::collect_used_symbols(&ir);
-        if matches!(options.c_defs.runtime, RuntimeTier::None) && !used.runtime.is_empty() {
-            let mut symbols: Vec<&str> = used.runtime.iter().map(|s| s.as_str()).collect();
-            symbols.sort();
-            return Err(MireError::new(ErrorKind::Runtime {
-                span: crate::error::Span::unknown(),
-                message: format!(
-                    "runtime = \"none\" but program uses runtime symbols: {}. \
-                     Set [c] runtime = \"minimal\" or \"full\", or remove these dependencies.",
-                    symbols.join(", ")
-                ),
-            }));
+    if matches!(options.c_defs.runtime, RuntimeTier::None) && !used.runtime.is_empty() {
+        let mut symbols: Vec<&str> = used.runtime.iter().map(|s| s.as_str()).collect();
+        symbols.sort();
+        return Err(MireError::new(ErrorKind::Runtime {
+            span: crate::error::Span::unknown(),
+            message: format!(
+                "runtime = \"none\" but program uses runtime symbols: {}. \
+                 Set [c] runtime = \"minimal\" or \"full\", or remove these dependencies.",
+                symbols.join(", ")
+            ),
+        }));
+    }
+    // R3.2 — Selective .c compilation for minimal tier:
+    // After IR generation, we know which runtime and PAL symbols are actually used.
+    // Filter runtime c_source_files to only needed files, and add PAL files on demand.
+    // The c_sources_hash was computed from ALL runtime files (conservative fingerprint).
+    if matches!(options.c_defs.runtime, RuntimeTier::Minimal) && !c_source_files.is_empty() {
+        let needed = minimal_runtime_c_files(&used.runtime);
+        let before = c_source_files.len();
+        // Filter: keep only runtime files that are needed
+        c_source_files.retain(|path| {
+            let fname = std::path::Path::new(path)
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned();
+            needed.contains(&fname)
+        });
+        // Add PAL files on demand: only if the program uses PAL symbols
+        if !used.pal.is_empty() {
+            let pal_platform = pal_platform_for_target(
+                options.c_defs.target.as_deref().unwrap_or("x86_64-unknown-linux-gnu"),
+            );
+            let pal_dirs: Vec<&str> = ["pal/core"].iter().chain(std::iter::once(&pal_platform)).copied().collect();
+            for directory in &pal_dirs {
+                let dir = runtime_base.join(directory);
+                if let Ok(entries) = std::fs::read_dir(&dir) {
+                    for entry in entries.flatten() {
+                        let p = entry.path();
+                        if p.extension().is_some_and(|e| e == "c") {
+                            c_source_files.push(p.to_string_lossy().into_owned());
+                        }
+                    }
+                }
+            }
+        }
+        // Always keep user-declared [c] sources
+        for proj_src in &options.c_defs.sources {
+            let root = crate::avens::manifest::find_project_root(source_path)
+                .unwrap_or_else(|| std::path::PathBuf::from("."));
+            let p = if std::path::Path::new(proj_src).is_absolute() {
+                std::path::PathBuf::from(proj_src)
+            } else {
+                root.join(proj_src)
+            };
+            if p.exists() {
+                let path_str = p.to_string_lossy().into_owned();
+                if !c_source_files.contains(&path_str) {
+                    c_source_files.push(path_str);
+                }
+            }
+        }
+        c_source_files.sort();
+        c_source_files.dedup();
+        if options.debug_dump {
+            eprintln!(
+                "[R3.2] minimal tier: {} → {} .c files ({} used rt symbols, {} used pal symbols)",
+                before,
+                c_source_files.len(),
+                used.runtime.len(),
+                used.pal.len(),
+            );
         }
     }
     // Append runtime declarations and struct constructor functions (MIR codegen path)
@@ -561,6 +619,7 @@ fn compile_file_inner(
             }
             results
         };
+        let has_pal_objects = c_source_files.iter().any(|f| f.contains("pal/"));
         compile_binary_from_ir(
             &final_ir,
             &c_objects,
@@ -568,6 +627,7 @@ fn compile_file_inner(
             &extern_libs,
             options.opt_level,
             source_filename,
+            has_pal_objects,
         )?;
         let phase_link = build_start.elapsed().as_millis() as u64;
         progress_phase(

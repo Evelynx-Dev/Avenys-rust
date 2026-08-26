@@ -44,6 +44,13 @@ All notable changes to Mire are documented in this file.
   now detected on fn-level annotations (not just file_attributes).
   Linker flags (`-lm`, `-lssl`, `-lcrypto`, `-lsodium`) skipped for
   `RuntimeTier::None`. Verified: 15KB binary, only `libc` linked.
+- **R3.2 Selective .c compilation for minimal tier**: `runtime = "minimal"`
+  now filters both runtime and PAL C files to only those actually used.
+  A dependency graph resolves transitive C→C dependencies (e.g. `strings.c`
+  → `vecs.c` → `strings.c`). Linker flags for crypto libs
+  (`-lssl`, `-lcrypto`, `-lsodium`) are only passed when PAL .c files are
+  actually compiled. Verified: string-only program → 4 .c files (was 15),
+  links only `libm` + `libc`.
 
 ### Changed
 

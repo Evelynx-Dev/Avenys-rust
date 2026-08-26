@@ -849,19 +849,19 @@ pub(crate) fn collect_used_symbols(ir: &str) -> UsedSymbols {
     let mut used = UsedSymbols::default();
     for line in ir.lines() {
         let trimmed = line.trim();
-        // Match call instructions: `call ... @sym_name(`
-        if trimmed.starts_with("call") {
-            // Strip "call" prefix and find @ symbol
-            if let Some(rest) = trimmed.strip_prefix("call").map(str::trim) {
-                if let Some(at_pos) = rest.find('@') {
-                    let after_at = &rest[at_pos + 1..];
-                    if let Some(paren_pos) = after_at.find('(') {
-                        let sym = &after_at[..paren_pos];
-                        if sym.starts_with("pal_") {
-                            used.pal.insert(sym.to_string());
-                        } else if sym.starts_with("rt_") {
-                            used.runtime.insert(sym.to_string());
-                        }
+        // Match call instructions: `... call ... @sym_name(`
+        // This handles both tail-call form (`call ... @sym(`) and
+        // assignment form (`%r = call ptr @sym(...)`).
+        if let Some(call_pos) = trimmed.find(" call ") {
+            let rest = &trimmed[call_pos + 6..]; // skip " call "
+            if let Some(at_pos) = rest.find('@') {
+                let after_at = &rest[at_pos + 1..];
+                if let Some(paren_pos) = after_at.find('(') {
+                    let sym = &after_at[..paren_pos];
+                    if sym.starts_with("pal_") {
+                        used.pal.insert(sym.to_string());
+                    } else if sym.starts_with("rt_") {
+                        used.runtime.insert(sym.to_string());
                     }
                 }
             }
@@ -967,15 +967,52 @@ fn runtime_symbol_to_c_file(sym: &str) -> Option<&'static str> {
 
 /// Given a set of used runtime symbols, return the minimal set of C source files
 /// needed to satisfy them.  Always includes `managed.c` (memory management) and
-/// `safety.c` (panic) as safety baselines.
+/// `safety.c` (panic) as safety baselines.  Transitive C→C dependencies are
+/// resolved (e.g. `strings.c` needs `vecs.c` which needs `strings.c`).
 pub(crate) fn minimal_runtime_c_files(used_runtime: &HashSet<String>) -> Vec<String> {
+    // Map a symbol to its C file (order: more specific prefixes first).
+    fn sym_to_file(sym: &str) -> Option<&'static str> {
+        runtime_symbol_to_c_file(sym)
+    }
+
+    // C→C transitive dependency graph (directed, has a cycle: strings ↔ vecs).
+    // A file listed here needs all the files it points to.
+    fn c_deps(file: &str) -> &'static [&'static str] {
+        match file {
+            "strings.c" => &["vecs.c", "managed.c"],
+            "vecs.c" => &["strings.c", "managed.c", "safety.c"],
+            "maps.c" => &["vecs.c", "managed.c"],
+            "maps_internal.c" => &["managed.c"],
+            "math.c" => &["vecs.c"],
+            "random.c" => &[],
+            "mire_types.c" => &["strings.c", "managed.c", "safety.c"],
+            "helpers.c" => &["strings.c", "managed.c"],
+            "mire_io.c" => &["managed.c"],
+            "thread.c" => &[],
+            "safety.c" => &[],
+            "managed.c" => &[],
+            _ => &[],
+        }
+    }
+
     let mut needed: HashSet<String> = HashSet::new();
     // Always include managed and safety (core infrastructure)
     needed.insert("managed.c".to_string());
     needed.insert("safety.c".to_string());
+    // Add files directly needed by used symbols
     for sym in used_runtime {
-        if let Some(file) = runtime_symbol_to_c_file(sym) {
+        if let Some(file) = sym_to_file(sym) {
             needed.insert(file.to_string());
+        }
+    }
+    // Resolve transitive C→C dependencies (fixed-point iteration, max 4 passes
+    // because the longest chain is managed→strings→vecs→strings, stabilizes fast).
+    for _ in 0..4 {
+        let current: Vec<String> = needed.iter().cloned().collect();
+        for file in &current {
+            for &dep in c_deps(file) {
+                needed.insert(dep.to_string());
+            }
         }
     }
     let mut files: Vec<String> = needed.into_iter().collect();
