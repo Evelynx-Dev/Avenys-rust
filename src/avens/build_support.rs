@@ -923,3 +923,62 @@ pub(super) fn strip_unused_decls(ir: &str, used: &UsedSymbols) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
+
+/// Map a runtime symbol name to the C source file that provides it.
+/// Returns the filename (relative to `runtime/`) or `None` if unknown.
+fn runtime_symbol_to_c_file(sym: &str) -> Option<&'static str> {
+    // Order matters: more specific prefixes first.
+    if sym.starts_with("rt_math_random") {
+        Some("random.c")
+    } else if sym.starts_with("rt_math_") {
+        Some("math.c")
+    } else if sym.starts_with("rt_maybe_") || sym.starts_with("rt_result_") || sym.starts_with("rt_arr_") {
+        Some("mire_types.c")
+    } else if sym.starts_with("rt_managed_") || sym.starts_with("rt_panic") {
+        Some("managed.c")
+    } else if sym.starts_with("rt_check_bounds") {
+        Some("safety.c")
+    } else if sym.starts_with("rt_list_") || sym.starts_with("rt_lists_") || sym.starts_with("rt_vecs_") {
+        Some("vecs.c")
+    } else if sym.starts_with("rt_dict_") || sym.starts_with("rt_dicts_") || sym.starts_with("rt_maps_") {
+        Some("maps.c")
+    } else if sym.starts_with("rt_string_") || sym.starts_with("rt_strings_")
+        || sym.starts_with("rt_i64_to_string") || sym.starts_with("rt_i128_to_string")
+        || sym.starts_with("rt_u128_to_string") || sym.starts_with("rt_f64_to_string")
+        || sym.starts_with("rt_f32_to_string") || sym.starts_with("rt_bool_to_string")
+        || sym.starts_with("rt_unicode_") || sym.starts_with("rt_managed_from")
+        || sym.starts_with("rt_managed_ensure")
+    {
+        Some("strings.c")
+    } else if sym.starts_with("rt_closure_env") {
+        Some("safety.c")
+    } else if sym.starts_with("rt_hex_to_file") || sym.starts_with("rt_free_raw")
+        || sym.starts_with("rt_blend_") || sym.starts_with("rt_read_") || sym.starts_with("rt_write_")
+    {
+        Some("helpers.c")
+    } else if sym.starts_with("rt_thread_") {
+        Some("thread.c")
+    } else if sym.starts_with("rt_get_args") || sym.starts_with("rt_free_argv") {
+        Some("helpers.c")
+    } else {
+        None
+    }
+}
+
+/// Given a set of used runtime symbols, return the minimal set of C source files
+/// needed to satisfy them.  Always includes `managed.c` (memory management) and
+/// `safety.c` (panic) as safety baselines.
+pub(crate) fn minimal_runtime_c_files(used_runtime: &HashSet<String>) -> Vec<String> {
+    let mut needed: HashSet<String> = HashSet::new();
+    // Always include managed and safety (core infrastructure)
+    needed.insert("managed.c".to_string());
+    needed.insert("safety.c".to_string());
+    for sym in used_runtime {
+        if let Some(file) = runtime_symbol_to_c_file(sym) {
+            needed.insert(file.to_string());
+        }
+    }
+    let mut files: Vec<String> = needed.into_iter().collect();
+    files.sort();
+    files
+}

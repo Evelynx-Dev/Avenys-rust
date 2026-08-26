@@ -82,8 +82,10 @@ fn compile_file_inner(
                         })?;
                 }
             } else {
-                // Minimal tier: compile PAL sources only (runtime is demand-driven)
-                for directory in ["pal/core", "pal/linux"] {
+                // Minimal tier: compile PAL + all runtime sources.
+                // TODO: selective runtime .c compilation requires a two-pass approach
+                // (IR generation first, then symbol→file lookup for the C sources hash).
+                for directory in ["runtime", "pal/core", "pal/linux"] {
                     super::toolchain::collect_c_files(&runtime_base.join(directory), &mut files)
                         .map_err(|err| {
                             MireError::new(ErrorKind::Runtime {
