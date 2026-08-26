@@ -40,6 +40,10 @@ All notable changes to Mire are documented in this file.
   cross-compilation (e.g. `[c] target = "aarch64-unknown-linux-gnu"`).
   PAL platform directory is auto-selected from the target triple
   (`pal/linux`, `pal/darwin`, `pal/windows`, `pal/freebsd`).
+- **Freestanding mode fix** (`runtime = "none"`): `@[no_main]` attribute
+  now detected on fn-level annotations (not just file_attributes).
+  Linker flags (`-lm`, `-lssl`, `-lcrypto`, `-lsodium`) skipped for
+  `RuntimeTier::None`. Verified: 15KB binary, only `libc` linked.
 
 ### Changed
 
