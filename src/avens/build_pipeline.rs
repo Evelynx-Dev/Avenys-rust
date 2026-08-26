@@ -64,14 +64,35 @@ fn compile_file_inner(
     set_c_defs(options.c_defs.clone());
     let (c_source_files, c_sources_hash) = if options.emit_binary {
         let mut files = Vec::new();
-        for directory in ["runtime", "pal/core", "pal/linux"] {
-            super::toolchain::collect_c_files(&runtime_base.join(directory), &mut files)
-                .map_err(|err| {
-                    MireError::new(ErrorKind::Runtime {
-                        span: crate::error::Span::unknown(),
-                        message: format!("Could not collect C sources from {directory}: {err}"),
-                    })
-                })?;
+        // Tier-aware C file collection:
+        //   full:    compile all runtime + PAL C sources (backward-compatible)
+        //   minimal: compile PAL C sources only (runtime is demand-driven at IR level)
+        //   none:    compile no runtime/PAL C sources (freestanding; user provides their own)
+        let runtime_tier = options.c_defs.runtime;
+        if !matches!(runtime_tier, RuntimeTier::None) {
+            if matches!(runtime_tier, RuntimeTier::Full) {
+                // Full tier: compile all runtime and PAL sources
+                for directory in ["runtime", "pal/core", "pal/linux"] {
+                    super::toolchain::collect_c_files(&runtime_base.join(directory), &mut files)
+                        .map_err(|err| {
+                            MireError::new(ErrorKind::Runtime {
+                                span: crate::error::Span::unknown(),
+                                message: format!("Could not collect C sources from {directory}: {err}"),
+                            })
+                        })?;
+                }
+            } else {
+                // Minimal tier: compile PAL sources only (runtime is demand-driven)
+                for directory in ["pal/core", "pal/linux"] {
+                    super::toolchain::collect_c_files(&runtime_base.join(directory), &mut files)
+                        .map_err(|err| {
+                            MireError::new(ErrorKind::Runtime {
+                                span: crate::error::Span::unknown(),
+                                message: format!("Could not collect C sources from {directory}: {err}"),
+                            })
+                        })?;
+                }
+            }
         }
         for proj_src in &options.c_defs.sources {
             let root = crate::avens::manifest::find_project_root(source_path)
@@ -358,6 +379,22 @@ fn compile_file_inner(
             (ir, extern_libs)
         }
     };
+    // Enforce runtime tier contract: runtime="none" means no rt_* calls are allowed.
+    {
+        let used = crate::avens::build_support::collect_used_symbols(&ir);
+        if matches!(options.c_defs.runtime, RuntimeTier::None) && !used.runtime.is_empty() {
+            let mut symbols: Vec<&str> = used.runtime.iter().map(|s| s.as_str()).collect();
+            symbols.sort();
+            return Err(MireError::new(ErrorKind::Runtime {
+                span: crate::error::Span::unknown(),
+                message: format!(
+                    "runtime = \"none\" but program uses runtime symbols: {}. \
+                     Set [c] runtime = \"minimal\" or \"full\", or remove these dependencies.",
+                    symbols.join(", ")
+                ),
+            }));
+        }
+    }
     // Append runtime declarations and struct constructor functions (MIR codegen path)
     {
         let runtime_decls = generate_runtime_declarations(&ir);
@@ -400,7 +437,9 @@ fn compile_file_inner(
             }
         }
         // Add @main entry point wrapper if the program defines @fn_main
-        if ir.contains("define") && ir.contains("@fn_main") && !ir.contains("define i32 @main(") {
+        // Respect @[no_main] file attribute to skip wrapper generation (freestanding mode)
+        let has_no_main = program.file_attributes.iter().any(|a| a.name == "no_main");
+        if !has_no_main && ir.contains("define") && ir.contains("@fn_main") && !ir.contains("define i32 @main(") {
             ir.push_str("\n\ndefine i32 @main(i32 %argc, ptr %argv) {\n");
             ir.push_str("  store i32 %argc, ptr @.argc\n");
             ir.push_str("  store ptr %argv, ptr @.argv\n");

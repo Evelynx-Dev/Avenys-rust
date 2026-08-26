@@ -20,6 +20,10 @@ fn try_fold(inst: &MirInst) -> Option<MirConst> {
     use MirOp::*;
     match &inst.op {
         Add(MirValue::Const(a), MirValue::Const(b)) => {
+            // String concatenation constant folding: "foo" + "bar" = "foobar"
+            if let (MirConst::Str(s1), MirConst::Str(s2)) = (a, b) {
+                return Some(MirConst::Str(format!("{}{}", s1, s2)));
+            }
             binop_const(a, b, |x, y| x + y, |x, y| x + y)
         }
         Sub(MirValue::Const(a), MirValue::Const(b)) => {

@@ -16,8 +16,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 mod build_pipeline;
-mod build_support;
-mod config;
+pub(crate) mod build_support;
+pub(crate) mod config;
 mod manifest;
 mod reuse;
 mod toolchain;
@@ -25,7 +25,8 @@ pub use build_pipeline::{compile_file_with_avenys, default_output_dir};
 pub use config::{
     BootstrapConfig, BuildMode, BuildOptions, BuildResult, CDefs, ExportsSection, ImportMode,
     MireCacheConfig, MireDependencies, MireDependency, MireLock, MireLockBuild, MireLockProject,
-    MireMacros, MireManifest, MireProject, OptLevel, SecurityConfig, SecurityMode, TrustTier,
+    MireMacros, MireManifest, MireProject, OptLevel, RuntimeTier, SecurityConfig, SecurityMode,
+    TrustTier,
 };
 pub use manifest::{
     check_entry_containment, find_project_root, load_exports, load_manifest_dependencies,
@@ -34,3 +35,6 @@ pub use manifest::{
 };
 use reuse::prepare_program_with_partial_analysis_reuse;
 use toolchain::{compile_binary_from_ir, optimize_ir};
+
+// Re-export dependency collector functions for codegen
+pub(crate) use build_support::{collect_used_symbols, filter_pal_decls};

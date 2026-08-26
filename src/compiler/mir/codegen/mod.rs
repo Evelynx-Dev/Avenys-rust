@@ -8,6 +8,8 @@ use self::resolve::resolve_typed;
 use self::types::llvm_type_str;
 use self::wrapper::{collect_used_extern_wrappers, generate_extern_wrapper};
 
+use crate::avens::{collect_used_symbols, filter_pal_decls};
+
 pub(crate) mod builtins;
 pub(crate) mod expr;
 pub(crate) mod resolve;
@@ -30,7 +32,7 @@ pub(crate) struct LlvmCtx<'a> {
     /// Maps extern function name -> its mire-wrapper LLVM name (e.g. "abs" -> "@fn_abs_wrapper").
     extern_wrapper_names: HashMap<String, String>,
     struct_types: &'a HashMap<String, Vec<(String, DataType)>>,
-    pub(crate) source_filename: String,
+    pub(crate)     _source_filename: String,
 }
 
 pub fn mir_to_llvm(program: &MirProgram) -> (String, Vec<(String, String)>) {
@@ -85,7 +87,7 @@ pub fn mir_to_llvm_with_filename(program: &MirProgram, source_filename: &str) ->
         extern_fn_names,
         extern_wrapper_names,
         struct_types: &program.struct_types,
-        source_filename: source_filename.to_string(),
+        _source_filename: source_filename.to_string(),
     };
     for func in &program.functions {
         let func_ir = compile_function_to_llvm(func, &mut ctx);
@@ -108,7 +110,11 @@ pub fn mir_to_llvm_with_filename(program: &MirProgram, source_filename: &str) ->
     out.push("target triple = \"x86_64-unknown-linux-gnu\"".to_string());
     out.push(String::new());
     out.extend(extern_decls);
-    out.extend(pal_extern_decls());
+    // Unified dependency collector: scan IR for used symbols, emit only needed declarations.
+    // In `full` mode we still emit everything for backward-compatibility.
+    let used = collect_used_symbols(&out.join("\n"));
+    let runtime_tier = crate::avens::build_support::c_defs().runtime;
+    out.extend(filter_pal_decls(&used.pal, runtime_tier));
     out.push(String::new());
     for (name, ty) in &program.globals {
         out.push(format!("@{} = global {} zeroinitializer", name, llvm_type_str(ty)));

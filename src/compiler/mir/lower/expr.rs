@@ -12,6 +12,14 @@ fn is_float_dt(t: &DataType) -> bool {
     matches!(t, DataType::F32 | DataType::F64)
 }
 
+/// Returns true if both operands of a binary / or % are integer types
+/// (i.e. the operation should be lowered with a div-by-zero check instead of fdiv/frem).
+fn is_int_division(left: &Expression, right: &Expression) -> bool {
+    let lt = extract_data_type(left);
+    let rt = extract_data_type(right);
+    !is_float_dt(&lt) && !is_float_dt(&rt)
+}
+
 impl MirLower {
 
     pub(crate) fn lower_call_args(&mut self, name: &str, args: &[Expression]) -> Vec<MirValue> {
@@ -155,6 +163,70 @@ impl MirLower {
             } => {
                 let l = self.lower_expression(left);
                 let r = self.lower_expression(right);
+
+                // Inline integer division/remainder: check div-by-zero + overflow at MIR level
+                // instead of calling rt_div_i64/rt_rem_i64. Float division is untouched.
+                if (operator == "/" || operator == "%") && is_int_division(left, right) {
+                    let pre_check = self.current_block;
+
+                    // Panic message (resolved from the operator)
+                    let panic_msg = if operator == "/" {
+                        "division by zero"
+                    } else {
+                        "remainder by zero"
+                    };
+
+                    // Create blocks: div_ok, div_panic, div_cont
+                    let ok_block = self.new_block("div_ok");
+                    let panic_block = self.new_block("div_panic");
+                    let cont_block = self.new_block("div_cont");
+
+                    // Check: r == 0
+                    let is_zero = self.new_temp();
+                    self.func.blocks[pre_check].push(
+                        Some(is_zero),
+                        MirOp::ICmp(MirCmp::Eq, r.clone(), MirValue::Const(MirConst::Int(0))),
+                        loc,
+                    );
+                    self.func.blocks[pre_check].terminator =
+                        MirTerminator::BrCond(MirValue::temp(is_zero), panic_block, ok_block);
+
+                    // Panic block: call rt_panic_loc then unreachable
+                    self.current_block = panic_block;
+                    self.func.blocks[panic_block].push(
+                        None,
+                        MirOp::Call(
+                            MirValue::Global("rt_panic_loc".to_string()),
+                            vec![
+                                MirValue::Const(MirConst::Str(panic_msg.to_string())),
+                                MirValue::Const(MirConst::Int(loc.0 as i64)),
+                                MirValue::Const(MirConst::Int(loc.1 as i64)),
+                                MirValue::Const(MirConst::Str(self.filename.clone())),
+                            ],
+                            MirType {
+                                data_type: DataType::None,
+                            },
+                        ),
+                        loc,
+                    );
+                    self.func.blocks[panic_block].terminator = MirTerminator::Unreachable;
+
+                    // OK block: native sdiv/srem
+                    self.current_block = ok_block;
+                    let result = self.new_temp();
+                    let op = if operator == "/" {
+                        MirOp::SDiv(l, r)
+                    } else {
+                        MirOp::SRem(l, r)
+                    };
+                    self.func.blocks[ok_block].push(Some(result), op, loc);
+                    self.func.blocks[ok_block].terminator = MirTerminator::Br(cont_block);
+
+                    // Continue block: result is available here
+                    self.current_block = cont_block;
+                    return MirValue::temp(result);
+                }
+
                 let result = self.new_temp();
                 let mir_op = match operator.as_str() {
                     "+" => MirOp::Add(l, r),
@@ -273,6 +345,19 @@ impl MirLower {
             Expression::Call { name, args, .. } if name == "len" && !args.is_empty() => {
                 let arg_val = self.lower_expression(&args[0]);
                 let arg_type = extract_data_type(&args[0]);
+                // Constant folding: if len() is called on a string literal, emit the length directly.
+                if let MirValue::Const(MirConst::Str(s)) = &arg_val {
+                    if matches!(arg_type, DataType::Str | DataType::Ref { .. } | DataType::RefMut { .. }) {
+                        let len = s.len() as i64;
+                        let result = self.new_temp();
+                        self.func.blocks[self.current_block].push(
+                            Some(result),
+                            MirOp::Copy(MirValue::Const(MirConst::Int(len))),
+                            loc,
+                        );
+                        return MirValue::temp(result);
+                    }
+                }
                 let rt_name = match arg_type {
                     DataType::Str | DataType::Ref { .. } | DataType::RefMut { .. } => {
                         "rt_strings_len"

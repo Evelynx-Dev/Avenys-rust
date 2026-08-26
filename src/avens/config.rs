@@ -104,7 +104,7 @@ pub struct MireManifest {
     pub c: CDefs,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CDefs {
     #[serde(default)]
     pub sources: Vec<String>,
@@ -114,6 +114,21 @@ pub struct CDefs {
     pub cflags: Vec<String>,
     #[serde(default)]
     pub libs: Vec<String>,
+    /// Runtime tier: full (default) | minimal (demand-driven) | none (freestanding).
+    #[serde(default)]
+    pub runtime: RuntimeTier,
+}
+
+impl Default for CDefs {
+    fn default() -> Self {
+        Self {
+            sources: Vec::new(),
+            include: Vec::new(),
+            cflags: Vec::new(),
+            libs: Vec::new(),
+            runtime: RuntimeTier::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -126,6 +141,21 @@ pub struct ExportsSection {
 pub struct MireMacros {
     #[serde(flatten)]
     pub entries: HashMap<String, String>,
+}
+
+/// Controls how much of the Mire runtime is linked into the final binary.
+/// - `full`:  every runtime and PAL symbol is available (default, backward-compatible).
+/// - `minimal`: only symbols actually referenced in the program are declared and linked.
+/// - `none`:  no Mire runtime at all; the program must provide its own panic handler
+///            and any PAL symbols it needs.  PAL declarations are still emitted when
+///            the program actually calls PAL functions (PAL is separate from the runtime).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum RuntimeTier {
+    #[default]
+    Full,
+    Minimal,
+    None,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]

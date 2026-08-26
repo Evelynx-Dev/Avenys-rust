@@ -1,7 +1,7 @@
 use super::builtins::{builtin_to_pal, compile_pal_builtin};
 use super::resolve::{coerce_to, coerce_to_bool, resolve_named_call, resolve_typed};
 use super::types::{llvm_type_str, render_struct_llvm_type};
-use super::{const_str, sanitize_fn_name, LlvmCtx, tmp_extra, tmp_result};
+use super::{sanitize_fn_name, LlvmCtx, tmp_extra, tmp_result};
 use crate::compiler::mir::{DataType, MirCmp, MirConst, MirInst, MirOp, MirValue};
 
 /// Resolves the common floating-point result type for a binary operation.
@@ -146,13 +146,7 @@ pub(crate) fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
             if is_float {
                 format!("%t{} = fdiv double {}, {}", result, l_final, r_final)
             } else {
-                let line = inst.loc.0 as i64;
-                let col = inst.loc.1 as i64;
-                let file = const_str(&MirConst::Str(ctx.source_filename.clone()), ctx);
-                format!(
-                    "%t{} = call i64 @rt_div_i64(i64 {}, i64 {}, i64 {}, i64 {}, ptr {})",
-                    result, l_final, r_final, line, col, file
-                )
+                format!("%t{} = sdiv i64 {}, {}", result, l_final, r_final)
             }
         }
         MirOp::SRem(l, r) => {
@@ -166,13 +160,7 @@ pub(crate) fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
             if is_float {
                 format!("%t{} = frem double {}, {}", result, l_final, r_final)
             } else {
-                let line = inst.loc.0 as i64;
-                let col = inst.loc.1 as i64;
-                let file = const_str(&MirConst::Str(ctx.source_filename.clone()), ctx);
-                format!(
-                    "%t{} = call i64 @rt_rem_i64(i64 {}, i64 {}, i64 {}, i64 {}, ptr {})",
-                    result, l_final, r_final, line, col, file
-                )
+                format!("%t{} = srem i64 {}, {}", result, l_final, r_final)
             }
         }
         MirOp::Shl(l, r) => {

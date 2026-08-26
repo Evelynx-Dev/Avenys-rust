@@ -13,7 +13,7 @@ pub(super) fn set_c_defs(d: CDefs) {
     let _ = C_EXTRA.set(d);
 }
 
-pub(super) fn c_defs() -> &'static CDefs {
+pub(crate) fn c_defs() -> &'static CDefs {
     C_EXTRA.get_or_init(CDefs::default)
 }
 
@@ -814,4 +814,112 @@ fn resolve_macro_file(root: &std::path::Path, rel_path: &str) -> Option<std::pat
     }
     let mod_file = candidate.join("mod.mire");
     check(&mod_file)
+}
+
+// ── Dependency Collector ──────────────────────────────────────────────────────
+// Unified dependency collector: scans the generated LLVM IR and returns the set
+// of PAL and runtime symbols that are actually called by the program.
+//
+// This replaces the two previous mechanisms:
+//   pal_extern_decls()        → emitted ALL ~150 PAL/runtime declarations
+//   generate_runtime_declarations() → emitted only used rt_* declarations
+//
+// The collector is a single-pass scan over the IR text looking for `call @pal_*`
+// and `call @rt_*` patterns.  The results are used to:
+//   1. Filter pal_extern_decls() to emit only used PAL declarations
+//   2. Determine which C source files to compile (tier-aware)
+//   3. Enforce the tier contract (none = no rt_* calls allowed)
+//
+// Runtime and PAL are separate concerns:
+//   Runtime = language features (rt_div_i64, rt_string_concat, rt_bounds_fail, ...)
+//   PAL     = host interaction (pal_file_open, pal_proc_create, pal_channel_send, ...)
+// A program can use PAL without the runtime, or the runtime without PAL.
+
+use std::collections::HashSet;
+
+#[derive(Debug, Clone, Default)]
+pub struct UsedSymbols {
+    pub runtime: HashSet<String>,
+    pub pal: HashSet<String>,
+}
+
+/// Scan the IR for `call @sym_name(...)` patterns and collect all used symbols.
+/// Returns a set of (runtime, pal) symbol names that are actually invoked.
+pub(crate) fn collect_used_symbols(ir: &str) -> UsedSymbols {
+    let mut used = UsedSymbols::default();
+    for line in ir.lines() {
+        let trimmed = line.trim();
+        // Match call instructions: `call ... @sym_name(`
+        if trimmed.starts_with("call") {
+            // Strip "call" prefix and find @ symbol
+            if let Some(rest) = trimmed.strip_prefix("call").map(str::trim) {
+                if let Some(at_pos) = rest.find('@') {
+                    let after_at = &rest[at_pos + 1..];
+                    if let Some(paren_pos) = after_at.find('(') {
+                        let sym = &after_at[..paren_pos];
+                        if sym.starts_with("pal_") {
+                            used.pal.insert(sym.to_string());
+                        } else if sym.starts_with("rt_") {
+                            used.runtime.insert(sym.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    used
+}
+
+/// Filter `pal_extern_decls()` to emit only declarations for symbols that appear
+/// in the `used_pal` set.  When `runtime_tier` is `Minimal` or `None`, this is
+/// the only source of PAL declarations.  When `Full`, all declarations are emitted
+/// regardless (backward-compatible).
+pub(crate) fn filter_pal_decls(used_pal: &HashSet<String>, runtime_tier: crate::avens::config::RuntimeTier) -> Vec<String> {
+    use crate::avens::config::RuntimeTier;
+    let all = crate::compiler::mir::codegen::builtins::pal_extern_decls();
+    if matches!(runtime_tier, RuntimeTier::Full) {
+        return all;
+    }
+    all.into_iter()
+        .filter(|decl| {
+            // Extract the symbol name from `declare ... @sym_name(...)`
+            if let Some(at_pos) = decl.find('@') {
+                let rest = &decl[at_pos + 1..];
+                if let Some(paren_pos) = rest.find('(') {
+                    let sym = &rest[..paren_pos];
+                    // Include the symbol if it's used, or if it's a runtime helper
+                    // (runtime helpers are always needed when the program uses rt_* functions)
+                    return used_pal.contains(sym) || sym.starts_with("rt_");
+                }
+            }
+            false
+        })
+        .collect()
+}
+
+/// Strip unused PAL and runtime declarations from the IR.
+/// This is used post-generation to remove dead declarations that were emitted
+/// before the dependency collector ran (e.g., from the old `pal_extern_decls()` call).
+pub(super) fn strip_unused_decls(ir: &str, used: &UsedSymbols) -> String {
+    ir.lines()
+        .filter(|line| {
+            let trimmed = line.trim();
+            // Keep non-declaration lines
+            if !trimmed.starts_with("declare") {
+                return true;
+            }
+            // Extract the symbol name from `declare ... @sym_name(...)`
+            if let Some(at_pos) = trimmed.find('@') {
+                let rest = &trimmed[at_pos + 1..];
+                if let Some(paren_pos) = rest.find('(') {
+                    let sym = &rest[..paren_pos];
+                    // Keep the declaration if the symbol is used
+                    return used.runtime.contains(sym) || used.pal.contains(sym);
+                }
+            }
+            // Keep unknown declarations (safety net)
+            true
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }

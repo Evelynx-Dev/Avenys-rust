@@ -339,6 +339,9 @@ impl MirLower {
                 self.current_block = cond_block;
 
                 let cond = self.lower_expression(condition);
+                // The condition expression may have created intermediate blocks
+                // (e.g. division inline). Use the final block as the condition branch source.
+                let cond_branch_block = self.current_block;
 
                 let body_block = self.new_block("while_body");
                 let end_block = self.new_block("while_end");
@@ -357,7 +360,7 @@ impl MirLower {
                     self.func.blocks[self.current_block].terminator = MirTerminator::Br(cond_block);
                 }
 
-                self.func.blocks[cond_block].terminator =
+                self.func.blocks[cond_branch_block].terminator =
                     MirTerminator::BrCond(cond, body_block, end_block);
                 self.func.blocks[pre_while_block].terminator = MirTerminator::Br(cond_block);
                 self.current_block = end_block;
