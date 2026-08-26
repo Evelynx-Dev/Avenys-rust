@@ -117,6 +117,10 @@ pub struct CDefs {
     /// Runtime tier: full (default) | minimal (demand-driven) | none (freestanding).
     #[serde(default)]
     pub runtime: RuntimeTier,
+    /// LLVM target triple override (e.g. "aarch64-unknown-linux-gnu").
+    /// If omitted, defaults to the host triple.
+    #[serde(default)]
+    pub target: Option<String>,
 }
 
 impl Default for CDefs {
@@ -127,6 +131,7 @@ impl Default for CDefs {
             cflags: Vec::new(),
             libs: Vec::new(),
             runtime: RuntimeTier::default(),
+            target: None,
         }
     }
 }

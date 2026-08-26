@@ -12,6 +12,22 @@ use super::build_support::{
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
+/// Map a target triple to the PAL platform directory name.
+/// Falls back to "linux" for unknown targets (backward-compatible).
+fn pal_platform_for_target(target: &str) -> &'static str {
+    if target.contains("linux") {
+        "pal/linux"
+    } else if target.contains("darwin") || target.contains("apple") {
+        "pal/darwin"
+    } else if target.contains("windows") || target.contains("mingw") {
+        "pal/windows"
+    } else if target.contains("freebsd") {
+        "pal/freebsd"
+    } else {
+        "pal/linux"
+    }
+}
+
 pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> Result<BuildResult> {
     let source = fs::read_to_string(source_path).map_err(|err| {
         crate::error::MireError::runtime(format!(
@@ -72,7 +88,10 @@ fn compile_file_inner(
         if !matches!(runtime_tier, RuntimeTier::None) {
             if matches!(runtime_tier, RuntimeTier::Full) {
                 // Full tier: compile all runtime and PAL sources
-                for directory in ["runtime", "pal/core", "pal/linux"] {
+                let pal_platform = pal_platform_for_target(
+                    options.c_defs.target.as_deref().unwrap_or("x86_64-unknown-linux-gnu"),
+                );
+                for directory in ["runtime", "pal/core"].iter().chain(std::iter::once(&pal_platform)) {
                     super::toolchain::collect_c_files(&runtime_base.join(directory), &mut files)
                         .map_err(|err| {
                             MireError::new(ErrorKind::Runtime {
@@ -85,7 +104,10 @@ fn compile_file_inner(
                 // Minimal tier: compile PAL + all runtime sources.
                 // TODO: selective runtime .c compilation requires a two-pass approach
                 // (IR generation first, then symbol→file lookup for the C sources hash).
-                for directory in ["runtime", "pal/core", "pal/linux"] {
+                let pal_platform = pal_platform_for_target(
+                    options.c_defs.target.as_deref().unwrap_or("x86_64-unknown-linux-gnu"),
+                );
+                for directory in ["runtime", "pal/core"].iter().chain(std::iter::once(&pal_platform)) {
                     super::toolchain::collect_c_files(&runtime_base.join(directory), &mut files)
                         .map_err(|err| {
                             MireError::new(ErrorKind::Runtime {

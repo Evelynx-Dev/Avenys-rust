@@ -107,7 +107,11 @@ pub fn mir_to_llvm_with_filename(program: &MirProgram, source_filename: &str) ->
     let strings = ctx.strings;
 
     let mut out = Vec::new();
-    out.push("target triple = \"x86_64-unknown-linux-gnu\"".to_string());
+    let target_triple = crate::avens::build_support::c_defs()
+        .target
+        .clone()
+        .unwrap_or_else(|| "x86_64-unknown-linux-gnu".to_string());
+    out.push(format!("target triple = \"{}\"", target_triple));
     out.push(String::new());
     out.extend(extern_decls);
     // Unified dependency collector: scan IR for used symbols, emit only needed declarations.
