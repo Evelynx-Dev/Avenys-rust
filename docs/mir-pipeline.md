@@ -45,7 +45,7 @@ closure bodies.
 | If/else | Done |
 | While loops | Done |
 | For loops (with optional index variable) | Done (lowered to while-loop with counter) |
-| Binary ops (+, -, *, /, ==, !=, <, <=, >, >=, &&, \|\|) | Done |
+| Binary ops (+, -, *, /, ==, !=, <, <=, >, >=, &&, \|\|) | Done (integer / and % inlined with div-by-zero check at MIR level; native sdiv/srem in codegen) |
 | Unary ops (-, !) | Done |
 | Function calls (user + builtins) | Done (builtins emit as regular calls) |
 | Method calls (instance dispatch) | Done (resolves via `method_map`, prepends receiver) |
@@ -55,7 +55,7 @@ closure bodies.
 | Literals (int, float, bool, char, str) | Done |
 | Variable references | Done (type-aware Load via `var_types`) |
 | Extern functions | Done (collected as `MirExternFunction`; wrappers generated on demand in codegen)
-| Index expressions (array/map read) | Done (GEP + Load) |
+| Index expressions (array/map read) | Done (GEP + Load; bounds checks inlined at MIR level with ICMP + BrCond + panic block) |
 | Index assignment (array/map write) | Done (GEP + Store) |
 | Member access (struct field read) | Done (GEP + Load via struct metadata) |
 | Member assignment (struct field write) | Done (load heap ptr + GEP + Store) |
@@ -99,7 +99,7 @@ Returns LLVM IR text + extern libs (currently always empty).
 | Function defs with typed params | Done |
 | Alloca for locals | Done |
 | Load/Store with correct types | Done |
-| Integer arithmetic (add, sub, mul, sdiv, shl) | Done |
+| Integer arithmetic (add, sub, mul, sdiv, shl) | Done (sdiv/srem emitted as native LLVM `sdiv`/`srem`; zero check handled at MIR level) |
 | Float arithmetic (fadd, fsub, fmul, fdiv) | Done |
 | Mixed-type arithmetic (coerce i64→double via sitofp) | Done |
 | Integer comparison (icmp) | Done |
@@ -148,7 +148,7 @@ Returns total number of applied transformations.
 
 | Optimization | Description |
 |---|---|
-| **Constant folding** | `Add(Const(1), Const(2))` → `Copy(Int(3))` for Add/Sub/Mul/SDiv/Shl/ICmp/FCmp/ZExt |
+| **Constant folding** | `Add(Const(1), Const(2))` → `Copy(Int(3))` for Add/Sub/Mul/SDiv/Shl/ICmp/FCmp/ZExt; string concat: `"foo" + "bar"` → `"foobar"` |
 | **Algebraic simplification** | Identity/sink eliminations: `x+0`, `0+x`, `x*1`, `1*x`, `x*0`, `0*x`, `x-0`, `x-x`, `x/1`, `ICmp(Eq, x, x)`→true |
 | **Strength reduction** | `Mul(x, Const(2^k))` → `Shl(x, Const(k))` (power-of-2 constants only) |
 | **Copy propagation** | `t1 = Copy(v); t2 = Add(t1, ...)` → `t2 = Add(v, ...)`. Transitive: `t2 = Copy(t1); t3 = Add(t2, ...)` → `Add(v, ...)` |
@@ -172,6 +172,15 @@ Returns total number of applied transformations.
 
 - **Default**: MIR pipeline is the only codegen path; there is no alternative backend.
 - **Runtime helpers**: C runtime files in `src/runtime/` and `src/pal/<pal>/*.c`
+- **RuntimeTier**: The `[c] runtime` setting in `owl.toml` controls which C sources
+  are compiled. `Full` compiles all; `Minimal` compiles all but emits only used
+  declarations; `None` compiles no runtime/PAL C (freestanding). The dependency
+  collector scans the generated IR for `call @pal_*`/`call @rt_*` patterns to
+  determine which declarations are needed.
+- **Inlined safety checks**: Division-by-zero and array bounds checks are inlined
+  at the MIR level as multi-block branching (ICmp + BrCond + panic block calling
+  `rt_panic_loc`), eliminating the function call overhead of `rt_div_i64`,
+  `rt_rem_i64`, and `rt_check_bounds_i64`.
 
 ## Known Limitations
 

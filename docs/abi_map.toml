@@ -408,14 +408,20 @@ category = "runtime"
 [symbol.rt_check_bounds_i64]
 target = "rt_check_bounds_i64"
 category = "runtime"
+# Inlined at MIR level since v3.24.30 (ICmp + BrCond + panic block).
+# Declaration kept for backward compatibility; no longer called by compiler.
 
 [symbol.rt_div_i64]
 target = "rt_div_i64"
 category = "runtime"
+# Inlined at MIR level since v3.24.30 (ICmp(r==0) + BrCond + native sdiv).
+# Declaration kept for backward compatibility; no longer called by compiler.
 
 [symbol.rt_rem_i64]
 target = "rt_rem_i64"
 category = "runtime"
+# Inlined at MIR level since v3.24.30 (ICmp(r==0) + BrCond + native srem).
+# Declaration kept for backward compatibility; no longer called by compiler.
 
 [symbol.rt_f32_to_string]
 target = "rt_f32_to_string"

@@ -2,6 +2,58 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.24.30] - 2026-08-26 (Zero-cost runtime: dependency collector + inlined bounds/div + string optimization)
+
+### Added
+
+- **RuntimeTier config** (`[c] runtime = "full" | "minimal" | "none"`):
+  configurable in `owl.toml` to control which runtime/PAL C sources are
+  compiled. `Full` (default) compiles everything; `Minimal` compiles all
+  runtime + PAL sources (demand-driven declarations); `None` compiles no
+  runtime/PAL C sources (freestanding mode).
+- **Dependency Collector** (`collect_used_symbols`): scans generated LLVM IR
+  for `call @pal_*` and `call @rt_*` patterns, returning the set of
+  actually-used symbols. Replaces the old dual-mechanism approach.
+- **Demand-driven PAL declarations** (`filter_pal_decls`): in `Minimal` or
+  `None` mode, only emits `declare` statements for PAL symbols that appear
+  in the IR. `Full` mode emits all declarations for backward-compatibility.
+- **`runtime = "none"` enforcement**: compilation fails with a clear error
+  listing missing symbols if any `rt_*` calls are found when tier is None.
+- **`@[no_main]` file attribute**: respected in the build pipeline to skip
+  `@main` wrapper generation (freestanding mode).
+- **String concat constant folding**: `"foo" + "bar"` is folded to `"foobar"`
+  at compile time, eliminating the `rt_string_concat` call.
+- **String literal `len()` elision**: `len("hello")` is lowered to `i64 5`
+  directly, eliminating the `rt_strings_len` call.
+- **Division/remainder inline at MIR level**: integer `/` and `%` operators
+  are now lowered to multi-block MIR with a div-by-zero check (`ICmp(r == 0)`
+  → `BrCond` to panic or ok block) followed by native `sdiv`/`srem` in
+  codegen. Eliminates `rt_div_i64`/`rt_rem_i64` function call overhead.
+- **Bounds-check inline at MIR level**: array/vector/list index expressions
+  now emit `ICmp(index < 0)` + `ICmp(index >= upper_bound)` with conditional
+  branches to a panic block (`rt_panic_loc("index out of bounds")`) or an ok
+  block (GEP + Load). Eliminates `rt_check_bounds_i64` function call overhead.
+- **Runtime symbol→C-file mapping** (`runtime_symbol_to_c_file`,
+  `minimal_runtime_c_files`): maps `rt_*` symbols to their C source files,
+  ready for future selective `.c` compilation in `Minimal` tier.
+
+### Changed
+
+- **While-loop lowering fix**: `lower/stmt.rs` now uses `self.current_block`
+  (not hardcoded `cond_block`) for the `BrCond` terminator, because the
+  condition expression may create intermediate blocks (e.g., from division
+  inline or bounds-check inline). Without this fix, the while loop's
+  terminator would overwrite the check's terminator, producing undefined
+  values in LLVM IR.
+- **Module visibility**: `build_support` and `config` modules changed to
+  `pub(crate)`; `RuntimeTier` re-exported from `lib.rs` and `avens/mod.rs`.
+
+### Deprecated
+
+- `rt_div_i64`, `rt_rem_i64`, `rt_check_bounds_i64` are still declared in
+  builtins for backward-compatibility but are no longer called by the
+  compiler for new code. They will be removed in a future major version.
+
 ## [3.24.29] - 2026-08-24 (PAL filesystem backend + runtime fixes)
 
 ### Added
