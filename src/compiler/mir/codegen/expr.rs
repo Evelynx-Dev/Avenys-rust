@@ -796,6 +796,21 @@ pub(crate) fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
             let result = tmp_result(ctx, &dst_t, inst.result);
             format!("%t{} = bitcast {} {} to {}", result, src_t, v, dst_t)
         }
+        MirOp::ExtractValue(agg, val, indices) => {
+            let (a, at) = resolve_typed(agg, ctx);
+            let (v, _) = resolve_typed(val, ctx);
+            // indices is a vec of field indices
+            let idx_str = indices.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ");
+            let result = tmp_result(ctx, &at, inst.result);
+            format!("%t{} = extractvalue {} {}, {}", result, at, a, idx_str)
+        }
+        MirOp::InsertValue(agg, val, indices) => {
+            let (a, at) = resolve_typed(agg, ctx);
+            let (v, vt) = resolve_typed(val, ctx);
+            let idx_str = indices.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ");
+            let result = tmp_result(ctx, &at, inst.result);
+            format!("%t{} = insertvalue {} {}, {} {}, {}", result, at, a, vt, v, idx_str)
+        }
         MirOp::Select(cond, t, f) => {
             let (c, _) = resolve_typed(cond, ctx);
             let (tv, tt) = resolve_typed(t, ctx);

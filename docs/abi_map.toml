@@ -4,7 +4,7 @@
 
 [meta]
 version = "4"
-symbol_count = 126
+symbol_count = 110
 
 # ── PAL — Filesystem ──────────────────────────────────────────
 
@@ -269,50 +269,6 @@ category = "runtime"
 target = "rt_math_ceil"
 category = "runtime"
 
-# ── Runtime — Maybe ───────────────────────────────────────────
-
-[symbol.rt_maybe_some_ptr]
-target = "rt_maybe_some_ptr"
-category = "runtime"
-
-[symbol.rt_maybe_some_str]
-target = "rt_maybe_some_str"
-category = "runtime"
-
-[symbol.rt_maybe_is_none]
-target = "rt_maybe_is_none"
-category = "runtime"
-
-[symbol.rt_maybe_is_some]
-target = "rt_maybe_is_some"
-category = "runtime"
-
-[symbol.rt_maybe_none_as_ptr]
-target = "rt_maybe_none_as_ptr"
-category = "runtime"
-
-[symbol.rt_maybe_unwrap_ptr]
-target = "rt_maybe_unwrap_ptr"
-category = "runtime"
-
-[symbol.rt_maybe_unwrap_str]
-target = "rt_maybe_unwrap_str"
-category = "runtime"
-
-[symbol.rt_maybe_unwrap_or_ptr]
-target = "rt_maybe_unwrap_or_ptr"
-category = "runtime"
-
-[symbol.rt_maybe_unwrap_or_str]
-target = "rt_maybe_unwrap_or_str"
-category = "runtime"
-
-[symbol.rt_maybe_free]
-target = "rt_maybe_free"
-category = "runtime"
-
-# ── Runtime — Result ──────────────────────────────────────────
-
 [symbol.rt_result_ok_ptr]
 target = "rt_result_ok_ptr"
 category = "runtime"
@@ -443,29 +399,11 @@ category = "runtime"
 target = "rt_u128_to_string"
 category = "runtime"
 
-[symbol.rt_maybe_some_i64]
-target = "rt_maybe_some_i64"
-category = "runtime"
 
-[symbol.rt_maybe_some_f64]
-target = "rt_maybe_some_f64"
-category = "runtime"
 
-[symbol.rt_maybe_unwrap_i64]
-target = "rt_maybe_unwrap_i64"
-category = "runtime"
 
-[symbol.rt_maybe_unwrap_f64]
-target = "rt_maybe_unwrap_f64"
-category = "runtime"
 
-[symbol.rt_maybe_unwrap_or_i64]
-target = "rt_maybe_unwrap_or_i64"
-category = "runtime"
 
-[symbol.rt_maybe_unwrap_or_f64]
-target = "rt_maybe_unwrap_or_f64"
-category = "runtime"
 
 [symbol.rt_result_ok_i64]
 target = "rt_result_ok_i64"

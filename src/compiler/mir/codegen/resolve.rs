@@ -11,6 +11,7 @@ pub(crate) fn resolve_typed(val: &MirValue, ctx: &mut LlvmCtx) -> (String, Strin
                 MirConst::Float(_) => "double",
                 MirConst::Bool(_) => "i1",
                 MirConst::Str(_) => "ptr",
+                MirConst::Struct { .. } | MirConst::Zero { .. } => "ptr",
             };
             (v, t.to_string())
         }

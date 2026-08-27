@@ -294,6 +294,8 @@ fn const_str(c: &MirConst, ctx: &mut LlvmCtx) -> String {
             format!("@.str_{}", id)
         }
         MirConst::None => "0".to_string(),
+        MirConst::Struct { .. } => "zeroinitializer".to_string(),
+        MirConst::Zero { .. } => "zeroinitializer".to_string(),
     }
 }
 

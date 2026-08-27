@@ -51,6 +51,13 @@ All notable changes to Mire are documented in this file.
   (`-lssl`, `-lcrypto`, `-lsodium`) are only passed when PAL .c files are
   actually compiled. Verified: string-only program → 4 .c files (was 15),
   links only `libm` + `libc`.
+- **R4 Option unboxed (Maybe[T] → {i1 tag, T value})**: `Maybe[T]` types now
+  use zero-cost unboxed representation `{i1 tag, T value}` instead of
+  pointer + runtime functions. `Some(x)` and `None` lower to inline struct
+  construction (`InsertValue`/`ExtractValue`). The `?` operator on `Maybe`
+  extracts tag/value via MIR `ICmp` + `ExtractValue` — no runtime calls.
+  Removed 16 `rt_maybe_*` symbols from builtins and abi_map.toml.
+  Verified: all test suites pass (368/368 + consumers).
 
 ### Changed
 

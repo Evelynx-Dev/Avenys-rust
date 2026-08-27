@@ -6,7 +6,7 @@ use super::types::{
 };
 use crate::compiler::location::expression_location;
 use crate::compiler::mir::*;
-use crate::parser::ast::{DataType, Expression};
+use crate::parser::ast::{DataType, Expression, Literal};
 
 fn is_float_dt(t: &DataType) -> bool {
     matches!(t, DataType::F32 | DataType::F64)
@@ -100,9 +100,32 @@ impl MirLower {
                 val
             }
                         Expression::Literal { lit, .. } => {
+                let expr_ty = extract_data_type(expr);
+                // Special handling for None literal when target is Maybe[T]
+                if matches!(lit, Literal::None) && matches!(&expr_ty, DataType::Maybe { inner }) {
+                    // Unboxed Maybe: { i1 tag, T value } with tag = 0
+                    // Allocate struct (zero-initialized = {i1 0, T zero}), then load
+                    let inner_ty = match &expr_ty {
+                        DataType::Maybe { inner } => *inner.clone(),
+                        _ => DataType::Unknown,
+                    };
+                    let struct_ty = MirType { data_type: expr_ty.clone() };
+                    let ptr = self.new_temp();
+                    self.func.blocks[self.current_block].push(
+                        Some(ptr),
+                        MirOp::Alloca(struct_ty.clone()),
+                        loc,
+                    );
+                    let loaded = self.new_temp();
+                    self.func.blocks[self.current_block].push(
+                        Some(loaded),
+                        MirOp::Load(MirValue::temp(ptr), struct_ty.clone()),
+                        loc,
+                    );
+                    return MirValue::temp(loaded);
+                }
                 let val = self.lower_literal(lit);
                 let natural = crate::types::unify::literal_type(lit);
-                let expr_ty = extract_data_type(expr);
                 if expr_ty != DataType::Unknown && expr_ty != natural {
                     return self.emit_convert(val, &natural, &expr_ty, loc);
                 }
@@ -485,7 +508,16 @@ impl MirLower {
                         .unwrap_or_else(|| name.clone());
                     (resolved, mir_args)
                 };
-
+ 
+                // Handle Maybe[T] builtin methods as inline struct operations
+                if matches!(resolved_name.as_str(),
+                    "maybe.is_some" | "maybe.is_none" | "maybe.unwrap.i64" | "maybe.unwrap.str"
+                    | "maybe.unwrap.f64" | "maybe.unwrap.ptr" | "maybe.unwrap_or.i64"
+                    | "maybe.unwrap_or.str" | "maybe.unwrap_or.f64" | "maybe.unwrap_or.ptr"
+                ) {
+                    return self.lower_maybe_builtin(&resolved_name, mir_args, data_type, loc);
+                }
+ 
                 let is_closure_var = self.var_types.get(name)
                     .map(|ty| matches!(ty, DataType::Closure { .. } | DataType::Function))
                     .unwrap_or(false);
@@ -1319,67 +1351,51 @@ impl MirLower {
                 value,
                 data_type,
             } => {
+                // Unboxed Maybe: { i1 tag, T value }
+                // tag = 1 for Some
                 let lowered_value = self.lower_expression(value);
-                let result_ptr = self.new_temp();
-                let alloc_ty = MirType {
-                    data_type: DataType::Unknown,
+                let inner_ty = match data_type {
+                    DataType::Maybe { inner } => *inner.clone(),
+                    _ => DataType::Unknown,
                 };
+                let struct_ty = MirType { data_type: data_type.clone() };
+                // Allocate struct (zero-initialized = {i1 0, T zero})
+                let ptr = self.new_temp();
                 self.func.blocks[self.current_block].push(
-                    Some(result_ptr),
-                    MirOp::Alloca(alloc_ty.clone()),
+                    Some(ptr),
+                    MirOp::Alloca(struct_ty.clone()),
                     loc,
                 );
-                let op = if data_type == &DataType::I64 {
-                    MirOp::Call(
-                        MirValue::Global("rt_maybe_some_i64".to_string()),
-                        vec![lowered_value],
-                        MirType {
-                            data_type: DataType::Unknown,
-                        },
-                    )
-                } else if data_type == &DataType::Str {
-                    MirOp::Call(
-                        MirValue::Global("rt_maybe_some_str".to_string()),
-                        vec![lowered_value],
-                        MirType {
-                            data_type: DataType::Unknown,
-                        },
-                    )
-                } else if data_type == &DataType::F64 {
-                    MirOp::Call(
-                        MirValue::Global("rt_maybe_some_f64".to_string()),
-                        vec![lowered_value],
-                        MirType {
-                            data_type: DataType::Unknown,
-                        },
-                    )
-                } else {
-                    MirOp::Call(
-                        MirValue::Global("rt_maybe_some_ptr".to_string()),
-                        vec![lowered_value],
-                        MirType {
-                            data_type: DataType::Unknown,
-                        },
-                    )
-                };
-                let lowered_op = self.new_temp();
+                // Load zero-initialized struct
+                let base_struct = self.new_temp();
                 self.func.blocks[self.current_block].push(
-                    Some(lowered_op),
-                    op,
+                    Some(base_struct),
+                    MirOp::Load(MirValue::temp(ptr), struct_ty.clone()),
                     loc,
                 );
+                // Insert tag = 1 at index 0
+                let with_tag = self.new_temp();
                 self.func.blocks[self.current_block].push(
-                    None,
-                    MirOp::Store(MirValue::temp(result_ptr), MirValue::temp(lowered_op)),
+                    Some(with_tag),
+                    MirOp::InsertValue(
+                        MirValue::temp(base_struct),
+                        MirValue::Const(MirConst::Int(1)),
+                        vec![0],
+                    ),
                     loc,
                 );
-                let restored = self.new_temp();
+                // Insert value at index 1
+                let with_value = self.new_temp();
                 self.func.blocks[self.current_block].push(
-                    Some(restored),
-                    MirOp::Load(MirValue::temp(result_ptr), alloc_ty.clone()),
+                    Some(with_value),
+                    MirOp::InsertValue(
+                        MirValue::temp(with_tag),
+                        lowered_value,
+                        vec![1],
+                    ),
                     loc,
                 );
-                MirValue::temp(restored)
+                MirValue::temp(with_value)
             }
             Expression::Ok {
                 value,
@@ -1510,63 +1526,82 @@ impl MirLower {
                 let line = MirValue::Const(MirConst::Int(loc.0 as i64));
                 let col = MirValue::Const(MirConst::Int(loc.1 as i64));
 
-                let check_fn = if is_result { "rt_result_is_err" } else { "rt_maybe_is_none" };
-                let check_raw = self.new_temp();
-                self.func.blocks[self.current_block].push(
-                    Some(check_raw),
-                    MirOp::Call(
-                        MirValue::Global(check_fn.to_string()),
-                        vec![operand.clone()],
-                        MirType { data_type: DataType::I64 },
-                    ),
-                    loc,
-                );
-
-                let is_err = self.new_temp();
-                self.func.blocks[self.current_block].push(
-                    Some(is_err),
-                    MirOp::ICmp(MirCmp::Ne, MirValue::temp(check_raw), MirValue::Const(MirConst::Int(0))),
-                    loc,
-                );
-
                 let unwrap_block = self.new_block("try_unwrap");
                 let err_block = self.new_block("try_err");
                 let pre_check = self.current_block;
 
-                self.func.blocks[pre_check].terminator =
-                    MirTerminator::BrCond(MirValue::temp(is_err), err_block, unwrap_block);
-
-                self.current_block = err_block;
-                self.func.blocks[err_block].terminator =
-                    MirTerminator::Ret(Some(operand.clone()));
-
-                self.current_block = unwrap_block;
-                let unwrap_fn = if is_result {
-                    match &inner_type {
+                if is_result {
+                    // Result: use existing runtime functions
+                    let check_fn = "rt_result_is_err";
+                    let check_raw = self.new_temp();
+                    self.func.blocks[self.current_block].push(
+                        Some(check_raw),
+                        MirOp::Call(
+                            MirValue::Global(check_fn.to_string()),
+                            vec![operand.clone()],
+                            MirType { data_type: DataType::I64 },
+                        ),
+                        loc,
+                    );
+                    let is_err = self.new_temp();
+                    self.func.blocks[self.current_block].push(
+                        Some(is_err),
+                        MirOp::ICmp(MirCmp::Ne, MirValue::temp(check_raw), MirValue::Const(MirConst::Int(0))),
+                        loc,
+                    );
+                    self.func.blocks[pre_check].terminator =
+                        MirTerminator::BrCond(MirValue::temp(is_err), err_block, unwrap_block);
+                    self.current_block = err_block;
+                    self.func.blocks[err_block].terminator =
+                        MirTerminator::Ret(Some(operand.clone()));
+                    self.current_block = unwrap_block;
+                    let unwrap_fn = match &inner_type {
                         DataType::I64 => "rt_result_unwrap_i64",
                         DataType::Str => "rt_result_unwrap_str",
                         DataType::F64 => "rt_result_unwrap_f64",
                         _ => "rt_result_unwrap_ptr",
-                    }
+                    };
+                    let unwrapped = self.new_temp();
+                    self.func.blocks[self.current_block].push(
+                        Some(unwrapped),
+                        MirOp::Call(
+                            MirValue::Global(unwrap_fn.to_string()),
+                            vec![operand.clone(), line, col, file],
+                            MirType { data_type: inner_type },
+                        ),
+                        loc,
+                    );
+                    MirValue::temp(unwrapped)
                 } else {
-                    match &inner_type {
-                        DataType::I64 => "rt_maybe_unwrap_i64",
-                        DataType::Str => "rt_maybe_unwrap_str",
-                        DataType::F64 => "rt_maybe_unwrap_f64",
-                        _ => "rt_maybe_unwrap_ptr",
-                    }
-                };
-                let unwrapped = self.new_temp();
-                self.func.blocks[self.current_block].push(
-                    Some(unwrapped),
-                    MirOp::Call(
-                        MirValue::Global(unwrap_fn.to_string()),
-                        vec![operand.clone(), line, col, file],
-                        MirType { data_type: inner_type },
-                    ),
-                    loc,
-                );
-                MirValue::temp(unwrapped)
+                    // Maybe: unboxed struct { i1 tag, T value }
+                    // Extract tag (index 0) and check if zero
+                    let tag = self.new_temp();
+                    self.func.blocks[self.current_block].push(
+                        Some(tag),
+                        MirOp::ExtractValue(MirValue::temp(pre_check), operand.clone(), vec![0]),
+                        loc,
+                    );
+                    let is_none = self.new_temp();
+                    self.func.blocks[self.current_block].push(
+                        Some(is_none),
+                        MirOp::ICmp(MirCmp::Eq, MirValue::temp(tag), MirValue::Const(MirConst::Int(0))),
+                        loc,
+                    );
+                    self.func.blocks[pre_check].terminator =
+                        MirTerminator::BrCond(MirValue::temp(is_none), err_block, unwrap_block);
+                    self.current_block = err_block;
+                    self.func.blocks[err_block].terminator =
+                        MirTerminator::Ret(Some(operand.clone()));
+                    self.current_block = unwrap_block;
+                    // Extract value (index 1)
+                    let value = self.new_temp();
+                    self.func.blocks[self.current_block].push(
+                        Some(value),
+                        MirOp::ExtractValue(MirValue::temp(pre_check), operand.clone(), vec![1]),
+                        loc,
+                    );
+                    MirValue::temp(value)
+                }
             }
             _ => MirValue::Const(MirConst::None),
         }
@@ -1638,6 +1673,101 @@ impl MirLower {
             );
             self.vars.insert(binding.clone(), slot);
             self.var_types.insert(binding.clone(), ptype);
+        }
+    }
+
+    /// Lower Maybe[T] builtin methods as inline struct operations.
+    /// Unboxed representation: { i1 tag, T value } where tag=0 for None, 1 for Some.
+    fn lower_maybe_builtin(
+        &mut self,
+        name: &str,
+        args: Vec<MirValue>,
+        data_type: &DataType,
+        loc: (usize, usize),
+    ) -> MirValue {
+        let maybe_val = &args[0]; // receiver
+        let inner_ty = match data_type {
+            DataType::Maybe { inner } => *inner.clone(),
+            _ => DataType::Unknown,
+        };
+        let struct_ty = MirType { data_type: DataType::Maybe { inner: Box::new(inner_ty.clone()) } };
+
+        match name {
+            "maybe.is_some" => {
+                // Extract tag (index 0) and compare with 1
+                let tag = self.new_temp();
+                self.func.blocks[self.current_block].push(
+                    Some(tag),
+                    MirOp::ExtractValue(maybe_val.clone(), maybe_val.clone(), vec![0]),
+                    loc,
+                );
+                let is_some = self.new_temp();
+                self.func.blocks[self.current_block].push(
+                    Some(is_some),
+                    MirOp::ICmp(MirCmp::Eq, MirValue::temp(tag), MirValue::Const(MirConst::Int(1))),
+                    loc,
+                );
+                MirValue::temp(is_some)
+            }
+            "maybe.is_none" => {
+                // Extract tag (index 0) and compare with 0
+                let tag = self.new_temp();
+                self.func.blocks[self.current_block].push(
+                    Some(tag),
+                    MirOp::ExtractValue(maybe_val.clone(), maybe_val.clone(), vec![0]),
+                    loc,
+                );
+                let is_none = self.new_temp();
+                self.func.blocks[self.current_block].push(
+                    Some(is_none),
+                    MirOp::ICmp(MirCmp::Eq, MirValue::temp(tag), MirValue::Const(MirConst::Int(0))),
+                    loc,
+                );
+                MirValue::temp(is_none)
+            }
+            "maybe.unwrap.i64" | "maybe.unwrap.str" | "maybe.unwrap.f64" | "maybe.unwrap.ptr" => {
+                // Extract value (index 1) - assume Some (caller checks with ?)
+                let value = self.new_temp();
+                self.func.blocks[self.current_block].push(
+                    Some(value),
+                    MirOp::ExtractValue(maybe_val.clone(), maybe_val.clone(), vec![1]),
+                    loc,
+                );
+                MirValue::temp(value)
+            }
+"maybe.unwrap_or.i64" | "maybe.unwrap_or.str" | "maybe.unwrap_or.f64" | "maybe.unwrap_or.ptr" => {
+                // args[0] = maybe, args[1] = default
+                // Extract tag, if 1 return value, else return default
+                let default = &args[1];
+                let tag = self.new_temp();
+                self.func.blocks[self.current_block].push(
+                    Some(tag),
+                    MirOp::ExtractValue(maybe_val.clone(), maybe_val.clone(), vec![0]),
+                    loc,
+                );
+                let is_some = self.new_temp();
+                self.func.blocks[self.current_block].push(
+                    Some(is_some),
+                    MirOp::ICmp(MirCmp::Eq, MirValue::temp(tag), MirValue::Const(MirConst::Int(1))),
+                    loc,
+                );
+                // Extract value
+                let value = self.new_temp();
+                self.func.blocks[self.current_block].push(
+                    Some(value),
+                    MirOp::ExtractValue(maybe_val.clone(), maybe_val.clone(), vec![1]),
+                    loc,
+                );
+                // Use Select: is_some ? value : default
+                let result = self.new_temp();
+                self.func.blocks[self.current_block].push(
+                    Some(result),
+                    MirOp::Select(MirValue::temp(is_some), MirValue::temp(value), default.clone()),
+                    loc,
+                );
+                MirValue::temp(result)
+            }
+            _ => MirValue::Const(MirConst::None),
         }
     }
 

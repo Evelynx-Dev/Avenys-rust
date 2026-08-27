@@ -107,6 +107,14 @@ fn collect_uses(op: &MirOp, used: &mut HashSet<usize>) {
             collect_val(f, used);
         }
         MirOp::Copy(v) => collect_val(v, used),
+        MirOp::ExtractValue(agg, val, _) => {
+            collect_val(agg, used);
+            collect_val(val, used);
+        }
+        MirOp::InsertValue(agg, val, _) => {
+            collect_val(agg, used);
+            collect_val(val, used);
+        }
         MirOp::Alloca(_) => {}
     }
 }

@@ -71,6 +71,14 @@ fn max_temp_in_op(op: &MirOp, max: &mut usize) {
             max_temp_in_value(t, max);
             max_temp_in_value(f, max);
         }
+        MirOp::ExtractValue(agg, val, _) => {
+            max_temp_in_value(agg, max);
+            max_temp_in_value(val, max);
+        }
+        MirOp::InsertValue(agg, val, _) => {
+            max_temp_in_value(agg, max);
+            max_temp_in_value(val, max);
+        }
     }
 }
 
@@ -255,6 +263,8 @@ fn remap_op(op: &MirOp, temp_offset: usize, callee: &MirFunction, args: &[MirVal
         MirOp::Fpext(v, t) => MirOp::Fpext(map(v), t.clone()),
         MirOp::Phi(p, t) => MirOp::Phi(p.iter().map(|(v, b)| (map(v), *b)).collect(), t.clone()),
         MirOp::Select(c, t, f) => MirOp::Select(map(c), map(t), map(f)),
+        MirOp::ExtractValue(agg, val, idx) => MirOp::ExtractValue(map(agg), map(val), idx.clone()),
+        MirOp::InsertValue(agg, val, idx) => MirOp::InsertValue(map(agg), map(val), idx.clone()),
         MirOp::Copy(v) => MirOp::Copy(map(v)),
     }
 }

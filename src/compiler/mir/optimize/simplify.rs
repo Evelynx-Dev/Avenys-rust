@@ -189,6 +189,14 @@ fn replace_value_in_op(op: &mut MirOp, copies: &HashMap<usize, MirValue>) -> usi
             replace(t, copies, &mut count);
             replace(f, copies, &mut count);
         }
+        MirOp::ExtractValue(agg, val, _) => {
+            replace(agg, copies, &mut count);
+            replace(val, copies, &mut count);
+        }
+        MirOp::InsertValue(agg, val, _) => {
+            replace(agg, copies, &mut count);
+            replace(val, copies, &mut count);
+        }
         MirOp::Alloca(_) => {}
     }
     count

@@ -706,6 +706,17 @@ impl TypeChecker {
                 "concat" => "str.concat",
                 _ => return None,
             }.to_string()),
+            DataType::Maybe { inner } => {
+                let e = type_suffix(inner);
+                let name = match method {
+                    "is_some" => return Some("maybe.is_some".to_string()),
+                    "is_none" => return Some("maybe.is_none".to_string()),
+                    "unwrap" => format!("maybe.unwrap.{e}"),
+                    "unwrap_or" => format!("maybe.unwrap_or.{e}"),
+                    _ => return None,
+                };
+                Some(name)
+            }
             _ => None,
         }
     }
@@ -721,3 +732,4 @@ fn type_suffix(t: &DataType) -> &'static str {
         _ => "i64",
     }
 }
+
