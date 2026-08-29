@@ -70,30 +70,39 @@ pub(crate) fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
                 }
             }
         }
-        MirOp::Add(l, r) => {
-            let (l_str, lt) = resolve_typed(l, ctx);
-            let (r_str, rt) = resolve_typed(r, ctx);
-            if lt == "ptr" || rt == "ptr" {
-                // String concatenation: emit call to rt_string_concat
-                let result = tmp_result(ctx, "ptr", inst.result);
-                let lhs = if lt != "ptr" {
-                    let conv = tmp_extra(ctx, "i64");
-                    extra.push(format!("{} = inttoptr i64 {} to ptr", conv, l_str));
-                    conv
-                } else {
-                    l_str.clone()
-                };
-                let rhs = if rt != "ptr" {
-                    let conv = tmp_extra(ctx, "i64");
-                    extra.push(format!("{} = inttoptr i64 {} to ptr", conv, r_str));
-                    conv
-                } else {
-                    r_str.clone()
-                };
-                format!(
-                    "%t{} = call ptr @rt_string_concat(ptr {}, ptr {})",
-                    result, lhs, rhs
-                )
+MirOp::Add(l, r) => {
+                let (l_str, lt) = resolve_typed(l, ctx);
+                let (r_str, rt) = resolve_typed(r, ctx);
+                if lt == "ptr" || rt == "ptr" {
+                    // String concatenation: emit call to rt_string_concat
+                    let result = tmp_result(ctx, "ptr", inst.result);
+                    let lhs = if lt != "ptr" {
+                        let conv = tmp_extra(ctx, "i64");
+                        extra.push(format!("{} = inttoptr i64 {} to ptr", conv, l_str));
+                        conv
+                    } else {
+                        l_str.clone()
+                    };
+                    let rhs = if rt != "ptr" {
+                        let conv = tmp_extra(ctx, "i64");
+                        extra.push(format!("{} = inttoptr i64 {} to ptr", conv, r_str));
+                        conv
+                    } else {
+                        r_str.clone()
+                    };
+                    // Emit the concat call
+                    let concat_call = format!(
+                        "%t{} = call ptr @rt_string_concat(ptr {}, ptr {})",
+                        result, lhs, rhs
+                    );
+                    // If left operand is a temporary, it's likely an intermediate in a concat chain
+                    // and can be freed after use
+                    let free_lhs = if lt == "ptr" && l_str.starts_with('%') {
+                        format!("\n  call void @rt_managed_free(ptr {})", lhs)
+                    } else {
+                        String::new()
+                    };
+                    format!("{}{}", concat_call, free_lhs)
             } else {
                 let ty = float_result_ty(&lt, &rt).unwrap_or("i64");
                 let result = tmp_result(ctx, ty, inst.result);
@@ -821,19 +830,18 @@ pub(crate) fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
                 result, c, tt, tv, ft, fv
             )
         }
-        MirOp::Phi(pairs, ty) => {
-            let ll_ty = llvm_type_str(&ty.data_type);
-            let result = tmp_result(ctx, &ll_ty, inst.result);
-            let incoming: Vec<String> = pairs
-                .iter()
-                .map(|(val, block_id)| {
-                    let (v, t) = resolve_typed(val, ctx);
-                    let coerced = coerce_to(&v, &t, &ll_ty, ctx, &mut extra);
-                    format!("[{} %bb_{}]", coerced, block_id)
-                })
-                .collect();
-            format!("%t{} = phi {} {}", result, ll_ty, incoming.join(", "))
+        MirOp::Drop(val) => {
+            // Materialize the Drop: tier-aware lowering
+            let (v, t) = resolve_typed(val, ctx);
+            if t == "ptr" {
+                // String/vec/map/closure — needs runtime free in minimal, no-op in full, free in none
+                format!("call void @rt_managed_free(ptr {})", v)
+            } else {
+                // Primitive types (i64, f64, bool, etc.) — no runtime action needed
+                String::new()
+            }
         }
+        MirOp::Phi(_, _) => String::new(),
     };
     let mut result = Vec::with_capacity(extra.len() + 1);
     result.extend(extra);

@@ -97,6 +97,20 @@ impl MirLower {
                 }
             }
             Statement::Assignment { target, value, .. } => {
+
+                // Drop the old value before assigning the new one (ownership transfer)
+                match target {
+                    AssignmentTarget::Variable(name) => {
+                        if let Some(&ptr) = self.vars.get(name) {
+                            // Drop the old value before overwriting
+                            let old_val = MirValue::temp(ptr);
+                            let last = self.current_block;
+                            self.func.blocks[last].push(None, MirOp::Drop(old_val), loc);
+                        }
+                    }
+                    _ => {}
+                }
+
                 let val_ty = extract_data_type(value);
                 let mut v = self.lower_expression(value);
                 let last = self.current_block;

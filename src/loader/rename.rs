@@ -287,14 +287,16 @@ impl<'a> ModuleRenamer<'a> {
                     default,
                 }
             }
-            Statement::Type {
-                visibility,
-                name,
-                type_params,
-                type_param_bounds,
-                parent,
-                fields,
-            } => {
+Statement::Type {
+            visibility,
+            name,
+            type_params,
+            type_param_bounds,
+            parent,
+            fields,
+            attributes,
+            ..
+        } => {
                 let name = self.rename_decl_name(name, scope_stack, top_level);
                 let mut fields_scope = scope_stack.clone();
                 if let Some(scope) = fields_scope.last_mut() {
@@ -321,6 +323,11 @@ impl<'a> ModuleRenamer<'a> {
                     type_param_bounds,
                     parent,
                     fields,
+                    attributes,
+                    line: 0,
+                    column: 0,
+                    end_line: 0,
+                    end_column: 0,
                 }
             }
             Statement::Skill { name, visibility, parent, methods } => Statement::Skill {

@@ -58,6 +58,13 @@ struct ImportResolver<'a> {
     manifest_dependencies: HashMap<String, MireDependency>,
     package_registry: HashMap<String, PackageEntry>,
     current_file: Option<String>,
+    /// When true, the next file loaded (the entry/root file) has `@[derive]`
+    /// attributes expanded on its parsed program before reachable-import
+    /// selection. This makes generated impls participate in
+    /// `collect_program_dependency_candidates`, so the stdlib functions they
+    /// reference (e.g. `str.copy`) are reachable-selected exactly as if the
+    /// user had written the impls by hand.
+    expand_derives_entry: bool,
 }
 
 struct ResolvedFile {
@@ -92,8 +99,9 @@ impl<'a> ImportResolver<'a> {
             sources: HashMap::new(),
             import_mode,
             manifest_dependencies,
-            package_registry: HashMap::new(),
+package_registry: HashMap::new(),
             current_file: None,
+            expand_derives_entry: true,
         }
     }
 
@@ -126,7 +134,14 @@ impl<'a> ImportResolver<'a> {
             return Err(self.loader_error(span, format!("Cyclic local load detected at '{}'", canonical.display())));
         }
 
-        let parsed = load_or_parse_file(self, &canonical)?;
+        let expanded_source = if self.expand_derives_entry {
+            self.expand_derives_entry = false;
+            let raw = crate::loader::files::read_source_file(&canonical)?;
+            Some(crate::avens::derive::expand_derives_source(&raw))
+        } else {
+            None
+        };
+        let mut parsed = load_or_parse_file(self, &canonical, expanded_source)?;
         self.current_file = Some(canonical.display().to_string());
         let imported_symbol_candidates = collect_program_dependency_candidates(&parsed.program);
         let mut expanded = Vec::new();
@@ -352,7 +367,7 @@ impl<'a> ImportResolver<'a> {
         items: Option<&[String]>,
         span: Span,
     ) -> Result<Vec<ExpandedStatement>> {
-        let parsed = load_or_parse_file(self, path)?;
+        let parsed = load_or_parse_file(self, path, None)?;
         let has_loads = parsed
             .program
             .statements

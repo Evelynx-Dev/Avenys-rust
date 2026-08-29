@@ -1069,6 +1069,11 @@ mod tests {
                     type_param_bounds: Vec::new(),
                     parent: None,
                     fields: vec![],
+                    attributes: vec![],
+                    line: 0,
+                    column: 0,
+                    end_line: 0,
+                    end_column: 0,
                 },
                 Statement::Impl {
                     trait_name: None,

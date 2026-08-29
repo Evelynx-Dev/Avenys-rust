@@ -176,13 +176,13 @@ impl DataType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct AttributeArg {
     pub name: Option<String>,
     pub value: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Attribute {
     pub name: String,
     pub args: Vec<AttributeArg>,
@@ -641,6 +641,16 @@ pub enum Statement {
         type_param_bounds: Vec<(String, Vec<String>)>,
         parent: Option<String>,
         fields: Vec<Statement>,
+        #[serde(default)]
+        attributes: Vec<Attribute>,
+        #[serde(default)]
+        line: usize,
+        #[serde(default)]
+        column: usize,
+        #[serde(default)]
+        end_line: usize,
+        #[serde(default)]
+        end_column: usize,
     },
     Skill {
         name: String,

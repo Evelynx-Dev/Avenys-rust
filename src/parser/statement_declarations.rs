@@ -86,6 +86,9 @@ impl Parser {
         visibility: Visibility,
     ) -> Result<Statement> {
         self.expect(keyword)?;
+        let start_tok = self.peek();
+        let start_line = start_tok.line;
+        let start_column = start_tok.column;
         let name = self.expect_ident()?;
         let (type_params, type_param_bounds) = self.parse_optional_type_params_with_bounds()?;
         self.push_type_param_scope(type_params.clone());
@@ -146,9 +149,13 @@ impl Parser {
             self.skip_newlines();
         }
 
+let end_tok = self.peek();
+        let end_line = end_tok.line;
+        let end_column = end_tok.column;
         self.expect_block_close()?;
         self.pop_type_param_scope();
         self.declare(&name);
+        let attributes = std::mem::take(&mut self.pending_attributes);
         Ok(Statement::Type {
             name,
             visibility,
@@ -156,6 +163,11 @@ impl Parser {
             type_param_bounds,
             parent,
             fields,
+            attributes,
+            line: start_line,
+            column: start_column,
+            end_line,
+            end_column,
         })
     }
 

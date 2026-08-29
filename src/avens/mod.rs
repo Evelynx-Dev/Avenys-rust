@@ -18,6 +18,7 @@ use std::process::{Command, Stdio};
 mod build_pipeline;
 pub(crate) mod build_support;
 pub(crate) mod config;
+pub(crate) mod derive;
 mod manifest;
 mod reuse;
 mod toolchain;

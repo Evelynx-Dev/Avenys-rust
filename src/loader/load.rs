@@ -277,7 +277,7 @@ pub(super) fn infer_reachable_import_items(
     module_prefix: Option<&str>,
     candidates: &HashSet<String>,
 ) -> Result<Option<Vec<String>>> {
-    let parsed = load_or_parse_file(resolver, path)?;
+    let parsed = load_or_parse_file(resolver, path, None)?;
     if parsed.exports.is_empty() {
         return Ok(None);
     }

@@ -126,6 +126,8 @@ pub(super) fn hash_statement(statement: &Statement, hasher: &mut FxHasher) {
             type_param_bounds,
             parent,
             fields,
+            attributes,
+            ..
         } => {
             hasher.write_u8(12);
             name.hash(hasher);
@@ -133,6 +135,7 @@ pub(super) fn hash_statement(statement: &Statement, hasher: &mut FxHasher) {
             type_param_bounds.hash(hasher);
             parent.hash(hasher);
             hash_statements(fields, hasher);
+            attributes.hash(hasher);
         }
         Statement::Skill { name, methods, .. } => {
             hasher.write_u8(13);

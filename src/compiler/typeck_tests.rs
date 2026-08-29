@@ -441,6 +441,7 @@
                     type_params: Vec::new(),
                     type_param_bounds: Vec::new(),
                     parent: None,
+                    attributes: vec![],
                     fields: vec![
                         Statement::Let {
                             name: "x".to_string(),
@@ -470,6 +471,10 @@
                             name_column: 1,
                         },
                     ],
+                    line: 0,
+                    column: 0,
+                    end_line: 0,
+                    end_column: 0,
                 },
                 Statement::Impl {
                     trait_name: None,

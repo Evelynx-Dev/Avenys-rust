@@ -2,6 +2,31 @@
 
 All notable changes to Mire are documented in this file.
 
+## [3.24.31] - 2026-08-29 (Derive: @[derive(...)] with text-level expansion + real spans)
+
+### Added
+- **`@[derive(...)]` attribute** for structs: `Default`, `Clone`, `PartialEq`, `Debug`
+- **Text-level source expansion** (`expand_derives_source`): generates `impl` blocks as Mire source text, spliced before parsing. This gives **real spans** — errors in derived code point to actual source lines in the user's file.
+- **Derive expansion in loader** (`load_or_parse_file`): runs on the entry file before reachable-import selection, so generated `impl` blocks participate in dependency candidate collection (e.g. `str::copy` is reachable-selected when `Clone` is derived).
+- **Generators**:
+  - `Default` → `fn default: () :T`
+  - `Clone` → `fn clone: (self) :T` (uses `str::copy` for `str` fields)
+  - `PartialEq` → `fn equals: (self other :&T) :bool`
+  - `Debug` → `fn to_string: (self) :str` (parenthesised format, no `{}` interpolation)
+- **Multiple derives**: `@[derive(Clone, PartialEq, Debug)]` — order independent
+- **Attribute consumed** after expansion; rest of compiler is unaware derive exists
+- **Spans preserved**: errors in derived `impl` blocks show exact line/column in user's file
+
+### Changed
+- Moved derive expansion from `build_pipeline` (post-load) to `loader` (pre-parse). Generated `impl` blocks now participate in `collect_program_dependency_candidates` for correct reachable-import selection.
+- `Statement::Type` AST gains `line`, `column`, `end_line`, `end_column` fields for precise splice positions.
+
+### Limitations
+- Structs only (enums future work)
+- `Clone` requires `str::copy` → needs `load mire::str`
+- `Clone` on `vec`/`map` fields fails (no `vec::clone`/`map::clone` in stdlib)
+- `Debug` uses parenthesised format `Name(f: v, ...)`; no `{}` string interpolation
+
 ## [3.24.30] - 2026-08-26 (Zero-cost runtime: dependency collector + inlined bounds/div + string optimization)
 
 ### Added

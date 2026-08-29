@@ -304,6 +304,10 @@ fn hash_op(op: &MirOp, buf: &mut Vec<u8>) {
                 buf.extend_from_slice(&idx.to_le_bytes());
             }
         }
+        MirOp::Drop(v) => {
+            buf.push(29);
+            hash_value(v, buf);
+        }
     }
 }
 
@@ -434,6 +438,7 @@ pub enum MirOp {
     Copy(MirValue),
     ExtractValue(MirValue, MirValue, Vec<usize>),
     InsertValue(MirValue, MirValue, Vec<usize>),
+    Drop(MirValue),
 }
 
 #[derive(Debug, Clone)]

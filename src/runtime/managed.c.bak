@@ -2,82 +2,35 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
 
-// ── Arena allocator with refcounting and size-class free lists ────────────────
+// ── Arena allocator (bump pointer, no per-object free) ────────────────
 //
 // All managed strings are allocated from a single contiguous arena.
-// Each string has a reference count in its header. When the refcount
-// reaches zero, the string is added to a size-class free list for reuse.
-// The arena is allocated at full size upfront via mmap(MAP_NORESERVE) to avoid
-// pointer invalidation on realloc (which would invalidate free list pointers).
-// The entire arena is released at program exit via rt_managed_cleanup_all().
+// Individual rt_managed_free() calls are no-ops; the entire arena is
+// released at program exit via rt_managed_cleanup_all().
+//
+// "Is this pointer managed?" is answered by a simple address-range
+// check against [arena_base, arena_base + arena_pos), replacing the
+// old linked-list + hash-table registry.
 
-#define ARENA_MAX_SIZE     (1024 * 1024 * 1024) // 1 GB cap
-#define NUM_SIZE_CLASSES 9
-
-// Size classes: 16, 32, 64, 128, 256, 512, 1024, 2048, 4096 bytes
-static const size_t SIZE_CLASSES[NUM_SIZE_CLASSES] = {
-    16, 32, 64, 128, 256, 512, 1024, 2048, 4096
-};
-
-typedef struct FreeBlock {
-    size_t size;      // total block size (including header)
-    char *next;       // next free block in same size class
-} FreeBlock;
+#define ARENA_INITIAL_SIZE (4 * 1024 * 1024)  // 4 MB
+#define ARENA_MAX_SIZE     (256 * 1024 * 1024) // 256 MB cap
 
 static char *arena_base = NULL;
 static size_t arena_pos = 0;    // bytes used
-static size_t arena_cap = 0;    // bytes allocated (always ARENA_MAX_SIZE after init)
-static char *free_lists[NUM_SIZE_CLASSES] = {NULL};
+static size_t arena_cap = 0;    // bytes allocated
 
-static int arena_ensure_initialized(void) {
-    if (arena_base) return 1;
-    // Use mmap with MAP_NORESERVE to reserve virtual address space without committing physical memory
-    arena_base = (char *)mmap(NULL, ARENA_MAX_SIZE, PROT_READ | PROT_WRITE,
-                              MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
-    if (arena_base == MAP_FAILED) return 0;
-    arena_cap = ARENA_MAX_SIZE;
-    arena_pos = 0;
+static int arena_grow(size_t need) {
+    size_t new_cap = arena_cap ? arena_cap : ARENA_INITIAL_SIZE;
+    while (new_cap < arena_pos + need) {
+        if (new_cap >= ARENA_MAX_SIZE) return 0;
+        new_cap += new_cap >> 1; // grow by 1.5x
+    }
+    char *new_base = (char *)realloc(arena_base, new_cap);
+    if (!new_base) return 0;
+    arena_base = new_base;
+    arena_cap = new_cap;
     return 1;
-}
-
-// ── Size class helpers ────────────────────────────────────────────────────
-
-static inline int size_class_index(size_t total_size) {
-    for (int i = 0; i < NUM_SIZE_CLASSES; i++) {
-        if (total_size <= SIZE_CLASSES[i]) return i;
-    }
-    return NUM_SIZE_CLASSES - 1; // largest class for oversized allocations
-}
-
-// ── Free list management ────────────────────────────────────────────────
-
-static inline void free_list_add(char *header_ptr, size_t total_size) {
-    int idx = size_class_index(total_size);
-    MireManagedString *hdr = (MireManagedString *)header_ptr;
-    char *data_area = (char *)(hdr + 1);  // data area starts after header
-    FreeBlock *block = (FreeBlock *)data_area;
-    block->size = total_size;
-    block->next = free_lists[size_class_index(total_size)];
-    free_lists[size_class_index(total_size)] = header_ptr;  // free list stores header pointers
-}
-
-static char *free_list_find(size_t need) {
-    int idx = size_class_index(need);
-    char **prev = (char **)&free_lists[idx];
-    while (*prev) {
-        char *header_ptr = *prev;
-        MireManagedString *hdr = (MireManagedString *)header_ptr;
-        char *data_area = (char *)(hdr + 1);
-        FreeBlock *curr = (FreeBlock *)data_area;
-        if (curr->size >= need) {
-            *prev = curr->next;
-            return header_ptr;
-        }
-        prev = &curr->next;
-    }
-    return NULL;
 }
 
 // ── Managed pointer detection ─────────────────────────────────────────
@@ -164,39 +117,22 @@ char *rt_strdup_raw_n(const char *src, size_t len) {
     return out;
 }
 
-// ── Arena allocation with size-class free lists ────────────────────────
+// ── Arena allocation ──────────────────────────────────────────────────
 
 char *rt_managed_alloc(size_t len) {
     size_t cap = rt_string_growth_cap(len);
     size_t total = sizeof(MireManagedString) + cap + 1;
     // Align to 16 bytes for performance
     total = (total + 15) & ~(size_t)15;
-
-    // Try to find a free block first
-    char *ptr = free_list_find(total);
-    if (ptr) {
-        MireManagedString *header = (MireManagedString *)ptr;
-        header->len = len;
-        header->cap = cap;
-        header->flags = MIRE_STR_MANAGED;
-        header->utf8_cp = 0;
-        header->refs = 1;
-        header->data[len] = '\0';
-        return header->data;
+    if (!arena_base || arena_pos + total > arena_cap) {
+        if (!arena_grow(total)) return NULL;
     }
-
-    // Allocate from arena (ensure initialized first)
-    if (!arena_ensure_initialized()) return NULL;
-    size_t total_size = sizeof(MireManagedString) + cap + 1;
-    total = (total + 15) & ~(size_t)15;
-    if (arena_pos + total > arena_cap) return NULL;
     MireManagedString *header = (MireManagedString *)(arena_base + arena_pos);
     arena_pos += total;
     header->len = len;
     header->cap = cap;
     header->flags = MIRE_STR_MANAGED;
     header->utf8_cp = 0;
-    header->refs = 1;
     header->data[len] = '\0';
     return header->data;
 }
@@ -246,42 +182,28 @@ char *rt_alloc_printf_raw_i64(const char *fmt, long long value) {
     return out;
 }
 
-// ── Refcounting ────────────────────────────────────────────────────────
-
-void rt_managed_retain(char *data_ptr) {
-    if (!data_ptr) return;
-    if (!rt_managed_is_managed(data_ptr)) return;
-    MireManagedString *hdr = rt_string_header(data_ptr);
-    if (hdr->refs > 0) {
-        hdr->refs++;
-    }
-}
+// ── No-op free / retain (arena lifetime) ─────────────────────────────
+//
+// With arena allocation, individual strings are never freed. The entire
+// arena is released at program exit via rt_managed_cleanup_all().
+// These functions are kept as no-ops for ABI compatibility with existing
+// compiled code and runtime callers.
 
 void rt_managed_free(char *value) {
-    if (!value) return;
-    if (!rt_managed_is_managed(value)) return;
-    MireManagedString *hdr = rt_string_header(value);
-    if (hdr->refs <= 0) return;
-    hdr->refs--;
-    if (hdr->refs == 0) {
-        // Add to free list for reuse
-        MireManagedString *hdr = rt_string_header(value);
-        size_t total = sizeof(MireManagedString) + hdr->cap + 1;
-        total = (total + 15) & ~(size_t)15;
-        free_list_add(value - offsetof(MireManagedString, data), total);
-    }
+    (void)value;
+}
+
+void rt_managed_retain(char *data_ptr) {
+    (void)data_ptr;
 }
 
 void rt_managed_cleanup_all(void) {
     if (arena_base) {
-        munmap(arena_base, ARENA_MAX_SIZE);
+        free(arena_base);
         arena_base = NULL;
     }
     arena_pos = 0;
     arena_cap = 0;
-    for (int i = 0; i < NUM_SIZE_CLASSES; i++) {
-        free_lists[i] = NULL;
-    }
 }
 
 // ── Register / unregister stubs (ABI compat, no-ops) ──────────────────

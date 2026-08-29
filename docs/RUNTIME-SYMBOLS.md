@@ -211,6 +211,31 @@ Does the program use PAL capabilities?
           → Link crypto libs (-lssl -lcrypto -lsodium)
 ```
 
+## Derive — `@[derive(...)]` Runtime Symbols
+
+When using `@[derive(...)]`, the generated `impl` blocks reference stdlib functions.
+These are **not** built-in compiler symbols — they are ordinary Mire stdlib calls that
+must be reachable-import-selected.
+
+| Derive | Required stdlib symbols (must `load mire::str` or `load kioto`) |
+|--------|---------------------------------------------------------------|
+| `Default` | None (only uses literal zero-expressions) |
+| `Clone` | `str::copy` for `str` fields |
+| `PartialEq` | `==` on primitive fields (no runtime call) |
+| `Debug` | `str::copy`, `str::from::i64`, `str::from::f64`, `str::from::bool`, `str::concat` (`+`) |
+
+**Note**: The derive expansion runs before reachable-import selection, so these symbols
+are automatically included in the dependency candidates when the corresponding derive
+is used. You still need `load mire::str` in your source.
+
+```
+Derive used? → YES → Adds required stdlib symbols to dependency candidates
+                      ↓
+            Reachable-import selection includes them from mire::str/kioto
+```
+
+---
+
 ## Verifying Your Build
 
 ```bash
@@ -239,4 +264,4 @@ nm bin/release/main | grep pal_
 
 ---
 
-*Generated for Mire v3.24.30+ with zero-cost runtime tiers.*
+*Generated for Mire v3.24.31+ with zero-cost runtime tiers.*
