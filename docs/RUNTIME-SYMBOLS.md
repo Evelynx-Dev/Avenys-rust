@@ -31,15 +31,15 @@ and to write freestanding (`runtime = "none"`) programs.
 ### Core Language (always needed)
 | Feature | Runtime Symbols | PAL Symbols |
 |---------|----------------|-------------|
-| Integer arithmetic (`+`, `-`, `*`, `/`, `%`) | `rt_div_i64`, `rt_rem_i64`, `rt_panic_loc` | — |
-| Bounds checking (arrays, vectors) | `rt_check_bounds_i64`, `rt_panic_loc` | — |
+| Integer arithmetic (`+`, `-`, `*`, `/`, `%`) | `rt_panic_loc` (div/rem inlined: native `sdiv`/`srem` with zero check) | — |
+| Bounds checking (arrays, vectors) | `rt_panic_loc` (inlined: multi-block MIR `ICmp` + `BrCond`) | — |
 | Panic / `?` on `Result`/`Maybe` | `rt_panic_loc` | — |
 | Memory management (strings, structs) | `rt_managed_alloc`, `rt_managed_free`, `rt_managed_ensure_managed`, `rt_managed_contains`, `rt_managed_retain`, `rt_managed_from_cstr`, `rt_managed_from_slice`, `rt_managed_is_managed`, `rt_managed_len`, `rt_managed_printf_i64`, `rt_managed_printf_f64` | — |
 
 ### String Operations
 | Feature | Runtime Symbols |
 |---------|----------------|
-| `str::concat` / `+` on strings | `rt_string_concat` |
+| `str::concat` / `+` on strings | `rt_string_concat` (pairwise) / `rt_string_concat_n` (n-way, constant-folded for literals) |
 | `str::len` | `rt_strings_len` (elided for literals) |
 | `str::substr` | `rt_strings_substr` |
 | `str::index` / `str::char_at` | `rt_strings_char_at` |
@@ -72,6 +72,15 @@ and to write freestanding (`runtime = "none"`) programs.
 | `vec::unique` | `rt_lists_unique` |
 | `vec::sort` | `rt_lists_sort` (if implemented) |
 | `vec::flatten` | `rt_lists_flatten` (if implemented) |
+| `vec::filter` | `rt_vecs_filter_i64`, `rt_vecs_filter_ptr` |
+| `vec::map` | `rt_vecs_map_i64_i64`, `rt_vecs_map_i64_ptr`, `rt_vecs_map_ptr_ptr` |
+| `vec::fold` | `rt_vecs_fold_i64`, `rt_vecs_fold_ptr` |
+| `vec::find` | `rt_vecs_find_i64`, `rt_vecs_find_ptr` |
+| `vec::partition` | `rt_vecs_partition_i64` |
+| `vec::chunk` | `rt_vecs_chunk` |
+| `vec::window` | `rt_vecs_window` |
+| `vec::binary_search` | `rt_vecs_binary_search` |
+| `vec::clone` | `rt_vecs_clone` |
 
 ### Map/Dict Operations
 | Feature | Runtime Symbols |
@@ -261,7 +270,8 @@ nm bin/release/main | grep pal_
 | + process | + PAL proc | `-lssl -lcrypto -lsodium` |
 | + crypto | + PAL crypto | `-lssl -lcrypto -lsodium` |
 | Full stdlib | 15 | all |
+| Freestanding (`runtime=none`, `nostdlib=true`) | 0 | none (static) |
 
 ---
 
-*Generated for Mire v3.24.31+ with zero-cost runtime tiers.*
+*Generated for Mire v3.24.32+ with zero-cost runtime tiers and freestanding support.*

@@ -121,6 +121,15 @@ pub struct CDefs {
     /// If omitted, defaults to the host triple.
     #[serde(default)]
     pub target: Option<String>,
+    /// Skip C runtime startup files (crt1.o, crti.o, crtn.o) for true
+    /// no-libc freestanding binaries. Requires `runtime = "none"` and
+    /// a user-provided entry point (e.g. `_start`).
+    #[serde(default)]
+    pub nostartfiles: bool,
+    /// Skip standard library (libc, libgcc, etc.) for true no-libc freestanding.
+    /// Requires `runtime = "none"` and `nostartfiles = true`.
+    #[serde(default)]
+    pub nostdlib: bool,
 }
 
 impl Default for CDefs {
@@ -132,6 +141,8 @@ impl Default for CDefs {
             libs: Vec::new(),
             runtime: RuntimeTier::default(),
             target: None,
+            nostartfiles: false,
+            nostdlib: false,
         }
     }
 }

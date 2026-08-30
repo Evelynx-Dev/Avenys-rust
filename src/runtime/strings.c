@@ -37,6 +37,36 @@ char *rt_string_concat(const char *left, const char *right) {
     return out;
 }
 
+__attribute__((noinline)) char *rt_string_concat_n(size_t count, const char *const *parts) {
+    if (count == 0) return rt_managed_from_slice("", 0);
+    if (count == 1) {
+        if (parts[0] == NULL) return rt_managed_from_slice("", 0);
+        return rt_managed_from_slice(parts[0], str_byte_len(parts[0]));
+    }
+
+    // Calculate total length
+    size_t total_len = 0;
+    for (size_t i = 0; i < count; i++) {
+        if (parts[i] != NULL) {
+            total_len += str_byte_len(parts[i]);
+        }
+    }
+
+    char *out = rt_managed_alloc(total_len);
+    if (out == NULL) return rt_managed_from_slice("", 0);
+
+    size_t pos = 0;
+    for (size_t i = 0; i < count; i++) {
+        if (parts[i] != NULL) {
+            size_t len = str_byte_len(parts[i]);
+            memcpy(out + pos, parts[i], len);
+            pos += len;
+        }
+    }
+    out[pos] = '\0';
+    return out;
+}
+
 int64_t rt_strings_char_at(const char *s, int64_t index) {
     if (!s || index < 0) return 0;
     size_t len = str_byte_len(s);

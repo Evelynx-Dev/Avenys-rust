@@ -93,6 +93,7 @@ MireManagedString *rt_string_header(const char *data);
 
 char *rt_string_copy(const char *value);
 char *rt_string_concat(const char *left, const char *right);
+char *rt_string_concat_n(size_t count, const char *const *parts);
 char *rt_strings_repeat(const char *input, int64_t count);
 char *rt_string_append_owned(char *value, const char *suffix);
 int64_t rt_strings_len(const char *s);
@@ -192,6 +193,7 @@ int64_t rt_vecs_first(void *vec, int64_t line, int64_t col, const char *file);
 int64_t rt_vecs_last(void *vec, int64_t line, int64_t col, const char *file);
 int64_t rt_vecs_contains_i64(void *vec, int64_t needle);
 int64_t rt_vecs_index_of_i64(void *vec, int64_t needle);
+void   *rt_vecs_clone(void *vec);
 
 // Lists module aliases (rt_lists_*) — backward compat
 int64_t rt_lists_len(void *list);

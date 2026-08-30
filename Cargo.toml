@@ -1,8 +1,8 @@
 [package]
 name = "Avenys"
-version = "3.24.30"
+version = "3.24.32"
 edition = "2024"
-description = "Avenys is the mire compiler"
+description = "Avenys is the mire compiler — zero-cost runtime, freestanding support, derive macros"
 
 [dependencies]
 thiserror = "2.0"

@@ -92,14 +92,14 @@ pub(super) fn compile_binary_from_ir(
     clang.arg("-o").arg(binary_path);
     clang.arg(opt_level.as_opt_flag());
 
+    let c_defs = super::build_support::c_defs();
+    let is_none_tier = matches!(c_defs.runtime, super::config::RuntimeTier::None);
+    
     // In freestanding mode (none tier), skip runtime libraries — the program
     // provides its own implementations.  In full/minimal tiers, link the
     // standard runtime dependencies.  Crypto libs (libssl/libcrypto/libsodium)
     // are only linked when PAL files are actually compiled.
-    if !matches!(
-        super::build_support::c_defs().runtime,
-        super::config::RuntimeTier::None
-    ) {
+    if !is_none_tier {
         clang.arg("-lm");
         if link_crypto_libs {
             clang.arg("-lssl");
@@ -107,6 +107,46 @@ pub(super) fn compile_binary_from_ir(
             clang.arg("-lsodium");
         }
     }
+
+    // True no-libc freestanding: skip C runtime startup files.
+    // Only allowed with `runtime = "none"` — user must provide their own entry point.
+    if c_defs.nostartfiles {
+        if !is_none_tier {
+            return Err(MireError::new(ErrorKind::Runtime {
+                span: crate::error::Span::unknown(),
+                message: "`nostartfiles = true` requires `runtime = \"none\"`".to_string(),
+            }).with_filename(source_filename.to_string()));
+        }
+        clang.arg("-nostartfiles");
+    }
+
+    // True no-libc: skip standard library (libc, libgcc, etc.)
+    if c_defs.nostdlib {
+        if !is_none_tier {
+            return Err(MireError::new(ErrorKind::Runtime {
+                span: crate::error::Span::unknown(),
+                message: "`nostdlib = true` requires `runtime = \"none\"`".to_string(),
+            }).with_filename(source_filename.to_string()));
+        }
+        if !c_defs.nostartfiles {
+            return Err(MireError::new(ErrorKind::Runtime {
+                span: crate::error::Span::unknown(),
+                message: "`nostdlib = true` requires `nostartfiles = true`".to_string(),
+            }).with_filename(source_filename.to_string()));
+        }
+        clang.arg("-nostdlib");
+    }
+
+    // Pass user-defined cflags
+    for flag in &c_defs.cflags {
+        clang.arg(flag);
+    }
+
+    // Add -ffreestanding for none tier or when nostartfiles is set
+    if is_none_tier || c_defs.nostartfiles {
+        clang.arg("-ffreestanding");
+    }
+
     clang.arg("-pthread");
 
     for (lib_name, lib_path) in extern_libs {

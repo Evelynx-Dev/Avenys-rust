@@ -308,6 +308,12 @@ fn hash_op(op: &MirOp, buf: &mut Vec<u8>) {
             buf.push(29);
             hash_value(v, buf);
         }
+        MirOp::Concat(vals) => {
+            buf.push(30);
+            for v in vals {
+                hash_value(v, buf);
+            }
+        }
     }
 }
 
@@ -439,6 +445,7 @@ pub enum MirOp {
     ExtractValue(MirValue, MirValue, Vec<usize>),
     InsertValue(MirValue, MirValue, Vec<usize>),
     Drop(MirValue),
+    Concat(Vec<MirValue>),
 }
 
 #[derive(Debug, Clone)]

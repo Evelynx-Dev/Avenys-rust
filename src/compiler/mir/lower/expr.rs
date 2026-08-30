@@ -20,6 +20,25 @@ fn is_int_division(left: &Expression, right: &Expression) -> bool {
     !is_float_dt(&lt) && !is_float_dt(&rt)
 }
 
+/// Collects all operands in a string concatenation chain.
+/// For `a + b + c + d`, this will return [a, b, c, d] in order.
+fn collect_concat_operands(lower: &mut MirLower, expr: &Expression, operands: &mut Vec<MirValue>) {
+    if let Expression::BinaryOp { operator, left, right, .. } = expr {
+        if operator == "+" {
+            let left_ty = extract_data_type(left);
+            let right_ty = extract_data_type(right);
+            if left_ty == DataType::Str && right_ty == DataType::Str {
+                // Recursively collect operands from left and right
+                collect_concat_operands(lower, left, operands);
+                collect_concat_operands(lower, right, operands);
+                return;
+            }
+        }
+    }
+    // Not a string concat, add the expression as a single operand
+    operands.push(lower.lower_expression(expr));
+}
+
 impl MirLower {
 
     pub(crate) fn lower_call_args(&mut self, name: &str, args: &[Expression]) -> Vec<MirValue> {
@@ -250,27 +269,38 @@ impl MirLower {
                     return MirValue::temp(result);
                 }
 
+                let left_ty = extract_data_type(left);
+                let right_ty = extract_data_type(right);
+
                 let result = self.new_temp();
-                let mir_op = match operator.as_str() {
-                    "+" => MirOp::Add(l, r),
-                    "-" => MirOp::Sub(l, r),
-                    "*" => MirOp::Mul(l, r),
-                    "/" => MirOp::SDiv(l, r),
-                    "%" => MirOp::SRem(l, r),
-                    "==" => MirOp::ICmp(MirCmp::Eq, l, r),
-                    "!=" => MirOp::ICmp(MirCmp::Ne, l, r),
-                    "<" => MirOp::ICmp(MirCmp::Lt, l, r),
-                    "<=" => MirOp::ICmp(MirCmp::Le, l, r),
-                    ">" => MirOp::ICmp(MirCmp::Gt, l, r),
-                    ">=" => MirOp::ICmp(MirCmp::Ge, l, r),
-                    "&&" => MirOp::And(l, r),
-                    "||" => MirOp::Or(l, r),
-                    "&" => MirOp::BitAnd(l, r),
-                    "|" => MirOp::BitOr(l, r),
-                    "^" => MirOp::Xor(l, r),
-                    "<<" => MirOp::Shl(l, r),
-                    ">>" => MirOp::Shr(l, r),
-                    _ => MirOp::Add(l, r),
+                let mir_op = if operator.as_str() == "+" && left_ty == DataType::Str && right_ty == DataType::Str {
+                    // Collect all operands in a string concatenation chain
+                    let mut operands = Vec::new();
+                    collect_concat_operands(self, left, &mut operands);
+                    collect_concat_operands(self, right, &mut operands);
+                    MirOp::Concat(operands)
+                } else {
+                    match operator.as_str() {
+                        "+" => MirOp::Add(l, r),
+                        "-" => MirOp::Sub(l, r),
+                        "*" => MirOp::Mul(l, r),
+                        "/" => MirOp::SDiv(l, r),
+                        "%" => MirOp::SRem(l, r),
+                        "==" => MirOp::ICmp(MirCmp::Eq, l, r),
+                        "!=" => MirOp::ICmp(MirCmp::Ne, l, r),
+                        "<" => MirOp::ICmp(MirCmp::Lt, l, r),
+                        "<=" => MirOp::ICmp(MirCmp::Le, l, r),
+                        ">" => MirOp::ICmp(MirCmp::Gt, l, r),
+                        ">=" => MirOp::ICmp(MirCmp::Ge, l, r),
+                        "&&" => MirOp::And(l, r),
+                        "||" => MirOp::Or(l, r),
+                        "&" => MirOp::BitAnd(l, r),
+                        "|" => MirOp::BitOr(l, r),
+                        "^" => MirOp::Xor(l, r),
+                        "<<" => MirOp::Shl(l, r),
+                        ">>" => MirOp::Shr(l, r),
+                        _ => MirOp::Add(l, r),
+                    }
                 };
                 let last = self.current_block;
                 self.func.blocks[last].push(Some(result), mir_op, loc);

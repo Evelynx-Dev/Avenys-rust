@@ -207,6 +207,10 @@ pub(super) fn generate_runtime_declarations(ir: &str) -> String {
             "declare ptr @rt_string_concat(ptr, ptr)",
         ),
         (
+            "declare ptr @rt_string_concat_n(",
+            "declare ptr @rt_string_concat_n(i64, ptr)",
+        ),
+        (
             "declare void @pal_proc_on(",
             "declare void @pal_proc_on(ptr)",
         ),

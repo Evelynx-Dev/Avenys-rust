@@ -45,9 +45,15 @@ fn read_vmrss() -> u64 {
 }
 
 fn kioto_path() -> PathBuf {
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    manifest.parent().unwrap().join("kioto")
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    manifest_dir.parent().unwrap().join("kioto")
 }
+
+fn mire_path() -> PathBuf {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    manifest_dir.parent().unwrap().join("mire")
+}
+
 
 fn bench_compile(name: &str, source: &str, opt_level: OptLevel) {
     let root = make_project_dir(&format!("bench_{name}"));
@@ -55,7 +61,8 @@ fn bench_compile(name: &str, source: &str, opt_level: OptLevel) {
     fs::write(
         root.join("owl.toml"),
         format!(
-            "[project]\nname = \"bench\"\nversion = \"0.1.0\"\nentry = \"main.mire\"\n\n[dependencies]\nkioto = {{ path = \"{}\" }}\n",
+            "[project]\nname = \"bench\"\nversion = \"0.1.0\"\nentry = \"main.mire\"\n\n[dependencies]\nmire = {{ path = \"{}\" }}\nkioto = {{ path = \"{}\" }}\n",
+            mire_path().display(),
             kioto_path().display()
         ),
     )

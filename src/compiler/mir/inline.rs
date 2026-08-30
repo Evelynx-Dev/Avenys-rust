@@ -82,6 +82,11 @@ fn max_temp_in_op(op: &MirOp, max: &mut usize) {
         MirOp::Drop(v) => {
             max_temp_in_value(v, max);
         }
+        MirOp::Concat(vals) => {
+            for v in vals {
+                max_temp_in_value(v, max);
+            }
+        }
     }
 }
 
@@ -270,6 +275,7 @@ fn remap_op(op: &MirOp, temp_offset: usize, callee: &MirFunction, args: &[MirVal
         MirOp::InsertValue(agg, val, idx) => MirOp::InsertValue(map(agg), map(val), idx.clone()),
         MirOp::Copy(v) => MirOp::Copy(map(v)),
         MirOp::Drop(v) => MirOp::Drop(map(v)),
+        MirOp::Concat(vals) => MirOp::Concat(vals.iter().map(map).collect()),
     }
 }
 

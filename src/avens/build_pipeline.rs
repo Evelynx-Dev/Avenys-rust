@@ -86,7 +86,7 @@ fn compile_file_inner(
         //   minimal: compile PAL C sources only (runtime is demand-driven at IR level)
         //   none:    compile no runtime/PAL C sources (freestanding; user provides their own)
         let runtime_tier = options.c_defs.runtime;
-        if !matches!(runtime_tier, RuntimeTier::None) {
+if !matches!(runtime_tier, RuntimeTier::None) {
             if matches!(runtime_tier, RuntimeTier::Full) {
                 // Full tier: compile all runtime and PAL sources
                 let pal_platform = pal_platform_for_target(
@@ -111,6 +111,18 @@ fn compile_file_inner(
                         MireError::new(ErrorKind::Runtime {
                             span: crate::error::Span::unknown(),
                             message: format!("Could not collect C sources from runtime: {err}"),
+                        })
+                    })?;
+            }
+            // Also collect C sources from the compiler's runtime directory (standard library)
+            let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let compiler_runtime = manifest_dir.join("src/runtime");
+            if compiler_runtime.exists() {
+                super::toolchain::collect_c_files(&compiler_runtime, &mut files)
+                    .map_err(|err| {
+                        MireError::new(ErrorKind::Runtime {
+                            span: crate::error::Span::unknown(),
+                            message: format!("Could not collect C sources from compiler runtime: {err}"),
                         })
                     })?;
             }

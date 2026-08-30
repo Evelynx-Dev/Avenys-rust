@@ -172,6 +172,36 @@ MirOp::Add(l, r) => {
                 format!("%t{} = srem i64 {}, {}", result, l_final, r_final)
             }
         }
+        MirOp::Concat(vals) => {
+            let result = tmp_result(ctx, "ptr", inst.result);
+            // Build array of pointers for rt_string_concat_n
+            let array_ptr = tmp_extra(ctx, "ptr");
+            let array_type = format!("[{} x ptr]", vals.len());
+            extra.push(format!(
+                "{} = alloca {}, align 8",
+                array_ptr, array_type
+            ));
+            for (i, val) in vals.iter().enumerate() {
+                let (v_str, v_ty) = resolve_typed(val, ctx);
+                let elem_ptr = tmp_extra(ctx, "ptr");
+                extra.push(format!(
+                    "{} = getelementptr inbounds {}, ptr {}, i32 0, i64 {}",
+                    elem_ptr, array_type, array_ptr, i
+                ));
+                if v_ty != "ptr" {
+                    let conv = tmp_extra(ctx, "i64");
+                    extra.push(format!("{} = inttoptr i64 {} to ptr", conv, v_str));
+                    extra.push(format!("store ptr {}, ptr {}", conv, elem_ptr));
+                } else {
+                    extra.push(format!("store ptr {}, ptr {}", v_str, elem_ptr));
+                }
+            }
+            let count = vals.len();
+            format!(
+                "%t{} = call ptr @rt_string_concat_n(i64 {}, ptr {})",
+                result, count, array_ptr
+            )
+        }
         MirOp::Shl(l, r) => {
             let (l, _lt) = resolve_typed(l, ctx);
             let (r, _) = resolve_typed(r, ctx);
