@@ -36,13 +36,12 @@ pub use parser::{MireValue, Program};
 /// compiler passes that need `.`-separated identifiers call this function exactly
 /// once at their boundary.
 ///
-/// ```text
 /// AST:   push::i64        ← kept by parser
 ///         ↓ canonical_fn_name
 /// Typeck: push.i64         ← function lookup tables
 ///         ↓ canonical_fn_name
 /// MIR:    push.i64         ← LLVM identifiers
-/// ```
+
 #[inline]
 pub fn canonical_fn_name(name: &str) -> String {
     name.replace("::", ".")
