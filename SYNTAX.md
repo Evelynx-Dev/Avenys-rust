@@ -1,13 +1,13 @@
 # Mire Language Reference
 
-Version: **3.24.27**
+Version: **3.24.32**
 
 ---
 
 ## 1. First program
 
 ```mire
-pub fn main: () {
+fn main: () {
  use dasu("Hello, Mire!")
 }
 ```
