@@ -5,11 +5,11 @@
 //! reachable-import inference that auto-selects only the exports the caller
 //! actually uses.
 
-use super::{ImportResolver, PackageEntry};
 use super::files::load_or_parse_file;
+use super::{ImportResolver, PackageEntry};
 use crate::avens::{
-    check_entry_containment, load_exports, load_project_manifest, resolve_export_path,
-    EntryContainment, MireDependency,
+    EntryContainment, MireDependency, check_entry_containment, load_exports, load_project_manifest,
+    resolve_export_path,
 };
 use crate::canonical_fn_name;
 use crate::error::Result;
@@ -28,12 +28,20 @@ pub(crate) fn owl_home_libs() -> PathBuf {
     PathBuf::from(home).join(".owl").join("libs")
 }
 
-/// Extra fallback directory from `--lib-dir` / `$MIRE_LIB_DIR`.
-pub(super) fn lib_dir_fallback() -> Option<PathBuf> {
+/// Extra fallback directories from repeated/colon-separated `--lib-dir`
+/// values supplied by Owl. The compiler never discovers these directories by
+/// itself; Owl resolves and installs the packages before invoking it.
+pub(super) fn lib_dir_fallbacks() -> Vec<PathBuf> {
     std::env::var("MIRE_LIB_DIR")
         .ok()
-        .filter(|s| !s.is_empty())
-        .map(PathBuf::from)
+        .map(|paths| {
+            paths
+                .split(':')
+                .filter(|path| !path.is_empty())
+                .map(expand_tilde)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Expand a leading `~` in a path to the user's home directory.
@@ -70,9 +78,10 @@ pub(crate) fn resolve_dependency_root(
 
 /// Resolve a package name to its `(root_path, entry_string)`.
 ///
-/// Checks the package registry cache first, then consults manifest
-/// dependencies (path-only, with-path, or simple home-path). Special-cases
-/// `"kioto"` for backward compatibility.
+/// Checks the in-process path cache first, then uses the explicit library
+/// directory supplied by Owl (`--lib-dir`/`MIRE_LIB_DIR`). Avenys deliberately
+/// does not read the consumer project's dependency table or contact a
+/// registry; dependency selection and installation belong to Owl.
 pub(super) fn resolve_package(
     resolver: &mut ImportResolver,
     name: &str,
@@ -81,61 +90,33 @@ pub(super) fn resolve_package(
     if let Some(entry) = resolver.package_registry.get(name) {
         return Ok((entry.root.clone(), entry.entry.clone()));
     }
-    let package_root = if let Some(dep) = resolver.manifest_dependencies.get(name) {
-        match dep {
-            crate::avens::MireDependency::PathOnly { path }
-            | crate::avens::MireDependency::WithPath { path, .. } => {
-                let p = expand_tilde(path);
-                if p.is_absolute() {
-                    p
-                } else {
-                    resolver.project_root.join(p)
-                }
-            }
-            crate::avens::MireDependency::Simple { .. } => owl_home_libs().join(name),
-        }
-    } else if name == "kioto" {
-        let home_path = owl_home_libs().join("kioto");
-        if home_path.exists() {
-            home_path
-        } else {
-            let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-            let dev_path = crate_dir.join("../kioto");
-            if dev_path.exists() {
-                dev_path
-            } else {
-                resolver.project_root.join("../kioto")
-            }
-        }
+    let fallback_dirs = lib_dir_fallbacks();
+    let package_root = if let Some(fallback_path) = fallback_dirs
+        .iter()
+        .map(|directory| directory.join(name))
+        .find(|candidate| candidate.exists())
+    {
+        fallback_path
     } else {
-        // Try --lib-dir fallback
-        if let Some(fallback) = lib_dir_fallback() {
-            let fallback_path = fallback.join(name);
-            if fallback_path.exists() {
-                fallback_path
-            } else {
-                return Err(resolver.loader_error(span, format!(
-                    "Package '{}' not found in [dependencies] of {}",
-                    name,
-                    resolver.project_root.join("owl.toml").display()
-                )));
-            }
-        } else {
-            return Err(resolver.loader_error(span, format!(
-                "Package '{}' not found in [dependencies] of {}",
+        return Err(resolver.loader_error(
+            span,
+            format!(
+                "Package '{}' is not installed in the library directories supplied by Owl",
                 name,
-                resolver.project_root.join("owl.toml").display()
-            )));
-        }
+            ),
+        ));
     };
 
     let canonical_root = package_root.canonicalize().map_err(|err| {
-        resolver.loader_error(span, format!(
-            "Could not resolve package '{}' at '{}': {}",
-            name,
-            package_root.display(),
-            err
-        ))
+        resolver.loader_error(
+            span,
+            format!(
+                "Could not resolve package '{}' at '{}': {}",
+                name,
+                package_root.display(),
+                err
+            ),
+        )
     })?;
 
     let manifest = load_project_manifest(&canonical_root)?;
@@ -147,53 +128,13 @@ pub(super) fn resolve_package(
     // Path containment (docs/SECURITY.md item 5): a manifest entry that is
     // absolute or resolves outside the package root must not be loaded.
     if check_entry_containment(&canonical_root, &entry) == EntryContainment::EscapesRoot {
-        return Err(resolver.loader_error(span, format!(
-            "Package '{}' entry '{}' escapes the package root",
-            name, entry
-        )));
-    }
-
-    if let Some(ref m) = manifest {
-        for (dep_name, dep) in &m.dependencies.entries {
-            // Store transitive dependencies with paths absolute relative to
-            // the package that declares them, so that a `load` from deep
-            // inside a dependency resolves against *its* root, not the
-            // top-level consumer's project root.
-            let absolutized = match dep {
-                crate::avens::MireDependency::PathOnly { path } => {
-                    let p = expand_tilde(path);
-                    if p.is_absolute() {
-                        dep.clone()
-                    } else {
-                        crate::avens::MireDependency::PathOnly {
-                            path: canonical_root
-                                .join(&p)
-                                .to_string_lossy()
-                                .into_owned(),
-                        }
-                    }
-                }
-                crate::avens::MireDependency::WithPath { version, path } => {
-                    let p = expand_tilde(path);
-                    if p.is_absolute() {
-                        dep.clone()
-                    } else {
-                        crate::avens::MireDependency::WithPath {
-                            version: version.clone(),
-                            path: canonical_root
-                                .join(&p)
-                                .to_string_lossy()
-                                .into_owned(),
-                        }
-                    }
-                }
-                crate::avens::MireDependency::Simple { .. } => dep.clone(),
-            };
-            resolver
-                .manifest_dependencies
-                .entry(dep_name.clone())
-                .or_insert_with(|| absolutized);
-        }
+        return Err(resolver.loader_error(
+            span,
+            format!(
+                "Package '{}' entry '{}' escapes the package root",
+                name, entry
+            ),
+        ));
     }
 
     resolver.package_registry.insert(
@@ -240,7 +181,10 @@ pub(super) fn resolve_load_path(
 
         let target =
             resolve_export_path(&current_exports, &current_root, segment).ok_or_else(|| {
-                resolver.loader_error(span, format!("Package '{}' has no export '{}'", segments[0], segment))
+                resolver.loader_error(
+                    span,
+                    format!("Package '{}' has no export '{}'", segments[0], segment),
+                )
             })?;
 
         if is_last {
@@ -257,11 +201,14 @@ pub(super) fn resolve_load_path(
             current_exports = load_exports(&parent).unwrap_or_default();
             current_root = parent;
         } else {
-            return Err(resolver.loader_error(span, format!(
-                "Cannot resolve '{}': '{}' has no sub-exports",
-                segments[i + 1..].join("::"),
-                segment
-            )));
+            return Err(resolver.loader_error(
+                span,
+                format!(
+                    "Cannot resolve '{}': '{}' has no sub-exports",
+                    segments[i + 1..].join("::"),
+                    segment
+                ),
+            ));
         }
     }
 

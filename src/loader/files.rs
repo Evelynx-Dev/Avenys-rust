@@ -3,15 +3,15 @@
 //! Handles reading source files from disk, parsing them into ASTs,
 //! and managing the incremental cache for fast recompilation.
 
-use crate::avens::derive::expand_derives_source;
 use super::{ImportResolver, ResolvedFile};
+use crate::avens::derive::expand_derives_source;
 use crate::error::{MireError, Result};
 use crate::incremental::{
-    CachedParsedFile, collect_statement_bindings, collect_statement_dependencies,
-    source_hash, source_hash2, statement_export_name,
+    CachedParsedFile, collect_statement_bindings, collect_statement_dependencies, source_hash,
+    source_hash2, statement_export_name,
 };
-use crate::parser::{Program, parse};
 use crate::parser::ast::Statement;
+use crate::parser::{Program, parse};
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;

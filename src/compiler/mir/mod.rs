@@ -387,13 +387,8 @@ pub enum MirConst {
     Char(char),
     Str(String),
     None,
-    Struct {
-        ty: MirType,
-        fields: Vec<MirConst>,
-    },
-    Zero {
-        ty: DataType,
-    },
+    Struct { ty: MirType, fields: Vec<MirConst> },
+    Zero { ty: DataType },
 }
 
 #[derive(Clone, Debug)]

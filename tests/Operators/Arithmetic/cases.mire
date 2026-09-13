@@ -1,0 +1,29 @@
+// Arithmetic operators are checked independently, including signed results.
+
+@[test]
+pub fn addition_case: () :bool { return 12 + 5 == 17 }
+
+@[test]
+pub fn subtraction_case: () :bool { return 12 - 5 == 7 }
+
+@[test]
+pub fn multiplication_case: () :bool { return 12 * 5 == 60 }
+
+@[test]
+pub fn division_case: () :bool { return 60 / 5 == 12 }
+
+@[test]
+pub fn modulo_case: () :bool { return 60 % 7 == 4 }
+
+@[test]
+pub fn negative_addition: () :bool { return -4 + 9 == 5 }
+
+@[test]
+pub fn arithmetic_chain: () :bool { return 2 + 3 * 4 - 5 == 9 }
+
+@[test]
+pub fn arithmetic_variables: () :bool {
+    set left = 6
+    set right = 7
+    return left * right == 42
+}

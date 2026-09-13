@@ -1,0 +1,11 @@
+// The attributes are meaningful only when the harness finds and executes this
+// function; the body also checks a real mutable transition.
+@[test]
+@[section("attributes")]
+pub fn test_attribute_is_executed: () :bool {
+    set state = 40 mut
+    set state = state + 2
+    if state != 42 { return false }
+    set confirmed = state - 2
+    return confirmed == 40
+}

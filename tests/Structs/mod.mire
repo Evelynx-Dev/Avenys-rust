@@ -1,0 +1,9 @@
+// Struct construction and field access.
+
+struct Point { x :i64, y :i64 }
+
+@[test]
+pub fn point_fields: () :bool {
+    set point = Point(20 22)
+    return point.x + point.y == 42
+}

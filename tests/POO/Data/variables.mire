@@ -1,0 +1,6 @@
+@[test]
+pub fn data_variable_reassigns: () :bool {
+    set quantity = 2 mut
+    set quantity = quantity * 4
+    return quantity == 8
+}

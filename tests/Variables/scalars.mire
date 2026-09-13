@@ -1,0 +1,33 @@
+// Scalar annotations ensure the parser and type checker preserve widths.
+
+@[test]
+pub fn signed_i8: () :bool { set value = 8 :i8
+    return value == 8 }
+
+@[test]
+pub fn signed_i16: () :bool { set value = 16 :i16
+    return value == 16 }
+
+@[test]
+pub fn signed_i32: () :bool { set value = 32 :i32
+    return value == 32 }
+
+@[test]
+pub fn unsigned_u8: () :bool { set value = 8 :u8
+    return value == 8 }
+
+@[test]
+pub fn unsigned_u16: () :bool { set value = 16 :u16
+    return value == 16 }
+
+@[test]
+pub fn unsigned_u32: () :bool { set value = 32 :u32
+    return value == 32 }
+
+@[test]
+pub fn floating_f32: () :bool { set value = 1.25 :f32
+    return value > 1.0 }
+
+@[test]
+pub fn floating_f64: () :bool { set value = 2.5 :f64
+    return value > 2.0 }

@@ -1,0 +1,5 @@
+@[test]
+pub fn pipeline_family_is_discoverable: () :bool {
+    set value = 42
+    return value == 42
+}

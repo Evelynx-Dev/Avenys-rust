@@ -1,0 +1,50 @@
+// Branch forms are tested with both selected paths and nested conditions.
+
+@[test]
+pub fn true_branch: () :bool { if true { return true } else { return false } }
+
+@[test]
+pub fn false_branch: () :bool { if false { return false } else { return true } }
+
+@[test]
+pub fn else_if_chain: () :bool {
+    set value = 2
+    if value == 1 {
+        return false
+    } else {
+        if value == 2 { return true } else { return false }
+    }
+}
+
+@[test]
+pub fn nested_branch: () :bool {
+    if true { if true { return true } }
+    return false
+}
+
+@[test]
+pub fn branch_assignment: () :bool {
+    set value = 0 mut
+    if true { set value = 5 }
+    return value == 5
+}
+
+@[test]
+pub fn branch_comparison: () :bool {
+    set value = 8
+    if value > 3 { return true }
+    return false
+}
+
+@[test]
+pub fn branch_with_expression: () :bool {
+    set value = 2
+    if value + 2 == 4 { return true }
+    return false
+}
+
+@[test]
+pub fn branch_false_guard: () :bool {
+    if 1 > 2 { return false }
+    return true
+}

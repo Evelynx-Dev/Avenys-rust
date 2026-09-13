@@ -65,9 +65,9 @@ pub struct BuildOptions {
     pub cache: CacheOverrides,
     pub warning_filter: WarningFilter,
     pub deny_warnings: HashSet<DiagnosticCode>,
-     pub module_paths: Vec<PathBuf>,
-     pub test_mode: bool,
-     pub c_defs: CDefs,
+    pub module_paths: Vec<PathBuf>,
+    pub test_mode: bool,
+    pub c_defs: CDefs,
 }
 
 #[derive(Debug, Clone)]
@@ -130,6 +130,9 @@ pub struct CDefs {
     /// Requires `runtime = "none"` and `nostartfiles = true`.
     #[serde(default)]
     pub nostdlib: bool,
+    /// Library type for --libt flag and libt config.
+    #[serde(default)]
+    pub libt: LibType,
 }
 
 impl Default for CDefs {
@@ -143,6 +146,7 @@ impl Default for CDefs {
             target: None,
             nostartfiles: false,
             nostdlib: false,
+            libt: LibType::default(),
         }
     }
 }
@@ -165,28 +169,110 @@ pub struct MireMacros {
 /// - `none`:  no Mire runtime at all; the program must provide its own panic handler
 ///            and any PAL symbols it needs.  PAL declarations are still emitted when
 ///            the program actually calls PAL functions (PAL is separate from the runtime).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RuntimeTier {
-    #[default]
     Full,
     Minimal,
     None,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+impl RuntimeTier {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.to_ascii_lowercase().as_str() {
+            "full" => Some(Self::Full),
+            "minimal" => Some(Self::Minimal),
+            "none" => Some(Self::None),
+            _ => None,
+        }
+    }
+}
+
+/// Library type for `--libt` flag and libt config.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum LibType {
+    #[default]
+    Bin,
+    Static,
+    Shared,
+}
+
+impl LibType {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.to_lowercase().as_str() {
+            "bin" => Some(Self::Bin),
+            "static" | "staticlib" | "static-lib" => Some(Self::Static),
+            "shared" | "cdylib" | "dylib" => Some(Self::Shared),
+            _ => None,
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for LibType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Self::parse(&s).ok_or_else(|| {
+            serde::de::Error::custom(format!(
+                "invalid library type: {} (expected bin, static, or shared)",
+                s
+            ))
+        })
+    }
+}
+
+impl Default for RuntimeTier {
+    fn default() -> Self {
+        Self::Full
+    }
+}
+
+impl serde::Serialize for RuntimeTier {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(match self {
+            RuntimeTier::Full => "full",
+            RuntimeTier::Minimal => "minimal",
+            RuntimeTier::None => "none",
+        })
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for RuntimeTier {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.as_str() {
+            "full" => Ok(RuntimeTier::Full),
+            "minimal" => Ok(RuntimeTier::Minimal),
+            "none" => Ok(RuntimeTier::None),
+            _ => Err(serde::de::Error::custom(format!(
+                "invalid runtime tier: {}",
+                s
+            ))),
+        }
+    }
+}
+
+/// Security trust tier for code execution.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum TrustTier {
+    #[default]
     Code,
     Macros,
     Ffi,
 }
 
-impl Default for TrustTier {
-    fn default() -> Self {
-        Self::Code
-    }
-}
+/// Library type for --libt flag and libt config.
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SecurityConfig {
@@ -286,24 +372,4 @@ pub struct MireCacheConfig {
     pub analysis_cache: Option<bool>,
     pub compression: Option<bool>,
     pub blob_checksum: Option<bool>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MireLock {
-    #[serde(alias = "package")]
-    pub project: MireLockProject,
-    pub build: MireLockBuild,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MireLockProject {
-    pub name: String,
-    pub version: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MireLockBuild {
-    pub llvm_version: String,
-    pub profile: String,
-    pub opt_level: String,
 }

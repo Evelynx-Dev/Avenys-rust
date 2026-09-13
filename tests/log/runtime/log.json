@@ -1,0 +1,22 @@
+{
+  "count": {
+    "Err": 0,
+    "FiltOut": 0,
+    "Ok": 1,
+    "ram_mb": 3,
+    "time_ms": 3
+  },
+  "family": "runtime",
+  "files": [
+    "tests/Runtime/Full/mod.mire"
+  ],
+  "info": {
+    "CODES": [],
+    "CPU %": 78.76,
+    "RAM": 3,
+    "Time ms": 3,
+    "Total": 1,
+    "Warns": 0
+  },
+  "reproducible": true
+}

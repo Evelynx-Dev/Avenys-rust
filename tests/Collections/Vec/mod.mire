@@ -1,0 +1,9 @@
+// Vector construction and indexed access.
+load mire::vec
+
+@[test]
+pub fn vector_push_and_get: () :bool {
+    set values = [] :vec[i64] mut
+    set values = vec::push::i64(values 7)
+    return vec::get::i64(values 0) == 7
+}

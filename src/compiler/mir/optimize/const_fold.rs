@@ -47,12 +47,12 @@ fn try_fold(inst: &MirInst) -> Option<MirConst> {
             _ => None,
         },
         Shr(MirValue::Const(a), MirValue::Const(b)) => match (a, b) {
-            (MirConst::Int(x), MirConst::Int(y)) => Some(MirConst::Int((*x as u64 >> *y as u32) as i64)),
+            (MirConst::Int(x), MirConst::Int(y)) => {
+                Some(MirConst::Int((*x as u64 >> *y as u32) as i64))
+            }
             _ => None,
         },
-        Xor(MirValue::Const(a), MirValue::Const(b)) => {
-            binop_const(a, b, |x, y| x ^ y, |_, _| 0.0)
-        }
+        Xor(MirValue::Const(a), MirValue::Const(b)) => binop_const(a, b, |x, y| x ^ y, |_, _| 0.0),
         BitAnd(MirValue::Const(a), MirValue::Const(b)) => {
             binop_const(a, b, |x, y| x & y, |_, _| 0.0)
         }

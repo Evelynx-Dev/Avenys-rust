@@ -1,0 +1,23 @@
+{
+  "count": {
+    "Err": 0,
+    "FiltOut": 0,
+    "Ok": 2,
+    "ram_mb": 5,
+    "time_ms": 5
+  },
+  "family": "macros",
+  "files": [
+    "tests/Macros/Builtin/mod.mire",
+    "tests/Macros/Custom/mod.mire"
+  ],
+  "info": {
+    "CODES": [],
+    "CPU %": 82.3,
+    "RAM": 5,
+    "Time ms": 5,
+    "Total": 2,
+    "Warns": 0
+  },
+  "reproducible": true
+}

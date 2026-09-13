@@ -1,0 +1,21 @@
+load mire::vec
+
+@[test]
+pub fn method_family_uses_collection: () :bool {
+    set values = [] :vec[i64] mut
+    set values = values.push::i64(42)
+    return values.len() == 1
+}
+
+@[test]
+pub fn method_syntax_reads_and_mutates_receiver: () :bool {
+    set values = [] :vec[i64] mut
+    set values = values.push::i64(4)
+    set values = values.push::i64(8)
+    set second = values.get::i64(1)
+
+    if values.len() != 2 {
+        return false
+    }
+    return second == 8
+}

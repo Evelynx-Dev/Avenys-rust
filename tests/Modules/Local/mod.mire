@@ -1,0 +1,10 @@
+module local_case
+
+fn local_answer: () :i64 { return 40 + 2 }
+
+@[test]
+pub fn local_namespace_declares: () :bool {
+    set observed = local_answer()
+    if observed != 42 { return false }
+    return observed - 2 == 40
+}

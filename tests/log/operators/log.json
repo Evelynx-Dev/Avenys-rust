@@ -1,0 +1,33 @@
+{
+  "count": {
+    "Err": 0,
+    "FiltOut": 0,
+    "Ok": 31,
+    "ram_mb": 5,
+    "time_ms": 3
+  },
+  "family": "operators",
+  "files": [
+    "tests/Operators/Arithmetic/cases.mire",
+    "tests/Operators/Arithmetic/mod.mire",
+    "tests/Operators/Bitwise/mod.mire",
+    "tests/Operators/Comparison/cases.mire",
+    "tests/Operators/Comparison/mod.mire",
+    "tests/Operators/Continuation/mod.mire",
+    "tests/Operators/Logical/cases.mire",
+    "tests/Operators/Logical/mod.mire",
+    "tests/Operators/Pipeline/mod.mire",
+    "tests/Operators/mod.mire"
+  ],
+  "info": {
+    "CODES": [
+      "W0036"
+    ],
+    "CPU %": 91.52,
+    "RAM": 5,
+    "Time ms": 3,
+    "Total": 31,
+    "Warns": 1
+  },
+  "reproducible": true
+}

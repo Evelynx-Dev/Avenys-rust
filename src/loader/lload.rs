@@ -3,7 +3,7 @@
 //! Handles resolving `load! path::to::module` declarations that refer to
 //! project-local files rather than external packages. Resolves paths
 //! relative to the project root (absolute) or the current file's directory
-//! (relative), with a 2-level depth limit.
+//! (relative), with a protected depth and graph limit in the resolver.
 
 use super::ImportResolver;
 use crate::error::{Result, Span};
@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 /// 3. `<dir>.mire`
 ///
 /// Returns the resolved file path and the directory depth below the project
-/// root (used for the 2-level limit enforced by `load_file`).
+/// root (used for diagnostics; the safety budget is enforced by `load_file`).
 pub(super) fn resolve_load_local_target(
     resolver: &ImportResolver,
     rel_path: &[String],
@@ -37,19 +37,22 @@ pub(super) fn resolve_load_local_target(
         candidate_dir.join("mod.mire"),
         candidate_dir.with_extension("mire"),
     ];
-    let target = candidates
-        .into_iter()
-        .find(|p| p.exists())
-        .ok_or_else(|| {
-            resolver.loader_error(span, format!("load! target '{}' not found", rel_path.join("/")))
-        })?;
+    let target = candidates.into_iter().find(|p| p.exists()).ok_or_else(|| {
+        resolver.loader_error(
+            span,
+            format!("load! target '{}' not found", rel_path.join("/")),
+        )
+    })?;
     let depth = target
         .parent()
         .and_then(|p| p.strip_prefix(&resolver.project_root).ok())
         .map(|rel| {
             rel.components()
                 .filter(|c| {
-                    !matches!(c, std::path::Component::CurDir | std::path::Component::ParentDir)
+                    !matches!(
+                        c,
+                        std::path::Component::CurDir | std::path::Component::ParentDir
+                    )
                 })
                 .count()
         })

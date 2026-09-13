@@ -1,31 +1,50 @@
 use crate::cli::*;
-use mire::{
-    BuildOptions, ImportMode, analyze_program, analyze_program_with_warnings_and_origins,
-    compile_file_with_avenys, load_program_with_metadata,
-};
 use mire::compiler::WarningConfig;
 use mire::error::diagnostic::Severity;
 use mire::error::diagnostic::WarningFilter;
 use mire::error::format::format_diagnostic;
+use mire::{
+    BuildOptions, ImportMode, analyze_program, analyze_program_with_warnings_and_origins,
+    compile_file_with_avenys, load_program_with_metadata,
+};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
 
 pub(crate) fn run_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
+    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
+        println!("Usage: mire run [file] [options] [-- program-args]");
+        println!("  --debug/--release     Select build profile");
+        println!("  -O, --opt-level <n>   0|1|2|3|s|z");
+        println!("  -o, --output <file>   Output executable");
+        println!("  --output-dir <dir>    Output directory");
+        println!("  --cache-dir <dir>     Incremental cache directory");
+        println!("  -L, --link <dir>      Native linker search directory");
+        println!("  -l, --link-lib <name> Native library to link");
+        println!("  --target <triple>     LLVM/Clang target triple");
+        println!("  --libt <bin|static|shared>  Output type");
+        return Ok(0);
+    }
     let (common, file, pass_through) = parse_run_options(cwd, args)?;
     let path = resolve_source_path(cwd, file)?;
+    configure_build_paths(cwd, &common, &path);
     set_lib_dir_env(&common.lib_dir);
     let c_defs = c_defs_for(cwd);
+    let mut c_defs = c_defs;
+    apply_cli_c_defs(&mut c_defs, &common);
     let test_roots = read_test_roots(cwd);
     let suppress_warn = is_under_test_path(&path, &test_roots);
     let options = BuildOptions {
         mode: common.mode,
         opt_level: common.opt_level,
         debug_dump: common.verbose,
-        output: common
-            .output
-            .clone()
-            .or_else(|| Some(default_binary_path(&path, common.mode))),
+        output: common.output.clone().or_else(|| {
+            common
+                .output_dir
+                .as_ref()
+                .map(|dir| dir.join(path.file_stem().unwrap_or_default()))
+                .or_else(|| Some(default_binary_path(&path, common.mode)))
+        }),
         emit_binary: true,
         persist_ir: false,
         import_mode: ImportMode::default(),
@@ -56,6 +75,13 @@ pub(crate) fn build_help() {
     println!("  -O, --opt-level <n>   0|1|2|3|s|z");
     println!("\nOutput:");
     println!("  -o, --output <file>   Output binary path (default: <input>.out)");
+    println!("  --output-dir <dir>    Output directory (default: bin/<profile>)");
+    println!("  --cache-dir <dir>     Incremental cache directory (default: bin/.cache)");
+    println!("  --libt <type>         Library type: bin|static|shared (default: bin)");
+    println!("  --runtime <tier>      Runtime tier: full|minimal|none");
+    println!("  --target <triple>     LLVM/Clang target triple");
+    println!("  -L, --link <dir>      Native linker search directory");
+    println!("  -l, --link-lib <name> Native library to link");
     println!("\nWarnings:");
     println!("  --show-warn           Show warning summary");
     println!("  --position            Show per-file warning locations");
@@ -68,22 +94,29 @@ pub(crate) fn build_help() {
 }
 
 pub(crate) fn build_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
-    if args.iter().any(|a| a == "--help") {
+    if args.iter().any(|a| a == "--help" || a == "-h") {
         build_help();
         return Ok(0);
     }
     let (common, file) = parse_common_with_file(cwd, args)?;
     let path = resolve_source_path(cwd, file)?;
+    configure_build_paths(cwd, &common, &path);
     set_lib_dir_env(&common.lib_dir);
     let test_roots = read_test_roots(cwd);
     let suppress_warn = is_under_test_path(&path, &test_roots);
+    let mut c_defs = c_defs_for(cwd);
+    apply_cli_c_defs(&mut c_defs, &common);
     let options = BuildOptions {
         mode: common.mode,
         opt_level: common.opt_level,
         debug_dump: common.verbose,
-        output: common
-            .output
-            .or_else(|| Some(default_binary_path(&path, common.mode))),
+        output: common.output.or_else(|| {
+            common
+                .output_dir
+                .as_ref()
+                .map(|dir| dir.join(path.file_stem().unwrap_or_default()))
+                .or_else(|| Some(default_binary_path(&path, common.mode)))
+        }),
         emit_binary: true,
         persist_ir: false,
         import_mode: ImportMode::default(),
@@ -92,7 +125,7 @@ pub(crate) fn build_command(cwd: &Path, args: &[String]) -> Result<i32, MireErro
         deny_warnings: common.warn.deny,
         test_mode: false,
         module_paths: Vec::new(),
-        c_defs: c_defs_for(cwd),
+        c_defs,
     };
     let build = compile_file_with_avenys(&path, &options)?;
     if !suppress_warn && !matches!(options.warning_filter, WarningFilter::Off) {
@@ -149,10 +182,14 @@ pub(crate) fn check_command(cwd: &Path, args: &[String]) -> Result<i32, MireErro
                 }
             } else {
                 print_warning_summary(&filtered_diags);
-                has_error = filtered_diags.iter().any(|d| matches!(d.severity, Severity::Error));
+                has_error = filtered_diags
+                    .iter()
+                    .any(|d| matches!(d.severity, Severity::Error));
             }
         } else {
-            has_error = filtered_diags.iter().any(|d| matches!(d.severity, Severity::Error));
+            has_error = filtered_diags
+                .iter()
+                .any(|d| matches!(d.severity, Severity::Error));
         }
         Ok(if has_error { 1 } else { 0 })
     };
@@ -160,10 +197,25 @@ pub(crate) fn check_command(cwd: &Path, args: &[String]) -> Result<i32, MireErro
 }
 
 pub(crate) fn debug_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
+    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
+        println!("Usage: mire debug [file] [options]");
+        println!("  --tokens, -t          Print lexer tokens");
+        println!("  --ast, -p             Print parsed AST");
+        println!("  --ir                  Emit IR without a binary");
+        println!("  --run, -r             Run the debug binary");
+        println!("  -O, --opt-level <n>   Optimization level");
+        println!("  -L, --link <dir>      Native linker search directory");
+        println!("  -l, --link-lib <name> Native library to link");
+        println!("  --target <triple>     LLVM/Clang target triple");
+        return Ok(0);
+    }
     let options = parse_debug_options(cwd, args)?;
     let path = resolve_source_path(cwd, options.file.clone())?;
+    configure_build_paths(cwd, &options.common, &path);
     set_lib_dir_env(&options.common.lib_dir);
     let c_defs = c_defs_for(cwd);
+    let mut c_defs = c_defs;
+    apply_cli_c_defs(&mut c_defs, &options.common);
     let source = fs::read_to_string(&path).map_err(runtime_err)?;
 
     if options.show_tokens {
@@ -190,11 +242,14 @@ pub(crate) fn debug_command(cwd: &Path, args: &[String]) -> Result<i32, MireErro
             mode: options.common.mode,
             opt_level: options.common.opt_level,
             debug_dump: true,
-            output: options
-                .common
-                .output
-                .clone()
-                .or_else(|| Some(default_binary_path(&path, options.common.mode))),
+            output: options.common.output.clone().or_else(|| {
+                options
+                    .common
+                    .output_dir
+                    .as_ref()
+                    .map(|dir| dir.join(path.file_stem().unwrap_or_default()))
+                    .or_else(|| Some(default_binary_path(&path, options.common.mode)))
+            }),
             emit_binary: !options.emit_ir_only,
             persist_ir: true,
             import_mode: ImportMode::default(),
@@ -380,7 +435,9 @@ pub(crate) fn lsp_command(cwd: &Path, args: &[String]) -> Result<i32, MireError>
             }
         }
         Err(err) => {
-            let msg = format!("{}", err).replace('\\', "\\\\").replace('"', "\\\"");
+            let msg = format!("{}", err)
+                .replace('\\', "\\\\")
+                .replace('"', "\\\"");
             s.push_str(&format!(
                 "{{\"sev\":\"error\",\"code\":\"pipeline\",\"msg\":\"{}\",\"l\":1,\"c\":1,\"len\":1}}",
                 msg

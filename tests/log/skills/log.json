@@ -1,0 +1,22 @@
+{
+  "count": {
+    "Err": 0,
+    "FiltOut": 0,
+    "Ok": 1,
+    "ram_mb": 3,
+    "time_ms": 3
+  },
+  "family": "skills",
+  "files": [
+    "tests/Skills/mod.mire"
+  ],
+  "info": {
+    "CODES": [],
+    "CPU %": 89.08,
+    "RAM": 3,
+    "Time ms": 3,
+    "Total": 1,
+    "Warns": 0
+  },
+  "reproducible": true
+}

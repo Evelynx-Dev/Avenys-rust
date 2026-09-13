@@ -1,0 +1,13 @@
+// Generic syntax is exercised with a concrete type inferred at the call site.
+
+fn identity[T]: (value :T) :T {
+    return value
+}
+
+@[test]
+pub fn inferred_generic: () :bool {
+    set original = 42
+    set copied = identity(original)
+    if copied != 42 { return false }
+    return identity(copied + 1) == 43
+}

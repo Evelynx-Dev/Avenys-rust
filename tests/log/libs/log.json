@@ -1,0 +1,24 @@
+{
+  "count": {
+    "Err": 0,
+    "FiltOut": 0,
+    "Ok": 3,
+    "ram_mb": 4,
+    "time_ms": 4
+  },
+  "family": "libs",
+  "files": [
+    "tests/libs/kioto/tests/mod.mire",
+    "tests/libs/mire/tests/mod.mire",
+    "tests/libs/sqlite/tests/mod.mire"
+  ],
+  "info": {
+    "CODES": [],
+    "CPU %": 87.96,
+    "RAM": 4,
+    "Time ms": 4,
+    "Total": 3,
+    "Warns": 0
+  },
+  "reproducible": true
+}

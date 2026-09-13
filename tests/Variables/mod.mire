@@ -1,0 +1,10 @@
+// Variables and scalar type syntax: inference, mutation and explicit ascription.
+
+@[test]
+pub fn inferred_and_mutable_values: () :bool {
+    set count = 2 mut
+    set count = count + 3
+    set enabled = true
+    set ratio = 2.5 :f64
+    return count == 5 && enabled && ratio > 2.0
+}

@@ -24,8 +24,8 @@
 // in dependency candidate collection (e.g. `str::copy` is reachable-selected).
 
 use crate::parser::{
+    ast::{DataType, EnumVariantDef, Program, Statement},
     parse,
-    ast::{EnumVariantDef, Program, Statement, DataType},
 };
 use std::collections::{HashMap, HashSet};
 
@@ -66,10 +66,8 @@ pub fn expand_derives_source(source: &str) -> String {
             ..
         } = stmt
         {
-            let derive_names: Option<Vec<&str>> = attributes
-                .iter()
-                .find(|a| a.name == "derive")
-                .map(|attr| {
+            let derive_names: Option<Vec<&str>> =
+                attributes.iter().find(|a| a.name == "derive").map(|attr| {
                     attr.args
                         .iter()
                         .filter_map(|arg| Some(arg.value.as_str()))
@@ -173,9 +171,12 @@ fn field_metas(fields: &[Statement]) -> Vec<FieldMeta> {
     fields
         .iter()
         .filter_map(|f| match f {
-            Statement::Let { name, data_type, .. } => {
-                Some(FieldMeta { name: name.clone(), ty: data_type.clone() })
-            }
+            Statement::Let {
+                name, data_type, ..
+            } => Some(FieldMeta {
+                name: name.clone(),
+                ty: data_type.clone(),
+            }),
             _ => None,
         })
         .collect()
@@ -267,8 +268,15 @@ fn zero_expr(ty: &DataType) -> String {
         DataType::Vector { element_type, .. } => {
             format!("[] :vec[{}]", type_to_string(element_type))
         }
-        DataType::Map { key_type, value_type } => {
-            format!("{{}} :map[{} {}]", type_to_string(key_type), type_to_string(value_type))
+        DataType::Map {
+            key_type,
+            value_type,
+        } => {
+            format!(
+                "{{}} :map[{} {}]",
+                type_to_string(key_type),
+                type_to_string(value_type)
+            )
         }
         DataType::Maybe { inner } => format!("None :{}", type_to_string(inner)),
         DataType::StructNamed(n) => format!("{n}::default()"),
@@ -371,8 +379,15 @@ fn type_to_string(ty: &DataType) -> String {
         DataType::Vector { element_type, .. } => {
             format!("vec[{}]", type_to_string(element_type))
         }
-        DataType::Map { key_type, value_type } => {
-            format!("map[{} {}]", type_to_string(key_type), type_to_string(value_type))
+        DataType::Map {
+            key_type,
+            value_type,
+        } => {
+            format!(
+                "map[{} {}]",
+                type_to_string(key_type),
+                type_to_string(value_type)
+            )
         }
         DataType::Maybe { inner } => format!("Maybe[{}]", type_to_string(inner)),
         DataType::StructNamed(n) => n.clone(),

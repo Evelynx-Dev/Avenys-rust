@@ -1,0 +1,15 @@
+// Branches and loops are checked through their resulting state.
+
+@[test]
+pub fn if_and_while: () :bool {
+    set value = 0 mut
+    if value == 0 {
+        set value = 1
+    } else {
+        set value = 99
+    }
+    while value < 4 {
+        set value = value + 1
+    }
+    return value == 4
+}

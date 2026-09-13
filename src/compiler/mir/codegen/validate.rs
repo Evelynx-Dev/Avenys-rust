@@ -32,13 +32,13 @@ fn pal_decl_names() -> HashSet<String> {
     names
 }
 
-pub(crate) fn find_first_undefined_call(
-    program: &MirProgram,
-) -> Option<(String, (usize, usize))> {
-    let defined: HashSet<String> =
-        program.functions.iter().map(|f| f.name.clone()).collect();
-    let extern_names: HashSet<String> =
-        program.extern_functions.iter().map(|e| e.name.clone()).collect();
+pub(crate) fn find_first_undefined_call(program: &MirProgram) -> Option<(String, (usize, usize))> {
+    let defined: HashSet<String> = program.functions.iter().map(|f| f.name.clone()).collect();
+    let extern_names: HashSet<String> = program
+        .extern_functions
+        .iter()
+        .map(|e| e.name.clone())
+        .collect();
     let struct_names: HashSet<String> = program.struct_types.keys().cloned().collect();
     let pal_decls = pal_decl_names();
     for func in &program.functions {

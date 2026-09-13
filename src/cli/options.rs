@@ -1,9 +1,9 @@
 use crate::cli::*;
+use mire::error::diagnostic::{DiagnosticCode, WarningFilter};
 use mire::{
-    BuildMode, CacheOverrides, MireError, OptLevel, default_output_dir, find_project_root,
+    BuildMode, CacheOverrides, LibType, MireError, OptLevel, default_output_dir, find_project_root,
     load_project_manifest,
 };
-use mire::error::diagnostic::{DiagnosticCode, WarningFilter};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -12,10 +12,19 @@ pub(crate) struct CommonOptions {
     pub(crate) mode: BuildMode,
     pub(crate) opt_level: OptLevel,
     pub(crate) output: Option<PathBuf>,
+    pub(crate) output_dir: Option<PathBuf>,
+    pub(crate) cache_dir: Option<PathBuf>,
     pub(crate) cache: CacheOverrides,
     pub(crate) lib_dir: Option<String>,
+    pub(crate) libt: Option<LibType>,
     pub(crate) warn: WarningCliOptions,
     pub(crate) verbose: bool,
+    pub(crate) target: Option<String>,
+    pub(crate) link_dirs: Vec<String>,
+    pub(crate) link_libs: Vec<String>,
+    pub(crate) runtime: Option<mire::RuntimeTier>,
+    pub(crate) nostartfiles: bool,
+    pub(crate) nostdlib: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -64,15 +73,24 @@ pub(crate) fn parse_common_with_file(
     let mut mode = BuildMode::Debug;
     let mut opt_level = OptLevel::O0;
     let mut output = None;
+    let mut output_dir = None;
     let mut file = None;
     let mut cache = CacheOverrides::default();
     let mut lib_dir = None;
+    let mut cache_dir = None;
+    let mut libt = None;
     let mut verbose = false;
     let mut show_warn = false;
     let mut position = false;
     let mut warn_codes = HashSet::new();
     let mut deny_codes = HashSet::new();
     let mut no_warn_cats: Vec<String> = Vec::new();
+    let mut target = None;
+    let mut link_dirs = Vec::new();
+    let mut link_libs = Vec::new();
+    let mut runtime = None;
+    let mut nostartfiles = false;
+    let mut nostdlib = false;
 
     let mut i = 0;
     while i < args.len() {
@@ -91,9 +109,9 @@ pub(crate) fn parse_common_with_file(
             }
             "-O" | "--opt-level" => {
                 i += 1;
-                let level = args.get(i).ok_or_else(|| {
-                    cli_msg("Missing optimization level after -O/--opt-level")
-                })?;
+                let level = args
+                    .get(i)
+                    .ok_or_else(|| cli_msg("Missing optimization level after -O/--opt-level"))?;
                 opt_level = OptLevel::parse(level)
                     .ok_or_else(|| cli_msg("Invalid optimization level, use 0/1/2/3/s/z"))?;
             }
@@ -108,6 +126,20 @@ pub(crate) fn parse_common_with_file(
                     .ok_or_else(|| cli_msg("Missing output path after -o/--output"))?;
                 output = Some(PathBuf::from(value));
             }
+            "--output-dir" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| cli_msg("Missing output directory after --output-dir"))?;
+                output_dir = Some(PathBuf::from(value));
+            }
+            "--cache-dir" | "--cache" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| cli_msg("Missing cache directory after --cache-dir"))?;
+                cache_dir = Some(PathBuf::from(value));
+            }
             "--lib-dir" => {
                 i += 1;
                 let value = args
@@ -115,6 +147,52 @@ pub(crate) fn parse_common_with_file(
                     .ok_or_else(|| cli_msg("Missing value for --lib-dir"))?;
                 lib_dir = Some(value.to_string());
             }
+            "--libt" => {
+                i += 1;
+                let value = args.get(i).ok_or_else(|| {
+                    cli_msg("Missing library type after --libt (bin|static|shared)")
+                })?;
+                libt = Some(
+                    LibType::parse(value)
+                        .ok_or_else(|| cli_msg("Invalid library type, use bin|static|shared"))?,
+                );
+            }
+            "--target" => {
+                i += 1;
+                target = Some(
+                    args.get(i)
+                        .ok_or_else(|| cli_msg("Missing target after --target"))?
+                        .clone(),
+                );
+            }
+            "-L" | "--link" => {
+                i += 1;
+                link_dirs.push(
+                    args.get(i)
+                        .ok_or_else(|| cli_msg("Missing path after -L/--link"))?
+                        .clone(),
+                );
+            }
+            "-l" | "--link-lib" => {
+                i += 1;
+                link_libs.push(
+                    args.get(i)
+                        .ok_or_else(|| cli_msg("Missing library after -l/--link-lib"))?
+                        .clone(),
+                );
+            }
+            "--runtime" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| cli_msg("Missing runtime tier after --runtime"))?;
+                runtime = Some(
+                    mire::RuntimeTier::parse(value)
+                        .ok_or_else(|| cli_msg("Runtime must be full, minimal, or none"))?,
+                );
+            }
+            "--nostartfiles" => nostartfiles = true,
+            "--nostdlib" => nostdlib = true,
             "--cache-max-units" => {
                 i += 1;
                 let value = args
@@ -130,13 +208,22 @@ pub(crate) fn parse_common_with_file(
             "--show-warn" | "--sh-warn" => show_warn = true,
             "--position" | "--pos" => position = true,
             "--warnings-as-errors" | "--deny-warnings" => {
-                for code in [DiagnosticCode::W0001, DiagnosticCode::W0002, DiagnosticCode::W0004, DiagnosticCode::W0005, DiagnosticCode::W0034, DiagnosticCode::W0039] {
+                for code in [
+                    DiagnosticCode::W0001,
+                    DiagnosticCode::W0002,
+                    DiagnosticCode::W0004,
+                    DiagnosticCode::W0005,
+                    DiagnosticCode::W0034,
+                    DiagnosticCode::W0039,
+                ] {
                     deny_codes.insert(code);
                 }
             }
             "--no-warn" => {
                 i += 1;
-                let cat = args.get(i).ok_or_else(|| cli_msg("Missing warning category after --no-warn"))?;
+                let cat = args
+                    .get(i)
+                    .ok_or_else(|| cli_msg("Missing warning category after --no-warn"))?;
                 no_warn_cats.push(cat.clone());
             }
             "-W" => {
@@ -182,17 +269,16 @@ pub(crate) fn parse_common_with_file(
         WarningFilter::Off
     };
 
-    if file.is_none() {
-        file = default_entry_from_manifest(cwd)?;
-    }
-
     Ok((
         CommonOptions {
             mode,
             opt_level,
             output,
+            output_dir,
+            cache_dir,
             cache,
             lib_dir,
+            libt,
             warn: WarningCliOptions {
                 filter: warning_filter,
                 deny: deny_codes,
@@ -200,9 +286,70 @@ pub(crate) fn parse_common_with_file(
                 no_warn_cats,
             },
             verbose,
+            target,
+            link_dirs,
+            link_libs,
+            runtime,
+            nostartfiles,
+            nostdlib,
         },
         file,
     ))
+}
+
+/// Applies command-line linker/runtime overrides after the project manifest
+/// has been loaded. `-L` affects native linking only; package lookup remains
+/// the responsibility of Owl and `--lib-dir` remains its explicit compiler
+/// escape hatch.
+pub(crate) fn apply_cli_c_defs(defs: &mut mire::CDefs, options: &CommonOptions) {
+    if let Some(target) = &options.target {
+        defs.target = Some(target.clone());
+    }
+    if let Some(runtime) = options.runtime {
+        defs.runtime = runtime;
+    }
+    if options.nostartfiles {
+        defs.nostartfiles = true;
+    }
+    if options.nostdlib {
+        defs.nostdlib = true;
+    }
+    if let Some(libt) = options.libt {
+        defs.libt = libt;
+    }
+    for directory in &options.link_dirs {
+        let expanded = if let Some(rest) = directory.strip_prefix("~/") {
+            std::env::var("HOME")
+                .map(|home| format!("{home}/{rest}"))
+                .unwrap_or_else(|_| directory.clone())
+        } else {
+            directory.clone()
+        };
+        defs.cflags.push(format!("-L{expanded}"));
+    }
+    defs.libs.extend(options.link_libs.iter().cloned());
+}
+
+pub(crate) fn configure_build_paths(cwd: &Path, options: &CommonOptions, source: &Path) {
+    if let Some(cache_dir) = &options.cache_dir {
+        let path = if cache_dir.is_absolute() {
+            cache_dir.clone()
+        } else {
+            cwd.join(cache_dir)
+        };
+        unsafe { std::env::set_var("MIRE_CACHE_DIR", path) };
+    }
+    if let Some(output_dir) = &options.output_dir {
+        let path = if output_dir.is_absolute() {
+            output_dir.clone()
+        } else {
+            cwd.join(output_dir)
+        };
+        unsafe { std::env::set_var("MIRE_OUTPUT_DIR", path) };
+    } else {
+        unsafe { std::env::remove_var("MIRE_OUTPUT_DIR") };
+    }
+    let _ = source;
 }
 
 pub(crate) fn parse_debug_options(cwd: &Path, args: &[String]) -> Result<DebugOptions, MireError> {
@@ -247,27 +394,9 @@ pub(crate) fn c_defs_for(cwd: &Path) -> mire::CDefs {
     mire::CDefs::default()
 }
 
-pub(crate) fn default_entry_from_manifest(cwd: &Path) -> Result<Option<String>, MireError> {
-    use mire::{check_entry_containment, EntryContainment};
-    let project_root = match find_project_root(cwd) {
-        Some(root) => root,
-        None => return Ok(None),
-    };
-    let manifest = load_project_manifest(&project_root)?;
-    let entry = manifest.map(|m| m.project.entry).unwrap_or_default();
-    if check_entry_containment(&project_root, &entry) == EntryContainment::EscapesRoot {
-        return Err(cli_msg(&format!(
-            "owl.toml `entry` '{}' escapes the package root",
-            entry
-        )));
-    }
-    let path = project_root.join(&entry);
-    Ok(Some(path.to_string_lossy().to_string()))
-}
-
 pub(crate) fn resolve_source_path(cwd: &Path, file: Option<String>) -> Result<PathBuf, MireError> {
     let file = file.ok_or_else(|| {
-        cli_msg("No input file provided and no `entry` was found in owl.toml")
+        cli_msg("No input file provided; pass a .mire file (project entries are selected by Owl)")
     })?;
     let path = PathBuf::from(&file);
     let resolved = if path.is_absolute() {

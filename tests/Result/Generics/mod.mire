@@ -1,0 +1,2 @@
+@[test]
+pub fn generic_result_family_is_discoverable: () :bool { return 20 + 22 == 42 }

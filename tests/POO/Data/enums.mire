@@ -1,0 +1,14 @@
+enum Availability {
+    InStock
+    SoldOut
+}
+
+@[test]
+pub fn data_enum_matches: () :bool {
+    set state = Availability.InStock
+    match state {
+        Availability.InStock { return true }
+        Availability.SoldOut { return false }
+    }
+    return false
+}

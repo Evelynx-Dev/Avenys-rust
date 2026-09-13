@@ -1,0 +1,7 @@
+// Result/maybe cases are expanded here as the type constructors stabilize.
+
+@[test]
+pub fn result_family_is_active: () :bool {
+    set status = 1
+    return status == 1
+}

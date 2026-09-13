@@ -10,10 +10,12 @@ use crate::parser::ast::{AssignmentTarget, DataType, Expression, Statement};
 /// would corrupt non-numeric values such as structs or pointers.
 pub(crate) fn needs_convert(from: &DataType, to: &DataType) -> bool {
     use DataType::*;
-    let numeric = |t: &DataType| matches!(
-        t,
-        I8 | I16 | I32 | I64 | I128 | U8 | U16 | U32 | U64 | U128 | Char | F32 | F64
-    );
+    let numeric = |t: &DataType| {
+        matches!(
+            t,
+            I8 | I16 | I32 | I64 | I128 | U8 | U16 | U32 | U64 | U128 | Char | F32 | F64
+        )
+    };
     from != to && *to != DataType::Unknown && numeric(from) && numeric(to)
 }
 
@@ -97,7 +99,6 @@ impl MirLower {
                 }
             }
             Statement::Assignment { target, value, .. } => {
-
                 // Drop the old value before assigning the new one (ownership transfer)
                 match target {
                     AssignmentTarget::Variable(name) => {
@@ -137,7 +138,10 @@ impl MirLower {
                     }
                     AssignmentTarget::Index { target, index } => {
                         let target_type = if let Expression::Identifier(id) = target.as_ref() {
-                            self.var_types.get(&id.name).cloned().unwrap_or(DataType::Unknown)
+                            self.var_types
+                                .get(&id.name)
+                                .cloned()
+                                .unwrap_or(DataType::Unknown)
                         } else {
                             extract_data_type(target)
                         };
@@ -206,25 +210,23 @@ impl MirLower {
 
                         let gep = self.new_temp();
                         let elem_ty = self.get_target_elem_type(target);
-                        let adjusted_index = if matches!(
-                            target_type,
-                            DataType::Vector { .. } | DataType::List
-                        ) {
-                            let elem_size = llvm_type_byte_size(&elem_ty);
-                            let header_offset = 8 / elem_size;
-                            let adj = self.new_temp();
-                            self.func.blocks[last].push(
-                                Some(adj),
-                                MirOp::Add(
-                                    index_val.clone(),
-                                    MirValue::Const(MirConst::Int(header_offset)),
-                                ),
-                                loc,
-                            );
-                            MirValue::temp(adj)
-                        } else {
-                            index_val.clone()
-                        };
+                        let adjusted_index =
+                            if matches!(target_type, DataType::Vector { .. } | DataType::List) {
+                                let elem_size = llvm_type_byte_size(&elem_ty);
+                                let header_offset = 8 / elem_size;
+                                let adj = self.new_temp();
+                                self.func.blocks[last].push(
+                                    Some(adj),
+                                    MirOp::Add(
+                                        index_val.clone(),
+                                        MirValue::Const(MirConst::Int(header_offset)),
+                                    ),
+                                    loc,
+                                );
+                                MirValue::temp(adj)
+                            } else {
+                                index_val.clone()
+                            };
                         self.func.blocks[last].push(
                             Some(gep),
                             MirOp::Gep(target_val, vec![adjusted_index], elem_ty),

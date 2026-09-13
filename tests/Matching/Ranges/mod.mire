@@ -1,0 +1,5 @@
+@[test]
+pub fn range_boundary_is_checked: () :bool {
+    set value = 3
+    return value >= 1 && value <= 5
+}

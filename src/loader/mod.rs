@@ -15,23 +15,23 @@
 //! - `rename.rs` — module-renamer that prefixes loaded names with aliases
 
 mod files;
-mod load;
 mod lload;
+mod load;
 mod rename;
 mod rename_expression;
 mod select;
 
 pub(crate) use load::resolve_dependency_root;
 
-use crate::avens::{ImportMode, MireDependency, find_project_root, load_manifest_dependencies};
+use crate::avens::{ImportMode, find_project_root};
 use crate::error::{ErrorKind, MireError, Result, Span};
 use crate::incremental::{
     CacheSettings, IncrementalCache, LoadedFile, LoadedProgram, statement_export_name,
 };
+use crate::parser::Program;
 use crate::parser::ast::{
     AssignmentTarget, DataType, EnumVariantDef, Expression, Identifier, Literal, Statement,
 };
-use crate::parser::Program;
 use files::{collect_program_dependency_candidates, load_or_parse_file};
 use rename::prefix_loaded_statements_scoped;
 use std::collections::{HashMap, HashSet};
@@ -55,7 +55,6 @@ struct ImportResolver<'a> {
     files: HashMap<PathBuf, LoadedFile>,
     sources: HashMap<PathBuf, String>,
     import_mode: ImportMode,
-    manifest_dependencies: HashMap<String, MireDependency>,
     package_registry: HashMap<String, PackageEntry>,
     current_file: Option<String>,
     /// When true, the next file loaded (the entry/root file) has `@[derive]`
@@ -66,6 +65,12 @@ struct ImportResolver<'a> {
     /// user had written the impls by hand.
     expand_derives_entry: bool,
 }
+
+// Local imports may be deeply nested, but a hostile or accidental graph must
+// not exhaust compiler memory or stack space. Cycle detection remains exact
+// through `active_stack`; these budgets cover acyclic explosions.
+const MAX_LOCAL_LOAD_DEPTH: usize = 64;
+const MAX_LOADED_FILES: usize = 4096;
 
 struct ResolvedFile {
     hash: u64,
@@ -88,7 +93,6 @@ impl<'a> ImportResolver<'a> {
         project_root: PathBuf,
         cache: &'a mut IncrementalCache,
         import_mode: ImportMode,
-        manifest_dependencies: HashMap<String, MireDependency>,
     ) -> Self {
         Self {
             project_root,
@@ -98,8 +102,7 @@ impl<'a> ImportResolver<'a> {
             files: HashMap::new(),
             sources: HashMap::new(),
             import_mode,
-            manifest_dependencies,
-package_registry: HashMap::new(),
+            package_registry: HashMap::new(),
             current_file: None,
             expand_derives_entry: true,
         }
@@ -122,8 +125,29 @@ package_registry: HashMap::new(),
     /// - **`Statement::LoadLocal`** → `lload` submodule (local resolution)
     /// - Everything else → pass through
     fn load_file(&mut self, path: &Path, span: Span) -> Result<Vec<ExpandedStatement>> {
+        if self.active_stack.len() >= MAX_LOCAL_LOAD_DEPTH {
+            return Err(self.loader_error(
+                span,
+                format!(
+                    "local load depth exceeds protected limit {}",
+                    MAX_LOCAL_LOAD_DEPTH
+                ),
+            ));
+        }
+        if self.files.len() >= MAX_LOADED_FILES {
+            return Err(self.loader_error(
+                span,
+                format!(
+                    "import graph exceeds protected limit {} files",
+                    MAX_LOADED_FILES
+                ),
+            ));
+        }
         let canonical = path.canonicalize().map_err(|err| {
-            self.loader_error(span, format!("Could not resolve '{}': {}", path.display(), err))
+            self.loader_error(
+                span,
+                format!("Could not resolve '{}': {}", path.display(), err),
+            )
         })?;
 
         if let Some(cached) = self.expanded_cache.get(&canonical) {
@@ -131,7 +155,10 @@ package_registry: HashMap::new(),
         }
 
         if !self.active_stack.insert(canonical.clone()) {
-            return Err(self.loader_error(span, format!("Cyclic local load detected at '{}'", canonical.display())));
+            return Err(self.loader_error(
+                span,
+                format!("Cyclic local load detected at '{}'", canonical.display()),
+            ));
         }
 
         let expanded_source = if self.expand_derives_entry {
@@ -150,22 +177,38 @@ package_registry: HashMap::new(),
 
         for statement in parsed.program.statements {
             match statement {
-                Statement::Load { path, alias, items, line, column }
-                    if !path.is_empty() && !path[0].starts_with("__") =>
-                {
+                Statement::Load {
+                    path,
+                    alias,
+                    items,
+                    line,
+                    column,
+                } if !path.is_empty() && !path[0].starts_with("__") => {
                     self.expand_load(
                         &canonical,
-                        path, alias, items, line, column,
+                        path,
+                        alias,
+                        items,
+                        line,
+                        column,
                         &imported_symbol_candidates,
                         &mut expanded,
                         &mut direct_dependencies,
                         &mut dep_set,
                     )?;
                 }
-                Statement::LoadLocal { rel_path, absolute, line, column } => {
+                Statement::LoadLocal {
+                    rel_path,
+                    absolute,
+                    line,
+                    column,
+                } => {
                     self.expand_load_local(
                         &canonical,
-                        rel_path, absolute, line, column,
+                        rel_path,
+                        absolute,
+                        line,
+                        column,
                         &mut expanded,
                         &mut direct_dependencies,
                         &mut dep_set,
@@ -215,9 +258,14 @@ package_registry: HashMap::new(),
             // filter to `unwrap::*` exports.
             Err(_) if path.len() >= 3 => {
                 return self.expand_load_prefix_group(
-                    path, alias, line, column,
+                    path,
+                    alias,
+                    line,
+                    column,
                     imported_symbol_candidates,
-                    expanded, direct_dependencies, dep_set,
+                    expanded,
+                    direct_dependencies,
+                    dep_set,
                 );
             }
             Err(e) => return Err(e),
@@ -294,18 +342,20 @@ package_registry: HashMap::new(),
         let matching_items: Vec<String> = all_imported
             .iter()
             .filter_map(|stmt| {
-                crate::incremental::statement_export_name(&stmt.statement)
-                    .map(ToString::to_string)
+                crate::incremental::statement_export_name(&stmt.statement).map(ToString::to_string)
             })
             .filter(|name| name.starts_with(&prefix_filter))
             .collect();
 
         if matching_items.is_empty() {
-            return Err(self.loader_error(load_span, format!(
-                "Module '{}' has no exports matching prefix '{}'",
-                parent_path.join("::"),
-                group_name
-            )));
+            return Err(self.loader_error(
+                load_span,
+                format!(
+                    "Module '{}' has no exports matching prefix '{}'",
+                    parent_path.join("::"),
+                    group_name
+                ),
+            ));
         }
 
         // Re-load with the filtered items list so transitive deps are resolved
@@ -335,18 +385,11 @@ package_registry: HashMap::new(),
     ) -> Result<()> {
         let current_dir = canonical.parent().unwrap_or_else(|| Path::new("."));
         let span = Span::new(line, column);
-        let (target, depth) =
+        let (target, _depth) =
             lload::resolve_load_local_target(self, &rel_path, absolute, current_dir, span)?;
-        if depth > 2 {
-            return Err(self.loader_error(span, format!(
-                "load! can only descend 2 levels below owl.toml, but got {} levels",
-                depth
-            )));
-        }
         let namespace = rel_path.last().cloned().unwrap_or_default();
         let imported = self.load_file(&target, span)?;
-        let prefixed =
-            prefix_loaded_statements_scoped(imported, &namespace, &target);
+        let prefixed = prefix_loaded_statements_scoped(imported, &namespace, &target);
         if dep_set.insert(target.clone()) {
             direct_dependencies.push(target);
         }
@@ -354,7 +397,12 @@ package_registry: HashMap::new(),
         // Keep the `load!` declaration in the program so later passes
         // (e.g. the mandatory `use!` check) can see the imported module.
         expanded.push(ExpandedStatement {
-            statement: Statement::LoadLocal { rel_path, absolute, line, column },
+            statement: Statement::LoadLocal {
+                rel_path,
+                absolute,
+                line,
+                column,
+            },
             origin: canonical.to_path_buf(),
         });
         Ok(())
@@ -452,15 +500,10 @@ pub fn load_program_with_metadata_with_settings(
             .parent()
             .unwrap_or_else(|| Path::new("."))
             .to_path_buf();
-        let manifest_dependencies = HashMap::new();
         let mut cache = IncrementalCache::load_with_settings(&canonical, settings)?;
-        let mut resolver = ImportResolver::new(
-            fallback.clone(),
-            &mut cache,
-            import_mode,
-            manifest_dependencies,
-        );
-        let statements = dedupe_identical_expanded(resolver.load_file(&canonical, Span::unknown())?);
+        let mut resolver = ImportResolver::new(fallback.clone(), &mut cache, import_mode);
+        let statements =
+            dedupe_identical_expanded(resolver.load_file(&canonical, Span::unknown())?);
         let statement_origins = statements.iter().map(|stmt| stmt.origin.clone()).collect();
         let program_statements = statements.into_iter().map(|stmt| stmt.statement).collect();
         let files = std::mem::take(&mut resolver.files);
@@ -479,10 +522,8 @@ pub fn load_program_with_metadata_with_settings(
         });
     };
 
-    let manifest_dependencies = load_manifest_dependencies(&project_root).unwrap_or_default();
     let mut cache = IncrementalCache::load_with_settings(&canonical, settings)?;
-    let mut resolver =
-        ImportResolver::new(project_root, &mut cache, import_mode, manifest_dependencies);
+    let mut resolver = ImportResolver::new(project_root, &mut cache, import_mode);
     let statements = dedupe_identical_expanded(resolver.load_file(&canonical, Span::unknown())?);
     let statement_origins = statements.iter().map(|stmt| stmt.origin.clone()).collect();
     let program_statements = statements.into_iter().map(|stmt| stmt.statement).collect();
@@ -525,10 +566,9 @@ pub fn load_program_with_cache(
             .parent()
             .unwrap_or_else(|| Path::new("."))
             .to_path_buf();
-        let manifest_dependencies = HashMap::new();
-        let mut resolver =
-            ImportResolver::new(fallback.clone(), cache, import_mode, manifest_dependencies);
-        let statements = dedupe_identical_expanded(resolver.load_file(&canonical, Span::unknown())?);
+        let mut resolver = ImportResolver::new(fallback.clone(), cache, import_mode);
+        let statements =
+            dedupe_identical_expanded(resolver.load_file(&canonical, Span::unknown())?);
         let statement_origins = statements.iter().map(|stmt| stmt.origin.clone()).collect();
         let program_statements = statements.into_iter().map(|stmt| stmt.statement).collect();
         return Ok(LoadedProgram {
@@ -543,8 +583,7 @@ pub fn load_program_with_cache(
         });
     };
 
-    let manifest_dependencies = load_manifest_dependencies(&project_root).unwrap_or_default();
-    let mut resolver = ImportResolver::new(project_root, cache, import_mode, manifest_dependencies);
+    let mut resolver = ImportResolver::new(project_root, cache, import_mode);
     let statements = dedupe_identical_expanded(resolver.load_file(&canonical, Span::unknown())?);
     let statement_origins = statements.iter().map(|stmt| stmt.origin.clone()).collect();
     let program_statements = statements.into_iter().map(|stmt| stmt.statement).collect();

@@ -1,0 +1,29 @@
+{
+  "count": {
+    "Err": 0,
+    "FiltOut": 0,
+    "Ok": 15,
+    "ram_mb": 3,
+    "time_ms": 5
+  },
+  "family": "matching",
+  "files": [
+    "tests/Matching/Guards/mod.mire",
+    "tests/Matching/Integration/mod.mire",
+    "tests/Matching/Normal/mod.mire",
+    "tests/Matching/OrPatterns/mod.mire",
+    "tests/Matching/Patterns/mod.mire",
+    "tests/Matching/Ranges/mod.mire",
+    "tests/Matching/mod.mire",
+    "tests/Matching/values.mire"
+  ],
+  "info": {
+    "CODES": [],
+    "CPU %": 92.94,
+    "RAM": 3,
+    "Time ms": 5,
+    "Total": 15,
+    "Warns": 0
+  },
+  "reproducible": true
+}

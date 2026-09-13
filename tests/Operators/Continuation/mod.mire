@@ -1,0 +1,6 @@
+@[test]
+pub fn continuation_family_is_discoverable: () :bool {
+    set value = 40 +
+        2
+    return value == 42
+}

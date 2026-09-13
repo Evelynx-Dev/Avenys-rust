@@ -309,14 +309,7 @@ pub fn unify_types(left: &DataType, right: &DataType) -> Result<DataType> {
                 err: Box::new(DataType::Str),
             });
         }
-        (
-            DataType::Maybe {
-                inner: left_inner,
-            },
-            DataType::Maybe {
-                inner: right_inner,
-            },
-        ) => {
+        (DataType::Maybe { inner: left_inner }, DataType::Maybe { inner: right_inner }) => {
             let inner = unify_types(left_inner, right_inner)?;
             return Ok(DataType::Maybe {
                 inner: Box::new(inner),
@@ -444,7 +437,10 @@ pub fn is_numeric(dtype: &DataType) -> bool {
 }
 
 pub fn is_bool_like(dtype: &DataType) -> bool {
-    matches!(dtype, DataType::Bool | DataType::Anything | DataType::Unknown)
+    matches!(
+        dtype,
+        DataType::Bool | DataType::Anything | DataType::Unknown
+    )
 }
 
 /// Is the assignment of `actual` to `expected` valid?
@@ -537,7 +533,8 @@ pub fn is_assignable(expected: &DataType, actual: &DataType) -> bool {
                 err: actual_err,
             },
         ) => {
-            return is_assignable(expected_ok, actual_ok) && is_assignable(expected_err, actual_err);
+            return is_assignable(expected_ok, actual_ok)
+                && is_assignable(expected_err, actual_err);
         }
         (
             DataType::Maybe {
@@ -604,11 +601,15 @@ fn float_to_int_preserves_sign(expected: &DataType, actual: &DataType) -> bool {
             numeric_bit_width(expected) >= numeric_bit_width(actual)
         }
         // signed -> unsigned of same width: valid (bitwise representation is the same).
-        (e, a) if is_unsigned(e) && is_signed(a) && numeric_bit_width(e) == numeric_bit_width(a) => {
+        (e, a)
+            if is_unsigned(e) && is_signed(a) && numeric_bit_width(e) == numeric_bit_width(a) =>
+        {
             true
         }
         // unsigned -> signed of same width: valid by width.
-        (e, a) if is_signed(e) && is_unsigned(a) && numeric_bit_width(e) == numeric_bit_width(a) => {
+        (e, a)
+            if is_signed(e) && is_unsigned(a) && numeric_bit_width(e) == numeric_bit_width(a) =>
+        {
             true
         }
         _ => true,

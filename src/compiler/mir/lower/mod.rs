@@ -7,8 +7,8 @@ use std::collections::HashSet;
 mod collections;
 mod decl;
 mod expr;
-mod expr_values;
 mod expr_collections;
+mod expr_values;
 mod stmt;
 mod types;
 
@@ -165,9 +165,7 @@ fn extract_bare_name_map(
     // Builtin names that should NOT be shadowed by qualified module functions.
     // The str() builtin converts values to string; get.str(list, index) from
     // kioto/lists/get.mire has a different arity and would produce wrong code.
-    let builtin_names: &[&str] = &[
-        "str",
-    ];
+    let builtin_names: &[&str] = &["str"];
     let mut map = HashMap::new();
     for name in seen_functions.iter() {
         if let Some((_, bare)) = name.rsplit_once('.') {
@@ -250,19 +248,6 @@ pub fn lower_program_with_filename(program: &Program, filename: &str) -> MirProg
     let mut extern_functions = Vec::new();
     let mut extern_libs = Vec::new();
     let mut seen_functions = HashSet::new();
-    eprintln!("[DBG-lower] program statements with fs_:");
-    for s in &program.statements {
-        if let Statement::Function { name, .. } = s {
-            if name.contains("fs_") || name.contains("fs.") {
-                eprintln!("  Function: {}", name);
-            }
-        }
-        if let Statement::ExternFunction { name, .. } = s {
-            if name.contains("fs") {
-                eprintln!("  ExternFunction: {}", name);
-            }
-        }
-    }
     let mut struct_types = extract_struct_types(program);
     let enum_types = extract_enum_types(program);
     let enum_payloads = extract_enum_payloads(program);
@@ -361,7 +346,11 @@ pub fn lower_program_with_filename(program: &Program, filename: &str) -> MirProg
         {
             for method in methods {
                 if let Statement::Function { name, .. } = method {
-                    seen_functions.insert(format!("{}.{}", canonical_fn_name(type_name), canonical_fn_name(name)));
+                    seen_functions.insert(format!(
+                        "{}.{}",
+                        canonical_fn_name(type_name),
+                        canonical_fn_name(name)
+                    ));
                 }
             }
         }
@@ -424,7 +413,11 @@ pub fn lower_program_with_filename(program: &Program, filename: &str) -> MirProg
                     .collect();
 
                 let mut lower = MirLower {
-                    func: MirFunction::new(canonical_fn_name(name), mir_params, return_type.clone()),
+                    func: MirFunction::new(
+                        canonical_fn_name(name),
+                        mir_params,
+                        return_type.clone(),
+                    ),
                     next_temp: 0,
                     vars: HashMap::new(),
                     var_types: HashMap::new(),
@@ -473,7 +466,11 @@ pub fn lower_program_with_filename(program: &Program, filename: &str) -> MirProg
                         ..
                     } = method
                     {
-                        let full_name = format!("{}.{}", canonical_fn_name(type_name), canonical_fn_name(name));
+                        let full_name = format!(
+                            "{}.{}",
+                            canonical_fn_name(type_name),
+                            canonical_fn_name(name)
+                        );
                         if !seen_functions.insert(full_name.clone()) {
                             continue;
                         }

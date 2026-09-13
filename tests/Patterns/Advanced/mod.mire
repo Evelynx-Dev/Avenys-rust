@@ -1,0 +1,14 @@
+enum Reading { Value(number :i64) Empty }
+
+@[test]
+pub fn advanced_pattern_binds_payload: () :bool {
+    set reading = Reading.Value(42)
+    match reading {
+        Reading.Value(number) {
+            if number != 42 { return false }
+            return number - 2 == 40
+        }
+        Reading.Empty { return false }
+    }
+    return false
+}

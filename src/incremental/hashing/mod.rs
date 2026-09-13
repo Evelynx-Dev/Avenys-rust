@@ -479,19 +479,21 @@ mod tests {
                     type_param_bounds: Vec::new(),
                     parent: None,
                     attributes: vec![],
-                    fields: vec![
-                        Statement::Let {
-                            name: "x".to_string(),
-                            data_type: DataType::I64,
-                            value: Some(Expression::Literal { lit: Literal::Int(1), line: 0, column: 0 }),
-                            is_constant: false,
-                            is_mutable: false,
-                            is_static: false,
-                            visibility: Visibility::Public,
-                            name_line: 1,
-                            name_column: 1,
-                        },
-                    ],
+                    fields: vec![Statement::Let {
+                        name: "x".to_string(),
+                        data_type: DataType::I64,
+                        value: Some(Expression::Literal {
+                            lit: Literal::Int(1),
+                            line: 0,
+                            column: 0,
+                        }),
+                        is_constant: false,
+                        is_mutable: false,
+                        is_static: false,
+                        visibility: Visibility::Public,
+                        name_line: 1,
+                        name_column: 1,
+                    }],
                     line: 0,
                     column: 0,
                     end_line: 0,
@@ -543,7 +545,11 @@ mod tests {
                     column: 0,
                 })),
                 operator: "+".to_string(),
-                right: Box::new(Expression::Literal { lit: Literal::Int(1), line: 0, column: 0 }),
+                right: Box::new(Expression::Literal {
+                    lit: Literal::Int(1),
+                    line: 0,
+                    column: 0,
+                }),
                 data_type: DataType::I64,
             }))],
             return_type: DataType::I64,
@@ -796,14 +802,17 @@ mod tests {
                     type_param_bounds: Vec::new(),
                     parent: None,
                     attributes: vec![],
-                    fields: vec![
-                        Statement::Let {
-                            name: "x".to_string(),
-                            data_type: DataType::I64,
-                            value: Some(Expression::Literal { lit: Literal::Int(1), line: 0, column: 0 }),
-                            is_constant: false,
-                            is_mutable: false,
-                            is_static: false,
+                    fields: vec![Statement::Let {
+                        name: "x".to_string(),
+                        data_type: DataType::I64,
+                        value: Some(Expression::Literal {
+                            lit: Literal::Int(1),
+                            line: 0,
+                            column: 0,
+                        }),
+                        is_constant: false,
+                        is_mutable: false,
+                        is_static: false,
                         visibility: Visibility::Public,
                         name_line: 1,
                         name_column: 1,
@@ -844,7 +853,11 @@ mod tests {
         let Statement::Let { value, .. } = &mut fields[0] else {
             panic!("expected field");
         };
-        *value = Some(Expression::Literal { lit: Literal::Int(2), line: 0, column: 0 });
+        *value = Some(Expression::Literal {
+            lit: Literal::Int(2),
+            line: 0,
+            column: 0,
+        });
 
         let report = compute_invalidation_report(
             &analysis_units_for_program(&previous),
@@ -977,9 +990,12 @@ mod tests {
         let mut found = 0usize;
         for i in 0..8 {
             let source_path = root.join(format!("mod{i}.mire"));
-            let mut cache =
-                IncrementalCache::load_with_settings(&source_path, test_settings()).expect("reload");
-            if cache.cached_analysis(&source_path, i as u64 + 15, 0).is_some() {
+            let mut cache = IncrementalCache::load_with_settings(&source_path, test_settings())
+                .expect("reload");
+            if cache
+                .cached_analysis(&source_path, i as u64 + 15, 0)
+                .is_some()
+            {
                 found += 1;
             }
         }

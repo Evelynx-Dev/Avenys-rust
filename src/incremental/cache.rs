@@ -1,5 +1,5 @@
-use super::lru::LruMap;
 use super::cache_types::{AnalysisMeta, BuildMeta, FileMeta, MirMeta, WalRecord};
+use super::lru::LruMap;
 use super::*;
 use std::collections::HashSet;
 use std::fs;
@@ -78,7 +78,11 @@ fn write_wal(base_dir: &Path, records: &[WalRecord]) -> Result<PathBuf> {
             std::process::id(),
             seq
         ));
-        match fs::OpenOptions::new().write(true).create_new(true).open(&candidate) {
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
             Ok(mut file) => {
                 for rec in records {
                     let line = serde_json::to_string(rec).map_err(|e| {
@@ -182,7 +186,9 @@ fn prune_stale_wal(base_dir: &Path) {
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        let Ok(meta) = fs::metadata(&path) else { continue };
+        let Ok(meta) = fs::metadata(&path) else {
+            continue;
+        };
         let mtime = meta
             .modified()
             .ok()
@@ -224,7 +230,8 @@ impl Drop for InitLockGuard<'_> {
 /// stale lock, removes it and proceeds — the version file is then read on the
 /// next load and the stale cache is handled by the following init holder.
 fn wait_for_init_lock(lock_dir: &Path) {
-    let stale_cutoff = std::time::Instant::now() + std::time::Duration::from_secs(INIT_LOCK_STALE_SECS);
+    let stale_cutoff =
+        std::time::Instant::now() + std::time::Duration::from_secs(INIT_LOCK_STALE_SECS);
     loop {
         if !lock_dir.exists() {
             return;
@@ -727,7 +734,11 @@ impl IncrementalCache {
             return None;
         }
 
-        let blob = read_blob(&self.cache_dir, &meta.blob_hash, self.settings.blob_checksum)?;
+        let blob = read_blob(
+            &self.cache_dir,
+            &meta.blob_hash,
+            self.settings.blob_checksum,
+        )?;
         let stored: StoredParsedFile = bincode::deserialize(&blob).ok()?;
 
         self.lru.insert(key, CacheEntryKind::File);
@@ -807,7 +818,11 @@ impl IncrementalCache {
             }
         };
 
-        let blob = read_blob(&self.cache_dir, &meta.blob_hash, self.settings.blob_checksum)?;
+        let blob = read_blob(
+            &self.cache_dir,
+            &meta.blob_hash,
+            self.settings.blob_checksum,
+        )?;
         let stored: StoredAnalysisPayload = bincode::deserialize(&blob).ok()?;
 
         self.lru.insert(key, CacheEntryKind::Analysis);
@@ -975,7 +990,11 @@ impl IncrementalCache {
     ) -> Option<CachedAnalysisSnapshot> {
         let key = latest_analysis_key(source_path);
         let meta = self.analyses.get(&key)?;
-        let blob = read_blob(&self.cache_dir, &meta.blob_hash, self.settings.blob_checksum)?;
+        let blob = read_blob(
+            &self.cache_dir,
+            &meta.blob_hash,
+            self.settings.blob_checksum,
+        )?;
         let stored: StoredAnalysisPayload = bincode::deserialize(&blob).ok()?;
         let StoredAnalysisOutcome::Success(s) = stored.outcome else {
             return None;
@@ -995,7 +1014,14 @@ impl IncrementalCache {
         persist_ir: bool,
         test_mode: bool,
     ) -> Option<&BuildCacheEntry> {
-        let key = build_cache_key(source_path, mode, import_mode, emit_binary, persist_ir, test_mode);
+        let key = build_cache_key(
+            source_path,
+            mode,
+            import_mode,
+            emit_binary,
+            persist_ir,
+            test_mode,
+        );
 
         // Check in-memory first
         if !self.builds.contains_key(&key) {
@@ -1067,7 +1093,11 @@ impl IncrementalCache {
             return None;
         }
 
-        let blob = read_blob(&self.cache_dir, &meta.blob_hash, self.settings.blob_checksum)?;
+        let blob = read_blob(
+            &self.cache_dir,
+            &meta.blob_hash,
+            self.settings.blob_checksum,
+        )?;
         let ir: String = bincode::deserialize(&blob).ok()?;
 
         self.lru.insert(key, CacheEntryKind::MirFn);
@@ -1173,7 +1203,11 @@ impl IncrementalCache {
     ) -> Option<Vec<AnalysisUnitMetadata>> {
         let key = latest_analysis_key(source_path);
         let meta = self.analyses.get(&key)?;
-        let blob = read_blob(&self.cache_dir, &meta.blob_hash, self.settings.blob_checksum)?;
+        let blob = read_blob(
+            &self.cache_dir,
+            &meta.blob_hash,
+            self.settings.blob_checksum,
+        )?;
         let stored: StoredAnalysisPayload = bincode::deserialize(&blob).ok()?;
         Some(stored.units)
     }
@@ -1438,7 +1472,9 @@ mod tests {
 
         // Simulate the old race: a file truncated mid-JSON.
         let bad = dir.join(WAL_DIR).join("corrupt.wal");
-        let mut bytes = serde_json::to_string(&wal_record("bad_key")).unwrap().into_bytes();
+        let mut bytes = serde_json::to_string(&wal_record("bad_key"))
+            .unwrap()
+            .into_bytes();
         bytes.truncate(bytes.len() / 2);
         fs::write(&bad, bytes).unwrap();
 

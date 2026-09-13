@@ -1,0 +1,11 @@
+enum State { Ready Done }
+
+@[test]
+pub fn basic_pattern_matches_variant: () :bool {
+    set state = State.Ready
+    match state {
+        State.Ready { return true }
+        State.Done { return false }
+    }
+    return false
+}

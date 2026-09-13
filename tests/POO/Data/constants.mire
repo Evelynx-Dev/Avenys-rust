@@ -1,0 +1,6 @@
+cons MAX_STOCK = 10 :i64
+
+@[test]
+pub fn constant_is_readable: () :bool {
+    return MAX_STOCK == 10
+}

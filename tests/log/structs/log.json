@@ -1,0 +1,23 @@
+{
+  "count": {
+    "Err": 0,
+    "FiltOut": 0,
+    "Ok": 9,
+    "ram_mb": 3,
+    "time_ms": 3
+  },
+  "family": "structs",
+  "files": [
+    "tests/Structs/composition.mire",
+    "tests/Structs/mod.mire"
+  ],
+  "info": {
+    "CODES": [],
+    "CPU %": 91.41,
+    "RAM": 3,
+    "Time ms": 3,
+    "Total": 9,
+    "Warns": 0
+  },
+  "reproducible": true
+}

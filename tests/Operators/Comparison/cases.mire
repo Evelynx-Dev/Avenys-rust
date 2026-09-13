@@ -1,0 +1,25 @@
+// Relational operators cover equality, ordering and their boundary cases.
+
+@[test]
+pub fn equal_values: () :bool { return 9 == 9 }
+
+@[test]
+pub fn different_values: () :bool { return 9 != 8 }
+
+@[test]
+pub fn lower_than: () :bool { return 3 < 4 }
+
+@[test]
+pub fn greater_than: () :bool { return 4 > 3 }
+
+@[test]
+pub fn lower_or_equal: () :bool { return 4 <= 4 }
+
+@[test]
+pub fn greater_or_equal: () :bool { return 4 >= 4 }
+
+@[test]
+pub fn string_equality: () :bool { return "same" == "same" }
+
+@[test]
+pub fn comparison_expression: () :bool { return 2 + 2 >= 4 }

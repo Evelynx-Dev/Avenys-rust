@@ -1,0 +1,26 @@
+{
+  "count": {
+    "Err": 0,
+    "FiltOut": 0,
+    "Ok": 19,
+    "ram_mb": 4,
+    "time_ms": 5
+  },
+  "family": "functions",
+  "files": [
+    "tests/Functions/Closures/mod.mire",
+    "tests/Functions/Nested/mod.mire",
+    "tests/Functions/arguments.mire",
+    "tests/Functions/mod.mire",
+    "tests/Functions/returns.mire"
+  ],
+  "info": {
+    "CODES": [],
+    "CPU %": 89.72,
+    "RAM": 4,
+    "Time ms": 5,
+    "Total": 19,
+    "Warns": 0
+  },
+  "reproducible": true
+}

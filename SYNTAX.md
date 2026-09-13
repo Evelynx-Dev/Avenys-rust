@@ -8,13 +8,9 @@ Version: **3.24.32**
 
 ```mire
 fn main: () {
- use dasu("Hello, Mire!")
+ use dasu("Hello Word!")
 }
 ```
-
-Save as `hello.mire` and run: `mire run hello.mire` or `owl run` (in an owl project)
-
----
 
 ## 2. Comments
 
@@ -1184,7 +1180,7 @@ symbols under `main`, *not* `math`. There is no alias.
 
 ```mire
 set r = use! math::suma(2 3) // correct
-set r = math::suma(2 3) // ERROR: require `use!`
+set r = math::suma(2 3) // ERROR E0026: require `use!`
 ```
 
 `use!` is **always mandatory** to call any symbol exposed by `load!`. It is
@@ -1195,6 +1191,62 @@ qualified call must go through `use!`.
 
 `load!` only searches up to **2 levels below the project root**; a deeper
 path fails with a note explaining the limit.
+
+---
+
+### 13.6 Package `load` — external packages (requires owl.toml)
+
+`load` (without bang) loads a **package from the dependency graph** declared
+in `owl.toml [dependencies]`. It makes the package's public exports available
+under a qualified namespace.
+
+```mire
+load mire::str      // loads str module from mire stdlib
+load kioto          // loads all of kioto
+load kioto::fs      // loads specific submodule from kioto
+load mylib::net::http  // loads nested module from user package
+```
+
+**Key differences from `load!`:**
+
+| Aspect | `load` (package) | `load!` (local) |
+|--------|------------------|-----------------|
+| Source | Dependency graph (owl.toml) | Local filesystem |
+| Manifest | Requires `owl.toml` with `[dependencies]` | No manifest needed |
+| Namespace | Package name (e.g., `mire::str`) | Last path segment (e.g., `math`) |
+| Call syntax | Direct: `str::from_i64(42)` | Must use `use!`: `use! math::add(1 2)` |
+| Error for `use!` | **E0025** — forbidden | **E0026** — mandatory |
+
+**Wrong — using `use!` with package `load`:**
+```mire
+load mire::str
+
+pub fn main: () {
+    set x = use! str::from_i64(42)  // ERROR E0025: must NOT use `use!`
+}
+```
+
+**Correct — direct call for package `load`:**
+```mire
+load mire::str
+
+pub fn main: () {
+    set x = str::from_i64(42)  // direct call
+}
+```
+
+**Correct — `use!` with `load!`:**
+```mire
+load! /math
+
+pub fn main: () {
+    set x = use! math::add(1, 2)  // mandatory `use!`
+}
+```
+
+**Error codes:**
+- **E0025**: Using `use!` with a `load` (external) module — call directly instead
+- **E0026**: Calling a `load!` module without `use!` — mandatory wrapper
 
 ---
 
@@ -1253,6 +1305,13 @@ pub fn error_message: () :str {
 
 **Linking:** `extern lib "name"` adds `-lname` to the linker. For `.so` files,
 add the full path: `extern lib "name" "/usr/lib/libname.so"` (adds `-L/path`).
+
+> **ABI Compatibility Note:** Mire's FFI only supports the **C ABI**.
+> - No C++ ABI, no Swift ABI, no Rust ABI — C only
+> - Function signatures must match C calling convention (System V AMD64 on Linux/x86_64)
+> - Struct passing/returning not supported (use output parameters or opaque pointers)
+> - Variadic functions not supported
+> - Thread-local storage not accessible from Mire
 
 See [`docs/FFI.md`](docs/FFI.md) for the complete FFI reference.
 

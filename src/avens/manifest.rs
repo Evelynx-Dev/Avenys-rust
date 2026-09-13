@@ -1,4 +1,3 @@
-use super::toolchain::llvm_version;
 use super::*;
 use std::collections::HashMap;
 
@@ -37,43 +36,6 @@ fn load_manifest_file(manifest_path: &Path) -> Result<Option<MireManifest>> {
     Ok(Some(manifest))
 }
 
-pub fn write_lock_file(cwd: &Path, manifest: &MireManifest, mode: BuildMode) -> Result<()> {
-    let llvm_version = llvm_version()?;
-    let lock = MireLock {
-        project: MireLockProject {
-            name: manifest.project.name.clone(),
-            version: manifest.project.version.clone(),
-        },
-        build: MireLockBuild {
-            llvm_version,
-            profile: match mode {
-                BuildMode::Debug => "debug".to_string(),
-                BuildMode::Release => "release".to_string(),
-            },
-            opt_level: match mode {
-                BuildMode::Debug => "0".to_string(),
-                BuildMode::Release => "3".to_string(),
-            },
-        },
-    };
-
-    let raw = toml::to_string_pretty(&lock).map_err(|err| {
-        MireError::new(ErrorKind::Runtime {
-            span: crate::error::Span::unknown(),
-            message: format!("Could not serialize Mire.lock: {}", err),
-        })
-    })?;
-
-    fs::write(project_lock_path(cwd), raw).map_err(|err| {
-        MireError::new(ErrorKind::Runtime {
-            span: crate::error::Span::unknown(),
-            message: format!("Could not write project.lock: {}", err),
-        })
-    })?;
-
-    Ok(())
-}
-
 pub fn find_project_root(start: &Path) -> Option<PathBuf> {
     let mut current = Some(start);
     while let Some(path) = current {
@@ -93,40 +55,6 @@ pub fn project_manifest_path(cwd: &Path) -> PathBuf {
         return cwd.join("Mire.toml");
     }
     cwd.join("owl.toml")
-}
-
-pub fn project_lock_path(cwd: &Path) -> PathBuf {
-    if cwd.join("owl.lock").exists() {
-        return cwd.join("owl.lock");
-    }
-    if cwd.join("project.lock").exists() {
-        return cwd.join("project.lock");
-    }
-    cwd.join("Mire.lock")
-}
-
-pub fn write_manifest(manifest: &MireManifest, path: &Path) -> Result<()> {
-    let raw = toml::to_string_pretty(manifest).map_err(|err| {
-        MireError::new(ErrorKind::Runtime {
-            span: crate::error::Span::unknown(),
-            message: format!("Could not serialize manifest: {}", err),
-        })
-    })?;
-    fs::write(path, raw).map_err(|err| {
-        MireError::new(ErrorKind::Runtime {
-            span: crate::error::Span::unknown(),
-            message: format!("Could not write manifest '{}': {}", path.display(), err),
-        })
-    })?;
-    Ok(())
-}
-
-pub fn load_manifest_dependencies(cwd: &Path) -> Result<HashMap<String, MireDependency>> {
-    match load_project_manifest(cwd) {
-        Ok(Some(manifest)) => Ok(manifest.dependencies.entries),
-        Ok(None) => Ok(HashMap::new()),
-        Err(e) => Err(e),
-    }
 }
 
 pub fn load_exports(cwd: &Path) -> Result<HashMap<String, String>> {

@@ -1,0 +1,7 @@
+// Module family root. Load and load! contract cases are kept in subfolders.
+
+@[test]
+pub fn module_family_is_active: () :bool {
+    set name = "modules"
+    return name == "modules"
+}

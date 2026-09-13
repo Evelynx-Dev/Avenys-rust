@@ -1,0 +1,43 @@
+// Interactive control client for the local log server. Commands and usage are
+// documented in tests/README.md; this file intentionally has no help output.
+load kioto::net
+load kioto::proc
+load kioto::strings
+
+fn request: (command :&str) :str {
+    set socket = net::socket::connect("127.0.0.1" 18080 :u16)
+    if socket.handle <= 0 { return "connection failed" }
+    set body = command mut
+    set method = "POST"
+    if strings::starts::with(command "TRY ") {
+        set body = strings::substr(command 4 strings::len(command) - 4)
+    }
+    set request = strings::concat(method " /__console HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: ") mut
+    set request = strings::concat(request strings::from::i64(strings::len(body)))
+    set request = strings::concat(request "\r\nX-Console-IP: 127.0.0.1\r\n\r\n")
+    set request = strings::concat(request body)
+    net::socket::send(socket request)
+    set buffer = strings::repeat("\0" 16384) :str mut
+    set count = net::socket::recv(socket buffer 16384)
+    net::socket::close(socket)
+    if count <= 0 { return "no response" }
+    return strings::substr(buffer 0 count)
+}
+
+pub fn main: () {
+    while true {
+        set line = strings::trim(proc::run::read_line())
+        if line == "STOP" {
+            use dasu(request(line))
+            return
+        }
+        if line == "CHAT" {
+            set name = strings::trim(proc::run::read_line())
+            set chat_command = strings::concat("CHAT " name)
+            use dasu(request(chat_command))
+            continue
+        }
+        if line == "" { continue }
+        use dasu(request(line))
+    }
+}

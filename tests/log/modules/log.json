@@ -1,0 +1,28 @@
+{
+  "count": {
+    "Err": 0,
+    "FiltOut": 0,
+    "Ok": 6,
+    "ram_mb": 5,
+    "time_ms": 4
+  },
+  "family": "modules",
+  "files": [
+    "tests/Modules/Exports/mod.mire",
+    "tests/Modules/Load/mod.mire",
+    "tests/Modules/LoadBang/helper.mire",
+    "tests/Modules/LoadBang/mod.mire",
+    "tests/Modules/Local/mod.mire",
+    "tests/Modules/UseBang/mod.mire",
+    "tests/Modules/mod.mire"
+  ],
+  "info": {
+    "CODES": [],
+    "CPU %": 93.08,
+    "RAM": 5,
+    "Time ms": 4,
+    "Total": 6,
+    "Warns": 0
+  },
+  "reproducible": true
+}

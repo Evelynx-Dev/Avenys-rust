@@ -1,9 +1,9 @@
 use super::*;
-use crate::parser::ast::DataType;
 use crate::avens::config::CDefs;
+use crate::parser::ast::DataType;
 use std::hash::{Hash, Hasher};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 static C_PRECOMPILE_SEQ: AtomicU64 = AtomicU64::new(0);
 
@@ -430,7 +430,11 @@ pub(super) fn c_object_hash(content: &str) -> u64 {
     hasher.finish()
 }
 
-pub(super) fn precompile_c_object(c_path: &str, cache_dir: &Path, runtime_base: &Path) -> Result<String> {
+pub(super) fn precompile_c_object(
+    c_path: &str,
+    cache_dir: &Path,
+    runtime_base: &Path,
+) -> Result<String> {
     let content = fs::read_to_string(c_path).map_err(|err| {
         MireError::new(ErrorKind::Runtime {
             span: crate::error::Span::new(1, 1),
@@ -461,8 +465,12 @@ pub(super) fn precompile_c_object(c_path: &str, cache_dir: &Path, runtime_base: 
         .wrapping_add(C_PRECOMPILE_SEQ.fetch_add(1, Ordering::Relaxed));
     let tmp_path = cache_dir.join(format!("{:x}.{:016x}.o", hash, unique));
     let extra = c_defs();
+    let is_shared = matches!(extra.libt, super::config::LibType::Shared);
     let mut cmd = std::process::Command::new("clang");
     cmd.args(["-c", "-O0", "-o"]).arg(&tmp_path).arg(c_path);
+    if is_shared {
+        cmd.arg("-fPIC");
+    }
     cmd.arg("-I").arg(runtime_base.join("runtime"));
     cmd.arg("-I").arg(runtime_base.join("pal"));
     for inc in &extra.include {
@@ -471,14 +479,12 @@ pub(super) fn precompile_c_object(c_path: &str, cache_dir: &Path, runtime_base: 
     for flag in &extra.cflags {
         cmd.arg(flag);
     }
-    let status = cmd
-        .status()
-        .map_err(|err| {
-            MireError::new(ErrorKind::Runtime {
-                span: crate::error::Span::unknown(),
-                message: format!("Failed to run clang for '{}': {}", c_path, err),
-            })
-        })?;
+    let status = cmd.status().map_err(|err| {
+        MireError::new(ErrorKind::Runtime {
+            span: crate::error::Span::unknown(),
+            message: format!("Failed to run clang for '{}': {}", c_path, err),
+        })
+    })?;
     if !status.success() {
         let _ = fs::remove_file(&tmp_path);
         return Err(MireError::new(ErrorKind::Runtime {
@@ -576,28 +582,30 @@ pub(super) fn inject_test_harness(program: &mut crate::parser::ast::Program) {
             if !current_section.is_empty() {
                 body.push(Statement::Expression(Expression::Call {
                     name: "dasu".to_string(),
-                    args: vec![Expression::Literal { lit: Literal::Str(format!(
-                        "\n  [{}]",
-                        current_section
-                    )), line: 0, column: 0 }],
+                    args: vec![Expression::Literal {
+                        lit: Literal::Str(format!("\n  [{}]", current_section)),
+                        line: 0,
+                        column: 0,
+                    }],
                     type_args: Vec::new(),
                     name_line: 0,
-            name_column: 0,
-            data_type: DataType::None,
+                    name_column: 0,
+                    data_type: DataType::None,
                 }));
             }
         }
         if test.ignored {
             body.push(Statement::Expression(Expression::Call {
                 name: "dasu".to_string(),
-                args: vec![Expression::Literal { lit: Literal::Str(format!(
-                    "  [SKIP] {}",
-                    test.name
-                )), line: 0, column: 0 }],
+                args: vec![Expression::Literal {
+                    lit: Literal::Str(format!("  [SKIP] {}", test.name)),
+                    line: 0,
+                    column: 0,
+                }],
                 type_args: Vec::new(),
                 name_line: 0,
-            name_column: 0,
-            data_type: DataType::None,
+                name_column: 0,
+                data_type: DataType::None,
             }));
         } else {
             body.push(Statement::Let {
@@ -608,8 +616,8 @@ pub(super) fn inject_test_harness(program: &mut crate::parser::ast::Program) {
                     args: Vec::new(),
                     type_args: Vec::new(),
                     name_line: 0,
-            name_column: 0,
-            data_type: DataType::Bool,
+                    name_column: 0,
+                    data_type: DataType::Bool,
                 }),
                 is_constant: false,
                 is_mutable: false,
@@ -628,25 +636,27 @@ pub(super) fn inject_test_harness(program: &mut crate::parser::ast::Program) {
                 }),
                 then_branch: vec![Statement::Expression(Expression::Call {
                     name: "dasu".to_string(),
-                    args: vec![Expression::Literal { lit: Literal::Str(format!(
-                        "  [PASS] {}",
-                        test.name
-                    )), line: 0, column: 0 }],
+                    args: vec![Expression::Literal {
+                        lit: Literal::Str(format!("  [PASS] {}", test.name)),
+                        line: 0,
+                        column: 0,
+                    }],
                     type_args: Vec::new(),
                     name_line: 0,
-            name_column: 0,
-            data_type: DataType::None,
+                    name_column: 0,
+                    data_type: DataType::None,
                 })],
                 else_branch: Some(vec![Statement::Expression(Expression::Call {
                     name: "dasu".to_string(),
-                    args: vec![Expression::Literal { lit: Literal::Str(format!(
-                        "  [FAIL] {}",
-                        test.name
-                    )), line: 0, column: 0 }],
+                    args: vec![Expression::Literal {
+                        lit: Literal::Str(format!("  [FAIL] {}", test.name)),
+                        line: 0,
+                        column: 0,
+                    }],
                     type_args: Vec::new(),
                     name_line: 0,
-            name_column: 0,
-            data_type: DataType::None,
+                    name_column: 0,
+                    data_type: DataType::None,
                 })]),
             });
         }
@@ -682,10 +692,13 @@ pub(super) fn inject_test_harness(program: &mut crate::parser::ast::Program) {
 ///
 /// In strict security mode, macros from dependencies are only injected when
 /// the dependency's trust tier is `macros` or `ffi`.
-pub(super) fn inject_macros(program: &mut crate::parser::ast::Program, source_path: &std::path::Path) {
+pub(super) fn inject_macros(
+    program: &mut crate::parser::ast::Program,
+    source_path: &std::path::Path,
+) {
     use crate::loader::resolve_dependency_root;
-    use crate::parser::parse_with_recovery;
     use crate::parser::ast::Statement;
+    use crate::parser::parse_with_recovery;
     use std::collections::HashSet;
     use std::path::Path;
 
@@ -745,7 +758,9 @@ pub(super) fn inject_macros(program: &mut crate::parser::ast::Program, source_pa
                         }
                     }
                     Statement::Function {
-                        name: fname, attributes, ..
+                        name: fname,
+                        attributes,
+                        ..
                     } => {
                         if attributes.iter().any(|a| a.name == "macro!")
                             && existing_fns.insert(fname.clone())
@@ -794,7 +809,7 @@ pub(super) fn inject_macros(program: &mut crate::parser::ast::Program, source_pa
 
 fn load_security_config() -> Option<SecurityConfig> {
     let cwd = std::env::current_dir().ok()?;
-    let manifest = crate::load_project_manifest(&cwd).ok()??;
+    let manifest = crate::avens::load_project_manifest(&cwd).ok()??;
     manifest.security
 }
 
@@ -878,7 +893,10 @@ pub(crate) fn collect_used_symbols(ir: &str) -> UsedSymbols {
 /// in the `used_pal` set.  When `runtime_tier` is `Minimal` or `None`, this is
 /// the only source of PAL declarations.  When `Full`, all declarations are emitted
 /// regardless (backward-compatible).
-pub(crate) fn filter_pal_decls(used_pal: &HashSet<String>, runtime_tier: crate::avens::config::RuntimeTier) -> Vec<String> {
+pub(crate) fn filter_pal_decls(
+    used_pal: &HashSet<String>,
+    runtime_tier: crate::avens::config::RuntimeTier,
+) -> Vec<String> {
     use crate::avens::config::RuntimeTier;
     let all = crate::compiler::mir::codegen::builtins::pal_extern_decls();
     if matches!(runtime_tier, RuntimeTier::Full) {
@@ -936,28 +954,45 @@ fn runtime_symbol_to_c_file(sym: &str) -> Option<&'static str> {
         Some("random.c")
     } else if sym.starts_with("rt_math_") {
         Some("math.c")
-    } else if sym.starts_with("rt_maybe_") || sym.starts_with("rt_result_") || sym.starts_with("rt_arr_") {
+    } else if sym.starts_with("rt_maybe_")
+        || sym.starts_with("rt_result_")
+        || sym.starts_with("rt_arr_")
+    {
         Some("mire_types.c")
     } else if sym.starts_with("rt_managed_") || sym.starts_with("rt_panic") {
         Some("managed.c")
     } else if sym.starts_with("rt_check_bounds") {
         Some("safety.c")
-    } else if sym.starts_with("rt_list_") || sym.starts_with("rt_lists_") || sym.starts_with("rt_vecs_") {
+    } else if sym.starts_with("rt_list_")
+        || sym.starts_with("rt_lists_")
+        || sym.starts_with("rt_vecs_")
+    {
         Some("vecs.c")
-    } else if sym.starts_with("rt_dict_") || sym.starts_with("rt_dicts_") || sym.starts_with("rt_maps_") {
+    } else if sym.starts_with("rt_dict_")
+        || sym.starts_with("rt_dicts_")
+        || sym.starts_with("rt_maps_")
+    {
         Some("maps.c")
-    } else if sym.starts_with("rt_string_") || sym.starts_with("rt_strings_")
-        || sym.starts_with("rt_i64_to_string") || sym.starts_with("rt_i128_to_string")
-        || sym.starts_with("rt_u128_to_string") || sym.starts_with("rt_f64_to_string")
-        || sym.starts_with("rt_f32_to_string") || sym.starts_with("rt_bool_to_string")
-        || sym.starts_with("rt_unicode_") || sym.starts_with("rt_managed_from")
+    } else if sym.starts_with("rt_string_")
+        || sym.starts_with("rt_strings_")
+        || sym.starts_with("rt_i64_to_string")
+        || sym.starts_with("rt_i128_to_string")
+        || sym.starts_with("rt_u128_to_string")
+        || sym.starts_with("rt_f64_to_string")
+        || sym.starts_with("rt_f32_to_string")
+        || sym.starts_with("rt_bool_to_string")
+        || sym.starts_with("rt_unicode_")
+        || sym.starts_with("rt_managed_from")
         || sym.starts_with("rt_managed_ensure")
     {
         Some("strings.c")
     } else if sym.starts_with("rt_closure_env") {
         Some("safety.c")
-    } else if sym.starts_with("rt_hex_to_file") || sym.starts_with("rt_free_raw")
-        || sym.starts_with("rt_blend_") || sym.starts_with("rt_read_") || sym.starts_with("rt_write_")
+    } else if sym.starts_with("rt_hex_to_file")
+        || sym.starts_with("rt_free_raw")
+        || sym.starts_with("rt_blend_")
+        || sym.starts_with("rt_read_")
+        || sym.starts_with("rt_write_")
     {
         Some("helpers.c")
     } else if sym.starts_with("rt_thread_") {

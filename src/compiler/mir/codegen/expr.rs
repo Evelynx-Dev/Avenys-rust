@@ -1,7 +1,7 @@
 use super::builtins::{builtin_to_pal, compile_pal_builtin};
 use super::resolve::{coerce_to, coerce_to_bool, resolve_named_call, resolve_typed};
 use super::types::{llvm_type_str, render_struct_llvm_type};
-use super::{sanitize_fn_name, LlvmCtx, tmp_extra, tmp_result};
+use super::{LlvmCtx, sanitize_fn_name, tmp_extra, tmp_result};
 use crate::compiler::mir::{DataType, MirCmp, MirConst, MirInst, MirOp, MirValue};
 
 /// Resolves the common floating-point result type for a binary operation.
@@ -42,67 +42,69 @@ pub(crate) fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
             let result = tmp_result(ctx, &llty, inst.result);
             format!("%t{} = load {}, ptr {}", result, llty, src_s)
         }
-        MirOp::Store(dst, src) => {
-            match src {
-                MirValue::FunctionRef { name, env } => {
-                    let (dst_s, _) = resolve_typed(dst, ctx);
-                    let fn_name = format!("@fn_{}", sanitize_fn_name(name));
-                    let (env_str, env_ty) = resolve_typed(env, ctx);
-                    let fn_gep = tmp_extra(ctx, "ptr");
-                    let env_gep = tmp_extra(ctx, "ptr");
-                    extra.push(format!("{fn_gep} = getelementptr {{ ptr, ptr }}, ptr {dst_s}, i32 0, i32 0"));
-                    extra.push(format!("{env_gep} = getelementptr {{ ptr, ptr }}, ptr {dst_s}, i32 0, i32 1"));
-                    extra.push(format!("store ptr {fn_name}, ptr {fn_gep}"));
-                    let env_casted = if env_ty != "ptr" {
-                        let tmp = tmp_extra(ctx, "ptr");
-                        extra.push(format!("{tmp} = inttoptr {env_ty} {env_str} to ptr"));
-                        tmp
-                    } else {
-                        env_str
-                    };
-                    extra.push(format!("store ptr {env_casted}, ptr {env_gep}"));
-                    String::new()
-                }
-                _ => {
-                    let (src_s, src_ty) = resolve_typed(src, ctx);
-                    let (dst_s, _) = resolve_typed(dst, ctx);
-                    format!("store {} {}, ptr {}", src_ty, src_s, dst_s)
-                }
+        MirOp::Store(dst, src) => match src {
+            MirValue::FunctionRef { name, env } => {
+                let (dst_s, _) = resolve_typed(dst, ctx);
+                let fn_name = format!("@fn_{}", sanitize_fn_name(name));
+                let (env_str, env_ty) = resolve_typed(env, ctx);
+                let fn_gep = tmp_extra(ctx, "ptr");
+                let env_gep = tmp_extra(ctx, "ptr");
+                extra.push(format!(
+                    "{fn_gep} = getelementptr {{ ptr, ptr }}, ptr {dst_s}, i32 0, i32 0"
+                ));
+                extra.push(format!(
+                    "{env_gep} = getelementptr {{ ptr, ptr }}, ptr {dst_s}, i32 0, i32 1"
+                ));
+                extra.push(format!("store ptr {fn_name}, ptr {fn_gep}"));
+                let env_casted = if env_ty != "ptr" {
+                    let tmp = tmp_extra(ctx, "ptr");
+                    extra.push(format!("{tmp} = inttoptr {env_ty} {env_str} to ptr"));
+                    tmp
+                } else {
+                    env_str
+                };
+                extra.push(format!("store ptr {env_casted}, ptr {env_gep}"));
+                String::new()
             }
-        }
-MirOp::Add(l, r) => {
-                let (l_str, lt) = resolve_typed(l, ctx);
-                let (r_str, rt) = resolve_typed(r, ctx);
-                if lt == "ptr" || rt == "ptr" {
-                    // String concatenation: emit call to rt_string_concat
-                    let result = tmp_result(ctx, "ptr", inst.result);
-                    let lhs = if lt != "ptr" {
-                        let conv = tmp_extra(ctx, "i64");
-                        extra.push(format!("{} = inttoptr i64 {} to ptr", conv, l_str));
-                        conv
-                    } else {
-                        l_str.clone()
-                    };
-                    let rhs = if rt != "ptr" {
-                        let conv = tmp_extra(ctx, "i64");
-                        extra.push(format!("{} = inttoptr i64 {} to ptr", conv, r_str));
-                        conv
-                    } else {
-                        r_str.clone()
-                    };
-                    // Emit the concat call
-                    let concat_call = format!(
-                        "%t{} = call ptr @rt_string_concat(ptr {}, ptr {})",
-                        result, lhs, rhs
-                    );
-                    // If left operand is a temporary, it's likely an intermediate in a concat chain
-                    // and can be freed after use
-                    let free_lhs = if lt == "ptr" && l_str.starts_with('%') {
-                        format!("\n  call void @rt_managed_free(ptr {})", lhs)
-                    } else {
-                        String::new()
-                    };
-                    format!("{}{}", concat_call, free_lhs)
+            _ => {
+                let (src_s, src_ty) = resolve_typed(src, ctx);
+                let (dst_s, _) = resolve_typed(dst, ctx);
+                format!("store {} {}, ptr {}", src_ty, src_s, dst_s)
+            }
+        },
+        MirOp::Add(l, r) => {
+            let (l_str, lt) = resolve_typed(l, ctx);
+            let (r_str, rt) = resolve_typed(r, ctx);
+            if lt == "ptr" || rt == "ptr" {
+                // String concatenation: emit call to rt_string_concat
+                let result = tmp_result(ctx, "ptr", inst.result);
+                let lhs = if lt != "ptr" {
+                    let conv = tmp_extra(ctx, "i64");
+                    extra.push(format!("{} = inttoptr i64 {} to ptr", conv, l_str));
+                    conv
+                } else {
+                    l_str.clone()
+                };
+                let rhs = if rt != "ptr" {
+                    let conv = tmp_extra(ctx, "i64");
+                    extra.push(format!("{} = inttoptr i64 {} to ptr", conv, r_str));
+                    conv
+                } else {
+                    r_str.clone()
+                };
+                // Emit the concat call
+                let concat_call = format!(
+                    "%t{} = call ptr @rt_string_concat(ptr {}, ptr {})",
+                    result, lhs, rhs
+                );
+                // If left operand is a temporary, it's likely an intermediate in a concat chain
+                // and can be freed after use
+                let free_lhs = if lt == "ptr" && l_str.starts_with('%') {
+                    format!("\n  call void @rt_managed_free(ptr {})", lhs)
+                } else {
+                    String::new()
+                };
+                format!("{}{}", concat_call, free_lhs)
             } else {
                 let ty = float_result_ty(&lt, &rt).unwrap_or("i64");
                 let result = tmp_result(ctx, ty, inst.result);
@@ -177,10 +179,7 @@ MirOp::Add(l, r) => {
             // Build array of pointers for rt_string_concat_n
             let array_ptr = tmp_extra(ctx, "ptr");
             let array_type = format!("[{} x ptr]", vals.len());
-            extra.push(format!(
-                "{} = alloca {}, align 8",
-                array_ptr, array_type
-            ));
+            extra.push(format!("{} = alloca {}, align 8", array_ptr, array_type));
             for (i, val) in vals.iter().enumerate() {
                 let (v_str, v_ty) = resolve_typed(val, ctx);
                 let elem_ptr = tmp_extra(ctx, "ptr");
@@ -474,7 +473,10 @@ MirOp::Add(l, r) => {
                             let (env_str, env_ty) = resolve_typed(env, ctx);
                             let env_cast = if env_ty != "ptr" {
                                 let tmp = tmp_extra(ctx, "ptr");
-                                extra.push(format!("{} = inttoptr {} {} to ptr", tmp, env_ty, env_str));
+                                extra.push(format!(
+                                    "{} = inttoptr {} {} to ptr",
+                                    tmp, env_ty, env_str
+                                ));
                                 tmp
                             } else {
                                 env_str
@@ -489,8 +491,12 @@ MirOp::Add(l, r) => {
                             if ty == "{ ptr, ptr }" {
                                 let fn_ptr = tmp_extra(ctx, "ptr");
                                 let env_ptr = tmp_extra(ctx, "ptr");
-                                extra.push(format!("{fn_ptr} = extractvalue {{ ptr, ptr }} {val}, 0"));
-                                extra.push(format!("{env_ptr} = extractvalue {{ ptr, ptr }} {val}, 1"));
+                                extra.push(format!(
+                                    "{fn_ptr} = extractvalue {{ ptr, ptr }} {val}, 0"
+                                ));
+                                extra.push(format!(
+                                    "{env_ptr} = extractvalue {{ ptr, ptr }} {val}, 1"
+                                ));
                                 format!(
                                     "%t{} = call i64 @rt_thread_spawn_closure(ptr {}, ptr {})",
                                     result, fn_ptr, env_ptr
@@ -651,13 +657,18 @@ MirOp::Add(l, r) => {
                         )
                     }
                     MirValue::Temp(callee_id) => {
-                        let (callee_val, callee_ty) = resolve_typed(&MirValue::Temp(*callee_id), ctx);
+                        let (callee_val, callee_ty) =
+                            resolve_typed(&MirValue::Temp(*callee_id), ctx);
                         if callee_ty == "{ ptr, ptr }" {
                             // Loaded closure value — extract fn_ptr + env_ptr via extractvalue
                             let fn_ptr = tmp_extra(ctx, "ptr");
                             let env_ptr = tmp_extra(ctx, "ptr");
-                            extra.push(format!("{fn_ptr} = extractvalue {{ ptr, ptr }} {callee_val}, 0"));
-                            extra.push(format!("{env_ptr} = extractvalue {{ ptr, ptr }} {callee_val}, 1"));
+                            extra.push(format!(
+                                "{fn_ptr} = extractvalue {{ ptr, ptr }} {callee_val}, 0"
+                            ));
+                            extra.push(format!(
+                                "{env_ptr} = extractvalue {{ ptr, ptr }} {callee_val}, 1"
+                            ));
                             let mut param_tys: Vec<String> = vec!["ptr".to_string()];
                             arg_strs.insert(0, format!("ptr {env_ptr}"));
                             for a in args {
@@ -671,7 +682,10 @@ MirOp::Add(l, r) => {
                                 format!("call void {}({})", fn_cast, arg_strs.join(", "))
                             } else {
                                 let r = tmp_result(ctx, &ll_ret, inst.result);
-                                format!("%t{r} = call {ll_ret} {fn_cast}({args_str})", args_str = arg_strs.join(", "))
+                                format!(
+                                    "%t{r} = call {ll_ret} {fn_cast}({args_str})",
+                                    args_str = arg_strs.join(", ")
+                                )
                             }
                         } else {
                             // Alloca pointer — GEP into { ptr, ptr } struct to load fn_ptr + env_ptr
@@ -704,10 +718,16 @@ MirOp::Add(l, r) => {
                                 "{fn_cast} = bitcast ptr {fn_ptr_loaded} to {fn_sig}"
                             ));
                             if is_void {
-                                format!("call void {fn_cast}({args_str})", args_str = arg_strs.join(", "))
+                                format!(
+                                    "call void {fn_cast}({args_str})",
+                                    args_str = arg_strs.join(", ")
+                                )
                             } else {
                                 let r = tmp_result(ctx, &ll_ret, inst.result);
-                                format!("%t{r} = call {ll_ret} {fn_cast}({args_str})", args_str = arg_strs.join(", "))
+                                format!(
+                                    "%t{r} = call {ll_ret} {fn_cast}({args_str})",
+                                    args_str = arg_strs.join(", ")
+                                )
                             }
                         }
                     }
@@ -839,16 +859,27 @@ MirOp::Add(l, r) => {
             let (a, at) = resolve_typed(agg, ctx);
             let (v, _) = resolve_typed(val, ctx);
             // indices is a vec of field indices
-            let idx_str = indices.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ");
+            let idx_str = indices
+                .iter()
+                .map(|i| i.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
             let result = tmp_result(ctx, &at, inst.result);
             format!("%t{} = extractvalue {} {}, {}", result, at, a, idx_str)
         }
         MirOp::InsertValue(agg, val, indices) => {
             let (a, at) = resolve_typed(agg, ctx);
             let (v, vt) = resolve_typed(val, ctx);
-            let idx_str = indices.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ");
+            let idx_str = indices
+                .iter()
+                .map(|i| i.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
             let result = tmp_result(ctx, &at, inst.result);
-            format!("%t{} = insertvalue {} {}, {} {}, {}", result, at, a, vt, v, idx_str)
+            format!(
+                "%t{} = insertvalue {} {}, {} {}, {}",
+                result, at, a, vt, v, idx_str
+            )
         }
         MirOp::Select(cond, t, f) => {
             let (c, _) = resolve_typed(cond, ctx);

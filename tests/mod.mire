@@ -1,0 +1,28 @@
+// Shared entry point for the modular suite. Families remain independently
+// discoverable, while these checks exercise the language/runtime boundary used
+// by every family rather than acting as placeholder arithmetic.
+
+@[test]
+@[section("orchestrator")]
+pub fn root_arithmetic: () :bool {
+    set left = 21
+    set right = 21
+    set observed = left + right
+    if observed != 42 { return false }
+    return observed - right == left
+}
+
+@[test]
+@[section("orchestrator")]
+pub fn root_control_flow: () :bool {
+    set value = 0 mut
+    while value < 3 {
+        set value = value + 1
+    }
+    if value != 3 { return false }
+    return value - 1 == 2
+}
+
+pub fn main: () {
+    use dasu("avenys modular suite")
+}

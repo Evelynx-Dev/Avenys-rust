@@ -1,0 +1,24 @@
+{
+  "count": {
+    "Err": 0,
+    "FiltOut": 0,
+    "Ok": 1,
+    "ram_mb": 4,
+    "time_ms": 3
+  },
+  "family": "ownership",
+  "files": [
+    "tests/Ownership/mod.mire"
+  ],
+  "info": {
+    "CODES": [
+      "W0001"
+    ],
+    "CPU %": 76.53,
+    "RAM": 4,
+    "Time ms": 3,
+    "Total": 1,
+    "Warns": 1
+  },
+  "reproducible": true
+}

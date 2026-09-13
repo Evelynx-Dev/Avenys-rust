@@ -231,11 +231,17 @@ pub(crate) fn coerce_to(
             // Asumimos extensión con signo para los casos de coerción en llamadas;
             // los literales con ascripción ya emiten zext/sext explicitos en el lower.
             let conv = tmp_extra(ctx, to_ty);
-            extra.push(format!("{} = sext {} {} to {}", conv, from_ty, operand, to_ty));
+            extra.push(format!(
+                "{} = sext {} {} to {}",
+                conv, from_ty, operand, to_ty
+            ));
             return conv;
         } else if to_w < from_w {
             let conv = tmp_extra(ctx, to_ty);
-            extra.push(format!("{} = trunc {} {} to {}", conv, from_ty, operand, to_ty));
+            extra.push(format!(
+                "{} = trunc {} {} to {}",
+                conv, from_ty, operand, to_ty
+            ));
             return conv;
         }
     }

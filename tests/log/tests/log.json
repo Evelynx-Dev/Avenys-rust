@@ -1,0 +1,22 @@
+{
+  "count": {
+    "Err": 0,
+    "FiltOut": 0,
+    "Ok": 1,
+    "ram_mb": 4,
+    "time_ms": 3
+  },
+  "family": "tests",
+  "files": [
+    "tests/Tests/mod.mire"
+  ],
+  "info": {
+    "CODES": [],
+    "CPU %": 75.92,
+    "RAM": 4,
+    "Time ms": 3,
+    "Total": 1,
+    "Warns": 0
+  },
+  "reproducible": true
+}

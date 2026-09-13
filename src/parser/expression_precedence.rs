@@ -94,8 +94,8 @@ impl Parser {
                     args: vec![expr, right],
                     type_args: Vec::new(),
                     name_line: 0,
-            name_column: 0,
-            data_type: DataType::Bool,
+                    name_column: 0,
+                    data_type: DataType::Bool,
                 };
             } else {
                 break;
@@ -212,8 +212,8 @@ impl Parser {
                     args: vec![expr, string_expr(&ty)],
                     type_args: Vec::new(),
                     name_line: 0,
-            name_column: 0,
-            data_type: DataType::Bool,
+                    name_column: 0,
+                    data_type: DataType::Bool,
                 };
             } else if self.check(TokenType::At) {
                 self.advance();
@@ -233,8 +233,8 @@ impl Parser {
                     args: vec![expr, right],
                     type_args: Vec::new(),
                     name_line: 0,
-            name_column: 0,
-            data_type: DataType::List,
+                    name_column: 0,
+                    data_type: DataType::List,
                 };
             } else {
                 break;
@@ -393,5 +393,4 @@ impl Parser {
 
         self.parse_postfix()
     }
-
 }

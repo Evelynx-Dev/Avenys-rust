@@ -1,0 +1,6 @@
+@[test]
+pub fn data_value_combines: () :bool {
+    set price = 12
+    set quantity = 3
+    return price * quantity == 36
+}

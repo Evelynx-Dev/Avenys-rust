@@ -1,4 +1,7 @@
-pub mod avens;
+// Project manifests, lockfiles, and dependency metadata are compiler internals.
+// Owl owns project orchestration and receives only the small compiler API
+// re-exported below.
+pub(crate) mod avens;
 pub mod builtins;
 pub mod compiler;
 pub mod error;
@@ -9,11 +12,10 @@ pub mod parser;
 pub mod types;
 
 pub use avens::{
-    BuildMode, BuildOptions, BuildResult, CDefs, EntryContainment, ImportMode, MireCacheConfig,
-    MireDependencies, MireDependency, MireLock, MireManifest, MireProject, OptLevel, RuntimeTier,
-    check_entry_containment, compile_file_with_avenys, default_output_dir, find_project_root,
-    load_exports, load_manifest_dependencies, load_project_manifest, project_lock_path,
-    project_manifest_path, write_lock_file, write_manifest,
+    BuildMode, BuildOptions, BuildResult, CDefs, EntryContainment, ImportMode, LibType,
+    MireCacheConfig, MireManifest, MireProject, OptLevel, RuntimeTier, check_entry_containment,
+    compile_file_with_avenys, default_output_dir, find_project_root, load_exports,
+    load_project_manifest,
 };
 pub use compiler::{
     AnalysisReport, WarningConfig, analyze_program, analyze_program_with_warnings,

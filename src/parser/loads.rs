@@ -9,7 +9,9 @@ impl Parser {
         self.expect(TokenType::Load)?;
 
         if self.check(TokenType::Dot) {
-            return Err(self.error("Local paths are not allowed; declare the dependency in owl.toml"));
+            return Err(
+                self.error("Local paths are not allowed; declare the dependency in owl.toml")
+            );
         }
 
         let mut path = vec![self.expect_ident()?];

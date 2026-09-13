@@ -1,15 +1,17 @@
+use super::build_support::{
+    apply_cfg_filter, collect_used_symbols, dedup_llvm_declarations, generate_enum_constructors,
+    generate_runtime_declarations, generate_struct_constructors, inject_macros,
+    inject_test_harness, minimal_runtime_c_files, precompile_c_object, progress_phase,
+    runtime_base, set_c_defs,
+};
 use super::*;
 use crate::compiler::check_warnings_with_origins;
-use crate::compiler::mir::{codegen::mir_to_llvm_with_filename, lower::lower_program_with_filename, optimize::optimize};
+use crate::compiler::mir::{
+    codegen::mir_to_llvm_with_filename, lower::lower_program_with_filename, optimize::optimize,
+};
 use crate::error::diagnostic::Diagnostic;
 use crate::loader::load_program_with_cache;
 use crate::parser::ast::Statement;
-use super::build_support::{
-    apply_cfg_filter, collect_used_symbols, dedup_llvm_declarations,
-    generate_runtime_declarations, generate_enum_constructors, generate_struct_constructors,
-    inject_test_harness, minimal_runtime_c_files, precompile_c_object,
-    inject_macros, progress_phase, runtime_base, set_c_defs,
-};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
@@ -67,10 +69,28 @@ fn compile_file_inner(
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("main");
-    let binary_path = options
-        .output
-        .clone()
-        .unwrap_or_else(|| output_dir.join(stem));
+    // For libraries, use project name with proper prefix/suffix
+    let binary_path = if matches!(options.c_defs.libt, LibType::Static | LibType::Shared) {
+        // Try to get project name from manifest
+        let project_name = find_project_root(source_path)
+            .and_then(|root| load_project_manifest(&root).ok().flatten())
+            .map(|m| m.project.name)
+            .unwrap_or_else(|| stem.to_string());
+        let (prefix, suffix) = match options.c_defs.libt {
+            LibType::Static => ("lib", ".a"),
+            LibType::Shared => ("lib", ".so"),
+            _ => ("", ""),
+        };
+        options
+            .output
+            .clone()
+            .unwrap_or_else(|| output_dir.join(format!("{prefix}{project_name}{suffix}")))
+    } else {
+        options
+            .output
+            .clone()
+            .unwrap_or_else(|| output_dir.join(stem))
+    };
     let ir_path = options
         .persist_ir
         .then(|| output_dir.join(format!("{stem}.ll")));
@@ -86,45 +106,105 @@ fn compile_file_inner(
         //   minimal: compile PAL C sources only (runtime is demand-driven at IR level)
         //   none:    compile no runtime/PAL C sources (freestanding; user provides their own)
         let runtime_tier = options.c_defs.runtime;
-if !matches!(runtime_tier, RuntimeTier::None) {
+        if !matches!(runtime_tier, RuntimeTier::None) {
             if matches!(runtime_tier, RuntimeTier::Full) {
-                // Full tier: compile all runtime and PAL sources
+                // Full tier: compile all runtime and PAL sources (exclude _minimal.c variants)
                 let pal_platform = pal_platform_for_target(
-                    options.c_defs.target.as_deref().unwrap_or("x86_64-unknown-linux-gnu"),
+                    options
+                        .c_defs
+                        .target
+                        .as_deref()
+                        .unwrap_or("x86_64-unknown-linux-gnu"),
                 );
-                for directory in ["runtime", "pal/core"].iter().chain(std::iter::once(&pal_platform)) {
-                    super::toolchain::collect_c_files(&runtime_base.join(directory), &mut files)
+                for directory in ["runtime", "pal/core"]
+                    .iter()
+                    .chain(std::iter::once(&pal_platform))
+                {
+                    let dir = runtime_base.join(directory);
+                    for entry in std::fs::read_dir(&dir)
                         .map_err(|err| {
                             MireError::new(ErrorKind::Runtime {
                                 span: crate::error::Span::unknown(),
-                                message: format!("Could not collect C sources from {directory}: {err}"),
+                                message: format!(
+                                    "Could not read C sources from {directory}: {err}"
+                                ),
                             })
-                        })?;
+                        })?
+                        .flatten()
+                    {
+                        let path = entry.path();
+                        if path.extension().is_some_and(|e| e == "c") {
+                            let fname = path.file_name().unwrap().to_string_lossy();
+                            // Skip _minimal.c variants in full tier (they're for minimal tier only)
+                            if !fname.ends_with("_minimal.c") {
+                                files.push(path.to_string_lossy().into_owned());
+                            }
+                        }
+                    }
                 }
             } else {
                 // Minimal tier: collect only runtime sources (PAL added on demand).
                 // After IR generation, R3.2 filters runtime .c to only needed files,
                 // and adds PAL .c files only if the program uses PAL symbols.
                 // The full hash is kept for conservative cache invalidation.
-                super::toolchain::collect_c_files(&runtime_base.join("runtime"), &mut files)
+                let dir = runtime_base.join("runtime");
+                for entry in std::fs::read_dir(&dir)
                     .map_err(|err| {
                         MireError::new(ErrorKind::Runtime {
                             span: crate::error::Span::unknown(),
-                            message: format!("Could not collect C sources from runtime: {err}"),
+                            message: format!("Could not read C sources from runtime: {err}"),
                         })
-                    })?;
+                    })?
+                    .flatten()
+                {
+                    let path = entry.path();
+                    if path.extension().is_some_and(|e| e == "c") {
+                        let fname = path.file_name().unwrap().to_string_lossy();
+                        // In minimal tier, prefer _minimal.c variants, but also include base files
+                        // that don't have a _minimal counterpart
+                        if fname.ends_with("_minimal.c")
+                            || !files
+                                .iter()
+                                .any(|f| f.contains(&fname.replace("_minimal", "")))
+                        {
+                            files.push(path.to_string_lossy().into_owned());
+                        }
+                    }
+                }
             }
             // Also collect C sources from the compiler's runtime directory (standard library)
             let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
             let compiler_runtime = manifest_dir.join("src/runtime");
             if compiler_runtime.exists() {
-                super::toolchain::collect_c_files(&compiler_runtime, &mut files)
+                for entry in std::fs::read_dir(&compiler_runtime)
                     .map_err(|err| {
                         MireError::new(ErrorKind::Runtime {
                             span: crate::error::Span::unknown(),
-                            message: format!("Could not collect C sources from compiler runtime: {err}"),
+                            message: format!(
+                                "Could not read C sources from compiler runtime: {err}"
+                            ),
                         })
-                    })?;
+                    })?
+                    .flatten()
+                {
+                    let path = entry.path();
+                    if path.extension().is_some_and(|e| e == "c") {
+                        let fname = path.file_name().unwrap().to_string_lossy();
+                        if matches!(runtime_tier, RuntimeTier::Full) {
+                            if !fname.ends_with("_minimal.c") {
+                                files.push(path.to_string_lossy().into_owned());
+                            }
+                        } else {
+                            if fname.ends_with("_minimal.c")
+                                || !files
+                                    .iter()
+                                    .any(|f| f.contains(&fname.replace("_minimal", "")))
+                            {
+                                files.push(path.to_string_lossy().into_owned());
+                            }
+                        }
+                    }
+                }
             }
         }
         for proj_src in &options.c_defs.sources {
@@ -140,10 +220,7 @@ if !matches!(runtime_tier, RuntimeTier::None) {
             } else {
                 return Err(MireError::new(ErrorKind::Runtime {
                     span: crate::error::Span::unknown(),
-                    message: format!(
-                        "C source '{}' declared in [c] was not found",
-                        p.display()
-                    ),
+                    message: format!("C source '{}' declared in [c] was not found", p.display()),
                 }));
             }
         }
@@ -191,7 +268,17 @@ if !matches!(runtime_tier, RuntimeTier::None) {
         options.import_mode,
         options.opt_level,
         options.emit_binary,
-        &format!("{:x}", c_sources_hash),
+        &format!(
+            "{:x}|libt={:?}|runtime={:?}|target={:?}|nostartfiles={}|nostdlib={}|cflags={:?}|libs={:?}",
+            c_sources_hash,
+            options.c_defs.libt,
+            options.c_defs.runtime,
+            options.c_defs.target,
+            options.c_defs.nostartfiles,
+            options.c_defs.nostdlib,
+            options.c_defs.cflags,
+            options.c_defs.libs,
+        ),
     );
 
     if let Some(entry) = cache.build_entry(
@@ -239,7 +326,9 @@ if !matches!(runtime_tier, RuntimeTier::None) {
 
     let mut phase_analyse_time = phase_load;
     let mut phase_mir_time = phase_load;
-    let program = if let Some(cached) = cache.cached_analysis(source_path, source_file_hash, dep_fingerprint) {
+    let program = if let Some(cached) =
+        cache.cached_analysis(source_path, source_file_hash, dep_fingerprint)
+    {
         match cached {
             CachedAnalysis::Success(mut program) => {
                 apply_cfg_filter(&mut program);
@@ -292,7 +381,13 @@ if !matches!(runtime_tier, RuntimeTier::None) {
             } else {
                 err
             };
-            cache.store_analysis_error(source_path, source_file_hash, dep_fingerprint, &program, &err)?;
+            cache.store_analysis_error(
+                source_path,
+                source_file_hash,
+                dep_fingerprint,
+                &program,
+                &err,
+            )?;
             cache.save()?;
             return Err(err);
         }
@@ -331,7 +426,10 @@ if !matches!(runtime_tier, RuntimeTier::None) {
     for diagnostic in &warnings {
         warning_strs.push(format_diagnostic(diagnostic, true));
     }
-    if let Some(err_diag) = warnings.iter().find(|d| matches!(d.severity, Severity::Error)) {
+    if let Some(err_diag) = warnings
+        .iter()
+        .find(|d| matches!(d.severity, Severity::Error))
+    {
         return Err(MireError::from_diagnostic(err_diag));
     }
 
@@ -446,9 +544,17 @@ if !matches!(runtime_tier, RuntimeTier::None) {
         // Add PAL files on demand: only if the program uses PAL symbols
         if !used.pal.is_empty() {
             let pal_platform = pal_platform_for_target(
-                options.c_defs.target.as_deref().unwrap_or("x86_64-unknown-linux-gnu"),
+                options
+                    .c_defs
+                    .target
+                    .as_deref()
+                    .unwrap_or("x86_64-unknown-linux-gnu"),
             );
-            let pal_dirs: Vec<&str> = ["pal/core"].iter().chain(std::iter::once(&pal_platform)).copied().collect();
+            let pal_dirs: Vec<&str> = ["pal/core"]
+                .iter()
+                .chain(std::iter::once(&pal_platform))
+                .copied()
+                .collect();
             for directory in &pal_dirs {
                 let dir = runtime_base.join(directory);
                 if let Ok(entries) = std::fs::read_dir(&dir) {
@@ -540,7 +646,11 @@ if !matches!(runtime_tier, RuntimeTier::None) {
                     false
                 }
             });
-        if !has_no_main && ir.contains("define") && ir.contains("@fn_main") && !ir.contains("define i32 @main(") {
+        if !has_no_main
+            && ir.contains("define")
+            && ir.contains("@fn_main")
+            && !ir.contains("define i32 @main(")
+        {
             ir.push_str("\n\ndefine i32 @main(i32 %argc, ptr %argv) {\n");
             ir.push_str("  store i32 %argc, ptr @.argc\n");
             ir.push_str("  store ptr %argv, ptr @.argv\n");
@@ -582,7 +692,10 @@ if !matches!(runtime_tier, RuntimeTier::None) {
     }
 
     if options.emit_binary {
-        let cache_dir = runtime_base.join(".cobject_cache");
+        let cache_dir = std::env::var_os("MIRE_CACHE_DIR")
+            .map(PathBuf::from)
+            .map(|path| path.join("cobjects"))
+            .unwrap_or_else(|| runtime_base.join(".cobject_cache"));
         let cache_dir = if fs::create_dir_all(&cache_dir).is_ok() {
             cache_dir
         } else {
@@ -642,12 +755,7 @@ if !matches!(runtime_tier, RuntimeTier::None) {
             has_pal_objects,
         )?;
         let phase_link = build_start.elapsed().as_millis() as u64;
-        progress_phase(
-            "link",
-            source_filename,
-            phase_link - phase_llvm,
-            phase_link,
-        );
+        progress_phase("link", source_filename, phase_link - phase_llvm, phase_link);
     }
     let phase_done = build_start.elapsed().as_millis() as u64;
     progress_phase("done", source_filename, 0, phase_done);
@@ -702,9 +810,14 @@ pub fn default_output_dir(source_path: &Path, mode: BuildMode) -> PathBuf {
         });
     }
 
-    source_path
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
+    std::env::var_os("MIRE_OUTPUT_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            source_path
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .join("bin")
+        })
         .join(match mode {
             BuildMode::Debug => "debug",
             BuildMode::Release => "release",

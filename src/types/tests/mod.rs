@@ -84,12 +84,30 @@ fn not_assignable_with_loss() {
 #[test]
 fn promote_numeric_keeps_widest() {
     use crate::types::unify::promote_numeric;
-    assert_eq!(promote_numeric(&DataType::I8, &DataType::I64), DataType::I64);
-    assert_eq!(promote_numeric(&DataType::U8, &DataType::U32), DataType::U32);
-    assert_eq!(promote_numeric(&DataType::F32, &DataType::I64), DataType::F32);
-    assert_eq!(promote_numeric(&DataType::I32, &DataType::F64), DataType::F64);
-    assert_eq!(promote_numeric(&DataType::F64, &DataType::F32), DataType::F64);
-    assert_eq!(promote_numeric(&DataType::I128, &DataType::I32), DataType::I128);
+    assert_eq!(
+        promote_numeric(&DataType::I8, &DataType::I64),
+        DataType::I64
+    );
+    assert_eq!(
+        promote_numeric(&DataType::U8, &DataType::U32),
+        DataType::U32
+    );
+    assert_eq!(
+        promote_numeric(&DataType::F32, &DataType::I64),
+        DataType::F32
+    );
+    assert_eq!(
+        promote_numeric(&DataType::I32, &DataType::F64),
+        DataType::F64
+    );
+    assert_eq!(
+        promote_numeric(&DataType::F64, &DataType::F32),
+        DataType::F64
+    );
+    assert_eq!(
+        promote_numeric(&DataType::I128, &DataType::I32),
+        DataType::I128
+    );
 }
 
 #[test]

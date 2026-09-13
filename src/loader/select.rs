@@ -41,8 +41,9 @@ pub(super) fn select_imported_statements(
                 .iter()
                 .enumerate()
                 .filter(|statement| {
-                    statement_export_name(&statement.1.statement)
-                        .is_some_and(|name| name == item.as_str() || name.starts_with(&format!("{item}.")))
+                    statement_export_name(&statement.1.statement).is_some_and(|name| {
+                        name == item.as_str() || name.starts_with(&format!("{item}."))
+                    })
                 })
                 .map(|(idx, _)| idx)
                 .collect();
@@ -152,8 +153,9 @@ fn resolve_statement_deps(
                 let export_name = statement_export_name(&stmt.statement);
                 let normalized_export = export_name.map(canonical_fn_name);
                 let internal_name = match &stmt.statement {
-                    Statement::ExternFunction { name, .. }
-                    | Statement::ExternLib { name, .. } => Some(name.as_str()),
+                    Statement::ExternFunction { name, .. } | Statement::ExternLib { name, .. } => {
+                        Some(name.as_str())
+                    }
                     Statement::Let { name, .. } => Some(name.as_str()),
                     Statement::Assignment {
                         target: AssignmentTarget::Variable(name),

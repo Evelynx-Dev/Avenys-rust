@@ -186,13 +186,17 @@ pub(super) fn hash_statement(statement: &Statement, hasher: &mut FxHasher) {
                 hash_expression(expr, hasher);
             }
         }
-        Statement::Load { path, alias, items, .. } => {
+        Statement::Load {
+            path, alias, items, ..
+        } => {
             hasher.write_u8(23);
             path.hash(hasher);
             alias.hash(hasher);
             items.hash(hasher);
         }
-        Statement::LoadLocal { rel_path, absolute, .. } => {
+        Statement::LoadLocal {
+            rel_path, absolute, ..
+        } => {
             hasher.write_u8(23);
             rel_path.hash(hasher);
             absolute.hash(hasher);

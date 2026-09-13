@@ -7,6 +7,17 @@ on:
     branches: [main, master]
 
 jobs:
+  wasm-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pull WASI SDK image
+        run: docker pull ghcr.io/webassembly/wasi-sdk:latest
+
+      - name: Build and run WASI and freestanding WASM fixtures
+        run: MIRE_WASM_DOCKER_TESTS=1 tests/wasm_docker.sh
+
   build-and-test:
     runs-on: ubuntu-latest
     steps:

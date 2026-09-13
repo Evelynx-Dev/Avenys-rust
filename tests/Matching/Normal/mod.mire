@@ -1,0 +1,10 @@
+@[test]
+pub fn normal_match: () :bool {
+    set value = 2
+    match value {
+        1 { return false }
+        2 { return true }
+        _ { return false }
+    }
+    return false
+}

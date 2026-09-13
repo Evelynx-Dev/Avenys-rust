@@ -1,0 +1,41 @@
+// Map cases use the Mire runtime collection instead of a scalar placeholder.
+load mire::map
+load mire::vec
+
+@[test]
+pub fn map_insert_lookup_and_remove: () :bool {
+    set values = {} :map[str i64] mut
+    set values = map::set::i64(values "answer" 42)
+
+    if !map::has(values "answer") {
+        return false
+    }
+
+    set observed = map::get::i64(values "answer")
+
+    if observed != 42 {
+        return false
+    }
+
+    map::remove(values "answer")
+
+    return !map::has(values "answer") && map::is::empty(values)
+}
+
+@[test]
+pub fn map_tracks_multiple_keys_and_values: () :bool {
+    set values = {} :map[str i64] mut
+    set values = map::set::i64(values "alpha" 10)
+    set values = map::set::i64(values "beta" 20)
+
+    set keys = map::keys(values)
+    set stored = map::values::i64(values)
+
+    if map::len(values) != 2 {
+        return false
+    }
+    if vec::len(keys) != 2 {
+        return false
+    }
+    return vec::len(stored) == 2
+}

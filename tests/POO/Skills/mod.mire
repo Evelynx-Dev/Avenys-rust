@@ -1,0 +1,7 @@
+skill Priced { fn total: (self) :i64 }
+
+@[test]
+pub fn skill_family_is_discoverable: () :bool {
+    set units = 3
+    return units == 3
+}

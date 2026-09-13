@@ -9,9 +9,9 @@ set -e
 #   curl -fsSL <url> | sh -s -- --compiler-only   # compiler only
 #   curl -fsSL <url> | sh -s -- --kioto-only      # kioto stdlib only
 
-REPO_OWL="${OWL_REPO:-mire-lang/owl}"
-REPO_COMPILER="${COMPILER_REPO:-mire-lang/Avenys-rust}"
-REPO_KIOTO="${KIOTO_REPO:-mire-lang/Kioto}"
+REPO_OWL="${OWL_REPO:-Evelynx-Dev/owl}"
+REPO_COMPILER="${COMPILER_REPO:-Evelynx-Dev/Avenys-rust}"
+REPO_KIOTO="${KIOTO_REPO:-Evelynx-Dev/Kioto-1}"
 OWL_TARBALL="owl-linux-x86_64.tar.gz"
 COMPILER_TARBALL="mire-compiler-linux-x86_64.tar.gz"
 PREFIX=""
@@ -138,7 +138,7 @@ detect_pkg_manager() {
 install_deps() {
     local pm="$1"
     echo ""
-    echo "  installing: curl tar git clang llvm libssl libsdl2 openssl"
+    echo "  installing: curl tar git clang llvm libssl libsodium libsdl2 openssl"
     echo "  manager: ${pm}"
 
     if [ "$YES" != "1" ]; then
@@ -151,21 +151,21 @@ install_deps() {
     case "$pm" in
         apt)
             sudo apt-get update -qq
-            sudo apt-get install -y -qq curl tar git clang llvm-dev libssl-dev libsdl2-dev 2>/dev/null || \
-            sudo apt-get install -y -qq curl tar git clang llvm-18-dev libssl-dev libsdl2-dev 2>/dev/null || \
-            sudo apt-get install -y -qq curl tar git clang libssl-dev libsdl2-dev
+            sudo apt-get install -y -qq curl tar git clang llvm-dev libssl-dev libsodium-dev libsdl2-dev 2>/dev/null || \
+            sudo apt-get install -y -qq curl tar git clang llvm-18-dev libssl-dev libsodium-dev libsdl2-dev 2>/dev/null || \
+            sudo apt-get install -y -qq curl tar git clang libssl-dev libsodium-dev libsdl2-dev
             ;;
         pacman)
-            sudo pacman -Sy --noconfirm curl tar git clang llvm openssl sdl2
+            sudo pacman -Sy --noconfirm curl tar git clang llvm openssl libsodium sdl2
             ;;
         dnf|yum)
-            sudo "$pm" install -y curl tar git clang llvm-devel openssl-devel SDL2-devel
+            sudo "$pm" install -y curl tar git clang llvm-devel openssl-devel libsodium-devel SDL2-devel
             ;;
         apk)
-            sudo apk add curl tar git gcompat libgcc clang llvm-dev openssl-dev sdl2-dev
+            sudo apk add curl tar git gcompat libgcc clang llvm-dev openssl-dev libsodium-dev sdl2-dev
             ;;
         zypper)
-            sudo zypper install -y curl tar git clang llvm-devel libopenssl-devel libSDL2-devel
+            sudo zypper install -y curl tar git clang llvm-devel libopenssl-devel libsodium-devel libSDL2-devel
             ;;
     esac
 }
@@ -177,6 +177,20 @@ check_prerequisites() {
     fi
     if ! command -v tar >/dev/null 2>&1; then
         missing="$missing tar"
+    fi
+    if [ "$INSTALL_COMPILER" = "1" ] || [ "$COMPILER_ONLY" = "1" ]; then
+        if ! command -v clang >/dev/null 2>&1; then
+            missing="$missing clang"
+        fi
+        if ! command -v llvm-config >/dev/null 2>&1 && ! command -v llvm-config-18 >/dev/null 2>&1; then
+            missing="$missing llvm"
+        fi
+    fi
+    if ! command -v openssl >/dev/null 2>&1; then
+        missing="$missing openssl"
+    fi
+    if command -v ldconfig >/dev/null 2>&1 && ! ldconfig -p 2>/dev/null | grep -q 'libsodium.so'; then
+        missing="$missing libsodium"
     fi
     if [ "$KIOTO_ONLY" = "1" ] && ! command -v git >/dev/null 2>&1; then
         missing="$missing git"
@@ -300,7 +314,7 @@ if [ "$KIOTO_ONLY" = "1" ]; then
         esac
     fi
 
-    mkdir -p "${OWL_HOME}/modules" "${OWL_HOME}/tmp"
+    mkdir -p "${OWL_HOME}/modules" "${OWL_HOME}/tmp" "${OWL_HOME}/cfg"
 
     if [ ! -f "$OWL_HOME/config.toml" ]; then
         cat > "$OWL_HOME/config.toml" << 'CONFIG'
@@ -388,7 +402,7 @@ if [ "$INSTALL_OWL" = "1" ]; then
         fi
 
         if [ -d "$TMPDIR/owl/kioto" ] && [ "$INSTALL_KIOTO" = "1" ]; then
-            mkdir -p "${OWL_HOME}/modules" "${OWL_HOME}/tmp"
+            mkdir -p "${OWL_HOME}/modules" "${OWL_HOME}/tmp" "${OWL_HOME}/cfg"
             rm -rf "${OWL_HOME}/modules/kioto"
             cp -r "$TMPDIR/owl/kioto" "${OWL_HOME}/modules/kioto"
         fi

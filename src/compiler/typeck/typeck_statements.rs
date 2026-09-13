@@ -1,5 +1,5 @@
-use std::collections::HashSet;
 use crate::parser::ast::Visibility;
+use std::collections::HashSet;
 
 use crate::canonical_fn_name;
 use crate::error::{Result, type_error_at_span};
@@ -21,9 +21,17 @@ impl TypeChecker {
         is_constant: bool,
     ) -> Result<()> {
         if let Some(expr) = value
-            && let Expression::Literal { lit: Literal::Int(int_val), .. } = expr
+            && let Expression::Literal {
+                lit: Literal::Int(int_val),
+                ..
+            } = expr
         {
-            Self::validate_int_literal_range(data_type, *int_val, self.current_span.line, self.current_span.column)?;
+            Self::validate_int_literal_range(
+                data_type,
+                *int_val,
+                self.current_span.line,
+                self.current_span.column,
+            )?;
         }
         let inferred = if let Some(expr) = value {
             self.check_expression(expr)?
@@ -43,7 +51,10 @@ impl TypeChecker {
                         self.current_span.column,
                         data_type,
                         &inferred,
-                        Some(&format!("(value :{})", crate::types::errors::pretty(data_type))),
+                        Some(&format!(
+                            "(value :{})",
+                            crate::types::errors::pretty(data_type)
+                        )),
                     ));
                 }
                 return Err(crate::types::errors::type_mismatch(
@@ -97,10 +108,7 @@ impl TypeChecker {
             if self.is_constant(name) {
                 return Err(type_error_at_span(
                     self.current_span,
-                    format!(
-                        "Cannot reassign constant '{}'",
-                        name
-                    ),
+                    format!("Cannot reassign constant '{}'", name),
                 ));
             }
         }
@@ -196,8 +204,8 @@ impl TypeChecker {
                 args: new_fields,
                 type_args: Vec::new(),
                 name_line: 0,
-            name_column: 0,
-            data_type: owner_type.clone(),
+                name_column: 0,
+                data_type: owner_type.clone(),
             };
 
             self.insert_var(owner.to_string(), owner_type.clone(), owner_mutable);
@@ -592,7 +600,9 @@ impl TypeChecker {
     ) -> Result<()> {
         for method in methods.iter() {
             if let Statement::Function {
-                name_line, name_column, ..
+                name_line,
+                name_column,
+                ..
             } = method
             {
                 self.current_span = crate::error::Span::new(*name_line, *name_column);
@@ -705,7 +715,8 @@ impl TypeChecker {
             Vec::new()
         };
         let mut all_methods = parent_methods;
-        let mut method_names: HashSet<String> = all_methods.iter().map(|m| m.name.clone()).collect();
+        let mut method_names: HashSet<String> =
+            all_methods.iter().map(|m| m.name.clone()).collect();
         for method in methods {
             if !method_names.insert(method.name.clone()) {
                 return Err(type_error_at_span(

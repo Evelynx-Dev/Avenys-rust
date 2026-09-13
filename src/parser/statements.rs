@@ -1,8 +1,7 @@
 use crate::error::Result;
 use crate::lexer::{Token, TokenType};
 use crate::parser::ast::{
-    Attribute, AttributeArg, DataType, EnumVariantDef, Expression, Literal, Statement,
-    Visibility,
+    Attribute, AttributeArg, DataType, EnumVariantDef, Expression, Literal, Statement, Visibility,
 };
 
 use super::Parser;
@@ -497,7 +496,12 @@ impl Parser {
         } else {
             name.clone()
         };
-        Ok(Statement::ExternLib { name, path, line: lib_token.line, column: lib_token.column })
+        Ok(Statement::ExternLib {
+            name,
+            path,
+            line: lib_token.line,
+            column: lib_token.column,
+        })
     }
 
     fn parse_extern_fn_statement(&mut self, visibility: Visibility) -> Result<Statement> {
@@ -590,7 +594,14 @@ impl Parser {
                 .join(" ")
                 .trim()
                 .to_string();
-            instructions.push((opcode, Expression::Literal { lit: Literal::Str(operand_text), line: 0, column: 0 }));
+            instructions.push((
+                opcode,
+                Expression::Literal {
+                    lit: Literal::Str(operand_text),
+                    line: 0,
+                    column: 0,
+                },
+            ));
         }
 
         self.expect_block_close()?;

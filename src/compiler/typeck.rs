@@ -15,18 +15,18 @@ mod typeck_validate;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use crate::load_project_manifest;
+use crate::avens::load_project_manifest;
 use crate::avens::{SecurityConfig, SecurityMode};
 
 use self::typeck_returns::{implicit_return_expression_mut, statements_contain_explicit_return};
+use crate::canonical_fn_name;
 use crate::compiler::{AnalysisSelection, location};
-use crate::error::{MireError, Result, type_error_at_span, type_error_code_at_span};
 use crate::error::diagnostic::DiagnosticCode;
+use crate::error::{MireError, Result, type_error_at_span, type_error_code_at_span};
 use crate::incremental::analysis_unit_key;
 use crate::parser::ast::{
     AssignmentTarget, DataType, Expression, Identifier, Literal, Program, Statement, TraitMethodSig,
 };
-use crate::canonical_fn_name;
 
 #[cfg(test)]
 #[path = "typeck_tests.rs"]
@@ -220,7 +220,7 @@ impl TypeChecker {
         if builtins.allow.is_empty() {
             return None;
         }
-Some(builtins.allow.into_iter().collect())
+        Some(builtins.allow.into_iter().collect())
     }
 
     /// Loads the `[security]` configuration from the project's owl.toml.
@@ -299,19 +299,15 @@ Some(builtins.allow.into_iter().collect())
         }
     }
 
-      fn collect_load_local_modules(&mut self, statements: &[Statement]) {
+    fn collect_load_local_modules(&mut self, statements: &[Statement]) {
         for statement in statements {
             match statement {
-                Statement::LoadLocal { rel_path, .. }
-                    if let Some(prefix) = rel_path.last()
-                =>
-                {
+                Statement::LoadLocal { rel_path, .. } if let Some(prefix) = rel_path.last() => {
                     self.load_local_modules.insert(prefix.clone());
                 }
                 Statement::Function {
                     name, attributes, ..
-                } =>
-                {
+                } => {
                     if attributes.iter().any(|a| a.name == "macro!") {
                         self.macro_names.insert(name.clone());
                     }
@@ -503,7 +499,7 @@ Some(builtins.allow.into_iter().collect())
                 cases,
                 default,
             } => self.check_match_statement(value, cases, default),
-Statement::Unsafe { body, .. } => {
+            Statement::Unsafe { body, .. } => {
                 if !self.is_unsafe_allowed() {
                     return Err(type_error_code_at_span(
                         self.current_span,
@@ -558,17 +554,25 @@ Statement::Unsafe { body, .. } => {
                 methods,
                 ..
             } => self.check_impl_statement(trait_name, type_name, type_params, methods),
-            Statement::Type { name, parent, fields, .. } => self.check_type_statement(name, parent.as_deref(), fields),
-            Statement::Skill { name, parent, methods, .. } => self.check_skill_statement(name, parent.as_deref(), methods),
-Statement::Break | Statement::Continue => Ok(()),
+            Statement::Type {
+                name,
+                parent,
+                fields,
+                ..
+            } => self.check_type_statement(name, parent.as_deref(), fields),
+            Statement::Skill {
+                name,
+                parent,
+                methods,
+                ..
+            } => self.check_skill_statement(name, parent.as_deref(), methods),
+            Statement::Break | Statement::Continue => Ok(()),
             Statement::ExternLib { name, .. } => {
                 if !self.is_extern_lib_allowed(name) {
                     return Err(type_error_code_at_span(
                         self.current_span,
                         DiagnosticCode::E0022,
-                        format!(
-                            "extern lib '{name}' is not allowed in [security].extern_libs"
-                        ),
+                        format!("extern lib '{name}' is not allowed in [security].extern_libs"),
                     ));
                 }
                 Ok(())
@@ -579,24 +583,19 @@ Statement::Break | Statement::Continue => Ok(()),
                     return Err(type_error_code_at_span(
                         self.current_span,
                         DiagnosticCode::E0022,
-                        format!(
-                            "extern function '{name}' is not allowed in [security].externs"
-                        ),
+                        format!("extern function '{name}' is not allowed in [security].externs"),
                     ));
                 }
                 if !self.is_extern_lib_allowed(lib_name) {
                     return Err(type_error_code_at_span(
                         self.current_span,
                         DiagnosticCode::E0022,
-                        format!(
-                            "extern lib '{lib_name}' is not allowed in [security].extern_libs"
-                        ),
+                        format!("extern lib '{lib_name}' is not allowed in [security].extern_libs"),
                     ));
                 }
                 Ok(())
             }
-            Statement::Enum { .. }
-            | Statement::Module { .. } => Ok(()),
+            Statement::Enum { .. } | Statement::Module { .. } => Ok(()),
             Statement::Load { .. } => Ok(()),
             Statement::LoadLocal { .. } => Ok(()),
         };

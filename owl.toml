@@ -1,7 +1,7 @@
 [project]
 name = "avenys"
 version = "3.24.28"
-entry = "mod.mire"
+entry = "tests/mod.mire"
 
 [build]
 compiler = "mire"
@@ -14,5 +14,17 @@ tests = "tests"
 output = "bin"
 cache = "bin/.cache"
 
+[tests]
+path = "tests"
+
 [dependencies]
-kioto = { path = "../kioto" }
+kioto = { path = "../kioto", version = "2.4.7" }
+mire = { path = "../mire", version = "0.0.7" }
+sqlite = { path = "../sqlite", version = "0.1.0" }
+
+[c]
+libs = ["sqlite3"]
+sources = ["../sqlite/native/sqlite_bridge.c"]
+
+[macros]
+ensure_answer = "tests/Macros/Custom/mod.mire"

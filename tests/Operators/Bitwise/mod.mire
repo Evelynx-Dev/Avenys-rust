@@ -1,0 +1,2 @@
+@[test]
+pub fn bitwise_operators: () :bool { return (1 << 3) == 8 }

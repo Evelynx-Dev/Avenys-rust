@@ -1,0 +1,63 @@
+// While loops verify repeated evaluation, mutation and termination.
+
+@[test]
+pub fn while_zero_iterations: () :bool {
+    set value = 0 mut
+    while false { set value = 1 }
+    return value == 0
+}
+
+@[test]
+pub fn while_counts_up: () :bool {
+    set value = 0 mut
+    while value < 5 { set value = value + 1 }
+    return value == 5
+}
+
+@[test]
+pub fn while_counts_down: () :bool {
+    set value = 5 mut
+    while value > 0 { set value = value - 1 }
+    return value == 0
+}
+
+@[test]
+pub fn while_accumulates: () :bool {
+    set index = 1 mut
+    set total = 0 mut
+    while index <= 4 {
+        set total = total + index
+        set index = index + 1
+    }
+    return total == 10
+}
+
+@[test]
+pub fn while_nested_condition: () :bool {
+    set value = 0 mut
+    while value < 3 {
+        if value == 1 { set value = value + 1 } else { set value = value + 1 }
+    }
+    return value == 3
+}
+
+@[test]
+pub fn while_reaches_boundary: () :bool {
+    set value = 2 mut
+    while value != 7 { set value = value + 1 }
+    return value == 7
+}
+
+@[test]
+pub fn while_preserves_result: () :bool {
+    set value = 4 mut
+    while value < 4 { set value = 99 }
+    return value == 4
+}
+
+@[test]
+pub fn while_multiple_updates: () :bool {
+    set value = 1 mut
+    while value < 10 { set value = value * 2 }
+    return value == 16
+}

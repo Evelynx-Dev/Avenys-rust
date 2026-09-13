@@ -14,6 +14,101 @@
 extern const char *pal_proc_capture_output(const char *cmd);
 #endif
 
+// Computes the RFC 6455 WebSocket accept value without pulling a web
+// framework into the compiler runtime. The result is runtime-managed so a
+// Mire-only log server can perform a standards-compliant upgrade handshake.
+char *rt_websocket_accept(const char *client_key) {
+    static const char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    static const char guid[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+    uint8_t input[256];
+    size_t key_len = client_key ? strlen(client_key) : 0;
+    size_t guid_len = sizeof(guid) - 1;
+    if (key_len + guid_len >= sizeof(input)) return rt_managed_from_cstr("");
+    memcpy(input, client_key, key_len);
+    memcpy(input + key_len, guid, guid_len);
+    size_t length = key_len + guid_len;
+
+    uint32_t h[5] = {0x67452301u, 0xEFCDAB89u, 0x98BADCFEu, 0x10325476u, 0xC3D2E1F0u};
+    uint8_t block[128] = {0};
+    memcpy(block, input, length);
+    block[length] = 0x80;
+    size_t padded = length + 1;
+    while ((padded % 64) != 56) padded++;
+    uint64_t bits = (uint64_t)length * 8u;
+    for (int i = 0; i < 8; i++) block[padded + i] = (uint8_t)(bits >> (56 - i * 8));
+    padded += 8;
+    for (size_t offset = 0; offset < padded; offset += 64) {
+        uint32_t w[80];
+        for (int i = 0; i < 16; i++) {
+            size_t p = offset + (size_t)i * 4;
+            w[i] = ((uint32_t)block[p] << 24) | ((uint32_t)block[p + 1] << 16) |
+                   ((uint32_t)block[p + 2] << 8) | block[p + 3];
+        }
+        for (int i = 16; i < 80; i++) {
+            uint32_t v = w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16];
+            w[i] = (v << 1) | (v >> 31);
+        }
+        uint32_t a = h[0], b = h[1], c = h[2], d = h[3], e = h[4];
+        for (int i = 0; i < 80; i++) {
+            uint32_t f, k;
+            if (i < 20) { f = (b & c) | ((~b) & d); k = 0x5A827999u; }
+            else if (i < 40) { f = b ^ c ^ d; k = 0x6ED9EBA1u; }
+            else if (i < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8F1BBCDCu; }
+            else { f = b ^ c ^ d; k = 0xCA62C1D6u; }
+            uint32_t rotated = (a << 5) | (a >> 27);
+            uint32_t temp = rotated + f + e + k + w[i];
+            e = d; d = c; c = (b << 30) | (b >> 2); b = a; a = temp;
+        }
+        h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e;
+    }
+    uint8_t digest[20];
+    for (int i = 0; i < 5; i++) {
+        digest[i * 4] = (uint8_t)(h[i] >> 24);
+        digest[i * 4 + 1] = (uint8_t)(h[i] >> 16);
+        digest[i * 4 + 2] = (uint8_t)(h[i] >> 8);
+        digest[i * 4 + 3] = (uint8_t)h[i];
+    }
+    char encoded[29];
+    size_t out = 0;
+    for (int i = 0; i < 20; i += 3) {
+        uint32_t v = ((uint32_t)digest[i] << 16) |
+                     ((uint32_t)(i + 1 < 20 ? digest[i + 1] : 0) << 8) |
+                     (uint32_t)(i + 2 < 20 ? digest[i + 2] : 0);
+        encoded[out++] = alphabet[(v >> 18) & 63];
+        encoded[out++] = alphabet[(v >> 12) & 63];
+        encoded[out++] = i + 1 < 20 ? alphabet[(v >> 6) & 63] : '=';
+        encoded[out++] = i + 2 < 20 ? alphabet[v & 63] : '=';
+    }
+    encoded[out] = '\0';
+    return rt_managed_from_cstr(encoded);
+}
+
+// Builds one unmasked server-to-client text frame. The live dashboard sends
+// only the compact global count, so the 125-byte short-frame form is enough.
+char *rt_websocket_text_frame(const char *payload) {
+    if (!payload) return rt_managed_from_cstr("");
+    size_t length = strlen(payload);
+    if (length > 125) return rt_managed_from_cstr("");
+    uint8_t frame[127];
+    frame[0] = 0x81;
+    frame[1] = (uint8_t)length;
+    memcpy(frame + 2, payload, length);
+    return rt_managed_from_slice((const char *)frame, length + 2);
+}
+
+/* Appends one already-formatted server event without exposing arbitrary file
+ * reads or paths to the HTTP layer. The caller owns the fixed log location. */
+int64_t rt_web_log_append(const char *path, const char *line) {
+    if (!path || !line) return -1;
+    FILE *file = fopen(path, "ab");
+    if (!file) return -1;
+    size_t length = strlen(line);
+    size_t written = fwrite(line, 1, length, file);
+    fputc('\n', file);
+    fclose(file);
+    return written == length ? 0 : -1;
+}
+
 // Raw byte access from a managed string.
 int64_t rt_crypto_byte_at(const char *s, int64_t i) {
     if (!s || i < 0) return 0;
@@ -88,7 +183,7 @@ char *rt_proc_capture_output(const char *cmd) {
 // Thread-local exit status of the most recent argv-based capture. Mirrors the
 // shell capture's implicit status without needing an extra out-parameter that
 // Mire cannot express. Single mire process = single sequential proc user.
-static _Thread_local int64_t g_last_proc_exit = -1;
+static _Thread_local __attribute__((tls_model("global-dynamic"))) int64_t g_last_proc_exit = -1;
 
 char *rt_proc_capture_argv(const char *cmd, void *args_vec) {
     g_last_proc_exit = -1;
@@ -636,4 +731,3 @@ int64_t rt_font_get_pixel(int64_t ch, int64_t col, int64_t row) {
     }
     return (s_font5x7['?' - 32][col] >> row) & 1;
 }
-

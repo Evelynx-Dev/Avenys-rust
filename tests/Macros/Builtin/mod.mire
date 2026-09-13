@@ -1,0 +1,10 @@
+@[test]
+pub fn builtin_macro_family_is_active: () :bool {
+    set value = 40 + 2
+    assert!(value == 42 "macro assertion must observe the computed value")
+
+    if value != 42 {
+        return false
+    }
+    return value / 2 == 21
+}

@@ -32,14 +32,17 @@ pub(crate) struct LlvmCtx<'a> {
     /// Maps extern function name -> its mire-wrapper LLVM name (e.g. "abs" -> "@fn_abs_wrapper").
     extern_wrapper_names: HashMap<String, String>,
     struct_types: &'a HashMap<String, Vec<(String, DataType)>>,
-    pub(crate)     _source_filename: String,
+    pub(crate) _source_filename: String,
 }
 
 pub fn mir_to_llvm(program: &MirProgram) -> (String, Vec<(String, String)>) {
     mir_to_llvm_with_filename(program, "")
 }
 
-pub fn mir_to_llvm_with_filename(program: &MirProgram, source_filename: &str) -> (String, Vec<(String, String)>) {
+pub fn mir_to_llvm_with_filename(
+    program: &MirProgram,
+    source_filename: &str,
+) -> (String, Vec<(String, String)>) {
     let mut extern_decls = Vec::new();
     let mut declared = std::collections::HashSet::new();
     for ext in &program.extern_functions {
@@ -121,7 +124,11 @@ pub fn mir_to_llvm_with_filename(program: &MirProgram, source_filename: &str) ->
     out.extend(filter_pal_decls(&used.pal, runtime_tier));
     out.push(String::new());
     for (name, ty) in &program.globals {
-        out.push(format!("@{} = global {} zeroinitializer", name, llvm_type_str(ty)));
+        out.push(format!(
+            "@{} = global {} zeroinitializer",
+            name,
+            llvm_type_str(ty)
+        ));
     }
     out.push(String::new());
     out.extend(strings);

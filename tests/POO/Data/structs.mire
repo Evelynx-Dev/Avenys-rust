@@ -1,0 +1,7 @@
+struct StockItem { quantity :i64 }
+
+@[test]
+pub fn data_struct_is_constructed: () :bool {
+    set item = StockItem(8)
+    return item.quantity == 8
+}

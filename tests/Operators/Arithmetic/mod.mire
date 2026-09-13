@@ -1,0 +1,2 @@
+@[test]
+pub fn arithmetic_operators: () :bool { return (8 / 2) + 1 == 5 }

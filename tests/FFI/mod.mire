@@ -1,0 +1,9 @@
+// FFI family marker. Real extern declarations are added only with a matching
+// ABI fixture; this test verifies the family remains discoverable.
+extern fn abs: (value :i64) :i64 lib "c"
+
+@[test]
+pub fn ffi_family_is_active: () :bool {
+    set abi_version = abs(-42)
+    return abi_version == 42
+}

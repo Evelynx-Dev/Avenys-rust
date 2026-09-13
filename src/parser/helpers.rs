@@ -319,7 +319,11 @@ pub(super) fn identifier_expr_with_pos(name: &str, line: usize, column: usize) -
 }
 
 pub(super) fn string_expr(value: &str) -> Expression {
-    Expression::Literal { lit: Literal::Str(value.to_string()), line: 0, column: 0 }
+    Expression::Literal {
+        lit: Literal::Str(value.to_string()),
+        line: 0,
+        column: 0,
+    }
 }
 
 pub(super) fn data_type_name(data_type: &DataType) -> String {
@@ -435,10 +439,7 @@ pub fn apply_map_type_to_dict(
             key_type,
             value_type,
         };
-    } else if let Expression::List {
-        elements,
-        ..
-    } = expr
+    } else if let Expression::List { elements, .. } = expr
         && elements.is_empty()
     {
         *expr = Expression::Dict {

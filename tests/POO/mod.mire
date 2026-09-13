@@ -1,0 +1,11 @@
+// Production-shaped POO entry point. Data, skills and impl scenarios are
+// split into the sibling directories and aggregated by Owl's test harness.
+
+struct Product { price :i64, stock :i64 }
+
+@[test]
+pub fn production_inventory: () :bool {
+    set item = Product(120 3)
+    set inventory_value = item.price * item.stock
+    return inventory_value == 360
+}

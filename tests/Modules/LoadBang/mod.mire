@@ -1,0 +1,7 @@
+load! /tests/Modules/LoadBang/helper
+
+@[test]
+pub fn local_load_requires_local_use: () :bool {
+    set value = use! helper::answer()
+    return value == 42
+}

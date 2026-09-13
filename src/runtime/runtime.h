@@ -69,6 +69,9 @@ typedef struct {
 char *rt_managed_alloc(size_t len);
 char *rt_managed_from_slice(const char *src, size_t len);
 char *rt_managed_from_cstr(const char *src);
+char *rt_websocket_accept(const char *client_key);
+char *rt_websocket_text_frame(const char *payload);
+int64_t rt_web_log_append(const char *path, const char *line);
 char *rt_managed_ensure_managed(char *ptr);
 char *rt_managed_printf_i64(const char *fmt, long long value);
 char *rt_managed_printf_f64(const char *fmt, double value);
@@ -479,6 +482,74 @@ int64_t rt_math_random_i64(void);
 double  rt_math_random_f64(void);
 int64_t rt_math_random_bool(void);
 int64_t rt_math_random_range_i64(int64_t min, int64_t max);
+
+// Constants
+double  rt_math_inf(void);
+double  rt_math_neg_inf(void);
+double  rt_math_nan(void);
+double  rt_math_epsilon(void);
+
+// Number-theoretic functions
+int64_t rt_math_comb(int64_t n, int64_t k);
+int64_t rt_math_factorial(int64_t n);
+int64_t rt_math_gcd(int64_t a, int64_t b);
+int64_t rt_math_isqrt(int64_t n);
+int64_t rt_math_lcm(int64_t a, int64_t b);
+int64_t rt_math_perm(int64_t n, int64_t k);
+
+// Float manipulation
+double  rt_math_fabs(double value);
+double  rt_math_fmod(double x, double y);
+double  rt_math_remainder(double x, double y);
+double  rt_math_trunc(double value);
+double  rt_math_fma(double x, double y, double z);
+double  rt_math_copysign(double x, double y);
+double  rt_math_frexp(double value, int *exponent);
+double  rt_math_ldexp(double value, int i);
+double  rt_math_nextafter(double x, double y);
+double  rt_math_ulp(double value);
+double  rt_math_modf(double value, double *iptr);
+
+// Float classification
+int64_t rt_math_isfinite(double value);
+int64_t rt_math_isinf(double value);
+int64_t rt_math_isnan(double value);
+int64_t rt_math_isclose(double a, double b, double rel_tol, double abs_tol);
+
+// Power, exponential and logarithmic
+double  rt_math_cbrt(double value);
+double  rt_math_exp2(double value);
+double  rt_math_expm1(double value);
+double  rt_math_log2(double value);
+double  rt_math_log1p(double value);
+
+// Trigonometric (additional)
+double  rt_math_atan(double value);
+
+// Angular conversion
+double  rt_math_degrees(double value);
+double  rt_math_radians(double value);
+
+// Hyperbolic
+double  rt_math_sinh(double value);
+double  rt_math_cosh(double value);
+double  rt_math_tanh(double value);
+double  rt_math_asinh(double value);
+double  rt_math_acosh(double value);
+double  rt_math_atanh(double value);
+
+// Special functions
+double  rt_math_erf(double value);
+double  rt_math_erfc(double value);
+double  rt_math_gamma(double value);
+double  rt_math_lgamma(double value);
+
+// Summation and product
+double  rt_math_fsum(void *list);
+double  rt_math_prod(void *list, double start);
+double  rt_math_sumprod(void *p, void *q);
+double  rt_math_dist(void *p, void *q);
+double  rt_math_hypot(double x, double y);
 
 // ═══════════════════════════════════════════════════════════════════════
 //  9. Safety — panics, checked arithmetic, bounds checking

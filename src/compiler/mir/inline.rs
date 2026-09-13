@@ -26,9 +26,9 @@ fn max_temp_in_op(op: &MirOp, max: &mut usize) {
         | MirOp::Trunc(v, _)
         | MirOp::Sitofp(v, _)
         | MirOp::Fptosi(v, _)
-            | MirOp::SExt(v, _)
-            | MirOp::Fptrunc(v, _)
-            | MirOp::Fpext(v, _)
+        | MirOp::SExt(v, _)
+        | MirOp::Fptrunc(v, _)
+        | MirOp::Fpext(v, _)
         | MirOp::Copy(v) => {
             max_temp_in_value(v, max);
         }
@@ -38,7 +38,7 @@ fn max_temp_in_op(op: &MirOp, max: &mut usize) {
         | MirOp::Mul(d, s)
         | MirOp::SDiv(d, s)
         | MirOp::SRem(d, s)
-        |         MirOp::Shl(d, s)
+        | MirOp::Shl(d, s)
         | MirOp::Shr(d, s)
         | MirOp::And(d, s)
         | MirOp::Or(d, s)

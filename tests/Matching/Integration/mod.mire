@@ -1,0 +1,6 @@
+@[test]
+pub fn matching_composes_with_flow: () :bool {
+    set value = 42
+    if value == 42 { return true }
+    return false
+}

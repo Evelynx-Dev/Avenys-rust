@@ -1,0 +1,7 @@
+load mire::vec
+
+@[test]
+pub fn regular_load_is_manifest_backed: () :bool {
+    set values = [] :vec[i64]
+    return vec::len(values) == 0
+}

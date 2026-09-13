@@ -1,0 +1,56 @@
+// Matching values exercise literal arms, wildcard fallback and boundaries.
+
+@[test]
+pub fn match_zero: () :bool {
+    set value = 0
+    match value { 0 { return true } _ { return false } }
+    return false
+}
+
+@[test]
+pub fn match_negative: () :bool {
+    set value = -1
+    match value { -1 { return true } _ { return false } }
+    return false
+}
+
+@[test]
+pub fn match_wildcard: () :bool {
+    set value = 9
+    match value { 1 { return false } _ { return true } }
+    return false
+}
+
+@[test]
+pub fn match_first_arm: () :bool {
+    set value = 1
+    match value { 1 { return true } 2 { return false } _ { return false } }
+    return false
+}
+
+@[test]
+pub fn match_second_arm: () :bool {
+    set value = 2
+    match value { 1 { return false } 2 { return true } _ { return false } }
+    return false
+}
+
+@[test]
+pub fn match_boundary_low: () :bool {
+    set value = 10
+    match value { 10 { return true } _ { return false } }
+    return false
+}
+
+@[test]
+pub fn match_boundary_high: () :bool {
+    set value = 20
+    match value { 20 { return true } _ { return false } }
+    return false
+}
+
+@[test]
+pub fn match_expression_input: () :bool {
+    match 2 + 2 { 4 { return true } _ { return false } }
+    return false
+}

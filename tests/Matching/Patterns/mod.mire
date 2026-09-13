@@ -1,0 +1,11 @@
+enum Signal { Green Red }
+
+@[test]
+pub fn variant_pattern: () :bool {
+    set signal = Signal.Green
+    match signal {
+        Signal.Green { return true }
+        Signal.Red { return false }
+    }
+    return false
+}

@@ -24,15 +24,13 @@ mod reuse;
 mod toolchain;
 pub use build_pipeline::{compile_file_with_avenys, default_output_dir};
 pub use config::{
-    BootstrapConfig, BuildMode, BuildOptions, BuildResult, CDefs, ExportsSection, ImportMode,
-    MireCacheConfig, MireDependencies, MireDependency, MireLock, MireLockBuild, MireLockProject,
-    MireMacros, MireManifest, MireProject, OptLevel, RuntimeTier, SecurityConfig, SecurityMode,
-    TrustTier,
+    BuildMode, BuildOptions, BuildResult, CDefs, ImportMode, LibType, MireCacheConfig,
+    MireDependency, MireMacros, MireManifest, MireProject, OptLevel, RuntimeTier, SecurityConfig,
+    SecurityMode, TrustTier,
 };
 pub use manifest::{
-    check_entry_containment, find_project_root, load_exports, load_manifest_dependencies,
-    load_project_manifest, project_lock_path, project_manifest_path, resolve_export_path,
-    write_lock_file, write_manifest, EntryContainment,
+    EntryContainment, check_entry_containment, find_project_root, load_exports,
+    load_project_manifest, resolve_export_path,
 };
 use reuse::prepare_program_with_partial_analysis_reuse;
 use toolchain::{compile_binary_from_ir, optimize_ir};

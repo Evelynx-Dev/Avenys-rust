@@ -1,0 +1,23 @@
+{
+  "count": {
+    "Err": 0,
+    "FiltOut": 0,
+    "Ok": 2,
+    "ram_mb": 3,
+    "time_ms": 3
+  },
+  "family": "patterns",
+  "files": [
+    "tests/Patterns/Advanced/mod.mire",
+    "tests/Patterns/Basic/mod.mire"
+  ],
+  "info": {
+    "CODES": [],
+    "CPU %": 89.17,
+    "RAM": 3,
+    "Time ms": 3,
+    "Total": 2,
+    "Warns": 0
+  },
+  "reproducible": true
+}

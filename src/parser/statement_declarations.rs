@@ -5,7 +5,9 @@ use crate::parser::ast::{DataType, Statement, TraitMethodSig, Visibility};
 use super::Parser;
 
 impl Parser {
-    pub(super) fn extract_ascription_type(expr: &crate::parser::ast::Expression) -> Option<DataType> {
+    pub(super) fn extract_ascription_type(
+        expr: &crate::parser::ast::Expression,
+    ) -> Option<DataType> {
         use crate::parser::ast::Expression;
         match expr {
             Expression::Ascription { target, .. } => Some(target.clone()),
@@ -149,7 +151,7 @@ impl Parser {
             self.skip_newlines();
         }
 
-let end_tok = self.peek();
+        let end_tok = self.peek();
         let end_line = end_tok.line;
         let end_column = end_tok.column;
         self.expect_block_close()?;
@@ -226,6 +228,4 @@ let end_tok = self.peek();
             methods,
         })
     }
-
-
 }
