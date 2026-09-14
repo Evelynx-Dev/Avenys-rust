@@ -424,9 +424,15 @@ pub(super) fn dedup_llvm_declarations(ir: &str) -> String {
     out.join("\n")
 }
 
-pub(super) fn c_object_hash(content: &str) -> u64 {
+pub(super) fn c_object_hash(content: &str, position_independent: bool, cflags: &[String]) -> u64 {
     let mut hasher = crate::incremental::FxHasher::new();
     content.hash(&mut hasher);
+    // The same C source must not share an object between executable and shared
+    // artifact builds: shared objects require PIC while normal objects do not.
+    // Include flags as well so a changed ABI/compiler option cannot reuse an
+    // incompatible cached object.
+    position_independent.hash(&mut hasher);
+    cflags.hash(&mut hasher);
     hasher.finish()
 }
 
@@ -441,7 +447,9 @@ pub(super) fn precompile_c_object(
             message: format!("Could not read C source '{}': {}", c_path, err),
         })
     })?;
-    let hash = c_object_hash(&content);
+    let extra = c_defs();
+    let is_shared = matches!(extra.artifact, super::config::LibType::Shared);
+    let hash = c_object_hash(&content, is_shared, &extra.cflags);
     fs::create_dir_all(cache_dir).map_err(|err| {
         MireError::new(ErrorKind::Runtime {
             span: crate::error::Span::unknown(),
@@ -464,8 +472,6 @@ pub(super) fn precompile_c_object(
         .wrapping_mul(0x9E3779B97F4A7C15)
         .wrapping_add(C_PRECOMPILE_SEQ.fetch_add(1, Ordering::Relaxed));
     let tmp_path = cache_dir.join(format!("{:x}.{:016x}.o", hash, unique));
-    let extra = c_defs();
-    let is_shared = matches!(extra.libt, super::config::LibType::Shared);
     let mut cmd = std::process::Command::new("clang");
     cmd.args(["-c", "-O0", "-o"]).arg(&tmp_path).arg(c_path);
     if is_shared {
@@ -831,8 +837,15 @@ fn resolve_macro_file(root: &std::path::Path, rel_path: &str) -> Option<std::pat
     if let Some(file) = check(&with_ext) {
         return Some(file);
     }
+    let with_mr_ext = candidate.with_extension("mr");
+    if let Some(file) = check(&with_mr_ext) {
+        return Some(file);
+    }
     let mod_file = candidate.join("mod.mire");
-    check(&mod_file)
+    if let Some(file) = check(&mod_file) {
+        return Some(file);
+    }
+    check(&candidate.join("mod.mr"))
 }
 
 // ── Dependency Collector ──────────────────────────────────────────────────────
@@ -988,7 +1001,8 @@ fn runtime_symbol_to_c_file(sym: &str) -> Option<&'static str> {
         Some("strings.c")
     } else if sym.starts_with("rt_closure_env") {
         Some("safety.c")
-    } else if sym.starts_with("rt_hex_to_file")
+    } else if sym.starts_with("rt_crypto_")
+        || sym.starts_with("rt_hex_to_file")
         || sym.starts_with("rt_free_raw")
         || sym.starts_with("rt_blend_")
         || sym.starts_with("rt_read_")
@@ -1020,7 +1034,10 @@ pub(crate) fn minimal_runtime_c_files(used_runtime: &HashSet<String>) -> Vec<Str
         match file {
             "strings.c" => &["vecs.c", "managed.c"],
             "vecs.c" => &["strings.c", "managed.c", "safety.c"],
-            "maps.c" => &["vecs.c", "managed.c"],
+            // maps.c delegates hashing, storage sizing and growth to the
+            // internal implementation; keeping this edge explicit is
+            // required for minimal runtime builds and shared-library tests.
+            "maps.c" => &["maps_internal.c", "vecs.c", "managed.c"],
             "maps_internal.c" => &["managed.c"],
             "math.c" => &["vecs.c"],
             "random.c" => &[],

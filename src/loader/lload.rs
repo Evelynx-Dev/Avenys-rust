@@ -12,9 +12,9 @@ use std::path::{Path, PathBuf};
 /// Resolve a `load!` (LoadLocal) target.
 ///
 /// Tries three candidates in order:
-/// 1. `<dir>/main.mire`
-/// 2. `<dir>/mod.mire`
-/// 3. `<dir>.mire`
+/// 1. `<dir>/main.mire` or `<dir>/main.mr`
+/// 2. `<dir>/mod.mire` or `<dir>/mod.mr`
+/// 3. `<dir>.mire` or `<dir>.mr`
 ///
 /// Returns the resolved file path and the directory depth below the project
 /// root (used for diagnostics; the safety budget is enforced by `load_file`).
@@ -34,8 +34,11 @@ pub(super) fn resolve_load_local_target(
     let candidate_dir = base.join(&joined);
     let candidates = [
         candidate_dir.join("main.mire"),
+        candidate_dir.join("main.mr"),
         candidate_dir.join("mod.mire"),
+        candidate_dir.join("mod.mr"),
         candidate_dir.with_extension("mire"),
+        candidate_dir.with_extension("mr"),
     ];
     let target = candidates.into_iter().find(|p| p.exists()).ok_or_else(|| {
         resolver.loader_error(

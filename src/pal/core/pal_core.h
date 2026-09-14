@@ -78,6 +78,8 @@ typedef struct pal_ops {
     int64_t (*listener_accept)(int64_t listener_internal);
     int64_t (*socket_send)(int64_t internal, const void *buf, int64_t length);
     int64_t (*socket_recv)(int64_t internal, void *buf, int64_t capacity);
+    int64_t (*listener_send)(int64_t internal, const void *buf, int64_t length);
+    int64_t (*listener_recv)(int64_t internal, void *buf, int64_t capacity);
     void (*socket_close)(int64_t internal);
     void (*listener_close)(int64_t internal);
 

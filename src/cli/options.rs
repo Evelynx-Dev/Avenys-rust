@@ -1,8 +1,7 @@
 use crate::cli::*;
 use mire::error::diagnostic::{DiagnosticCode, WarningFilter};
 use mire::{
-    BuildMode, CacheOverrides, LibType, MireError, OptLevel, default_output_dir, find_project_root,
-    load_project_manifest,
+    BuildMode, CacheOverrides, LibType, MireError, OptLevel, default_output_dir, load_config_file,
 };
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -14,9 +13,10 @@ pub(crate) struct CommonOptions {
     pub(crate) output: Option<PathBuf>,
     pub(crate) output_dir: Option<PathBuf>,
     pub(crate) cache_dir: Option<PathBuf>,
+    pub(crate) config: Option<PathBuf>,
     pub(crate) cache: CacheOverrides,
     pub(crate) lib_dir: Option<String>,
-    pub(crate) libt: Option<LibType>,
+    pub(crate) artifact: Option<LibType>,
     pub(crate) warn: WarningCliOptions,
     pub(crate) verbose: bool,
     pub(crate) target: Option<String>,
@@ -78,7 +78,8 @@ pub(crate) fn parse_common_with_file(
     let mut cache = CacheOverrides::default();
     let mut lib_dir = None;
     let mut cache_dir = None;
-    let mut libt = None;
+    let mut config = None;
+    let mut artifact = None;
     let mut verbose = false;
     let mut show_warn = false;
     let mut position = false;
@@ -147,14 +148,21 @@ pub(crate) fn parse_common_with_file(
                     .ok_or_else(|| cli_msg("Missing value for --lib-dir"))?;
                 lib_dir = Some(value.to_string());
             }
-            "--libt" => {
+            "--config" => {
+                i += 1;
+                config =
+                    Some(PathBuf::from(args.get(i).ok_or_else(|| {
+                        cli_msg("Missing config path after --config")
+                    })?));
+            }
+            "--artifact" => {
                 i += 1;
                 let value = args.get(i).ok_or_else(|| {
-                    cli_msg("Missing library type after --libt (bin|static|shared)")
+                    cli_msg("Missing artifact after --artifact (bin|static|shared)")
                 })?;
-                libt = Some(
+                artifact = Some(
                     LibType::parse(value)
-                        .ok_or_else(|| cli_msg("Invalid library type, use bin|static|shared"))?,
+                        .ok_or_else(|| cli_msg("Invalid artifact, use bin|static|shared"))?,
                 );
             }
             "--target" => {
@@ -276,9 +284,10 @@ pub(crate) fn parse_common_with_file(
             output,
             output_dir,
             cache_dir,
+            config,
             cache,
             lib_dir,
-            libt,
+            artifact,
             warn: WarningCliOptions {
                 filter: warning_filter,
                 deny: deny_codes,
@@ -314,8 +323,8 @@ pub(crate) fn apply_cli_c_defs(defs: &mut mire::CDefs, options: &CommonOptions) 
     if options.nostdlib {
         defs.nostdlib = true;
     }
-    if let Some(libt) = options.libt {
-        defs.libt = libt;
+    if let Some(artifact) = options.artifact {
+        defs.artifact = artifact;
     }
     for directory in &options.link_dirs {
         let expanded = if let Some(rest) = directory.strip_prefix("~/") {
@@ -331,6 +340,16 @@ pub(crate) fn apply_cli_c_defs(defs: &mut mire::CDefs, options: &CommonOptions) 
 }
 
 pub(crate) fn configure_build_paths(cwd: &Path, options: &CommonOptions, source: &Path) {
+    if let Some(config) = &options.config {
+        let path = if config.is_absolute() {
+            config.clone()
+        } else {
+            cwd.join(config)
+        };
+        unsafe { std::env::set_var("MIRE_CONFIG", path) };
+    } else {
+        unsafe { std::env::remove_var("MIRE_CONFIG") };
+    }
     if let Some(cache_dir) = &options.cache_dir {
         let path = if cache_dir.is_absolute() {
             cache_dir.clone()
@@ -385,18 +404,46 @@ pub(crate) fn parse_debug_options(cwd: &Path, args: &[String]) -> Result<DebugOp
     })
 }
 
-pub(crate) fn c_defs_for(cwd: &Path) -> mire::CDefs {
-    if let Some(root) = find_project_root(cwd) {
-        if let Ok(Some(manifest)) = load_project_manifest(&root) {
-            return manifest.c;
+pub(crate) fn c_defs_for(cwd: &Path, config: Option<&Path>) -> Result<mire::CDefs, MireError> {
+    if let Some(config_path) = config {
+        let manifest = load_config_file(&resolve_config_path(cwd, config_path))?;
+        if let Some(paths) = &manifest.paths {
+            if let Some(cache) = &paths.cache {
+                let path = if cache.is_absolute() {
+                    cache.clone()
+                } else {
+                    cwd.join(cache)
+                };
+                unsafe { std::env::set_var("MIRE_CACHE_DIR", path) };
+            }
+            if let Some(bin) = &paths.bin {
+                let path = if bin.is_absolute() {
+                    bin.clone()
+                } else {
+                    cwd.join(bin)
+                };
+                unsafe { std::env::set_var("MIRE_OUTPUT_DIR", path) };
+            }
         }
+        return Ok(manifest.c);
     }
-    mire::CDefs::default()
+    // Avenys deliberately does not discover a project manifest. Owl owns
+    // project configuration and passes it through --config; direct compiler
+    // use receives only the explicit CLI flags and restricted defaults.
+    Ok(mire::CDefs::default())
+}
+
+pub(crate) fn resolve_config_path(cwd: &Path, config: &Path) -> PathBuf {
+    if config.is_absolute() {
+        config.to_path_buf()
+    } else {
+        cwd.join(config)
+    }
 }
 
 pub(crate) fn resolve_source_path(cwd: &Path, file: Option<String>) -> Result<PathBuf, MireError> {
     let file = file.ok_or_else(|| {
-        cli_msg("No input file provided; pass a .mire file (project entries are selected by Owl)")
+        cli_msg("No input file provided; pass a .mire or .mr file (project entries are selected by Owl)")
     })?;
     let path = PathBuf::from(&file);
     let resolved = if path.is_absolute() {

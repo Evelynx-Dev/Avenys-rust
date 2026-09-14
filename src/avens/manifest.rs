@@ -1,6 +1,132 @@
 use super::*;
 use std::collections::HashMap;
 
+/// Normalized project configuration emitted by Owl. Avenys accepts this file
+/// as a closed compiler contract and does not resolve the originating
+/// `owl.toml` or dependency graph when it is supplied with `--config`.
+#[derive(Debug, Clone, serde::Deserialize)]
+struct MireConfigFile {
+    #[serde(default)]
+    project: MireConfigProject,
+    #[serde(default)]
+    build: MireConfigBuild,
+    #[serde(default)]
+    cfg: MireConfigCfg,
+    #[serde(default)]
+    security: Option<SecurityConfig>,
+    #[serde(default)]
+    paths: MirePaths,
+}
+
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+struct MireConfigProject {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    version: String,
+    #[serde(default)]
+    entry: String,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+struct MireConfigBuild {
+    #[serde(default = "default_config_runtime")]
+    runtime: RuntimeTier,
+    #[serde(default = "default_config_target")]
+    target: Option<String>,
+    #[serde(default = "default_config_artifact")]
+    artifact: LibType,
+}
+
+impl Default for MireConfigBuild {
+    fn default() -> Self {
+        Self {
+            runtime: default_config_runtime(),
+            target: default_config_target(),
+            artifact: default_config_artifact(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+struct MireConfigCfg {
+    #[serde(default)]
+    libs: Vec<String>,
+    #[serde(default, alias = "link_dirs")]
+    link_dirs: Vec<String>,
+    #[serde(default)]
+    cflags: Vec<String>,
+    #[serde(default)]
+    sources: Vec<String>,
+}
+
+fn default_config_runtime() -> RuntimeTier {
+    RuntimeTier::Minimal
+}
+
+fn default_config_target() -> Option<String> {
+    Some("x86_64-unknown-linux-gnu".to_string())
+}
+
+fn default_config_artifact() -> LibType {
+    LibType::Bin
+}
+
+/// Load Owl's normalized `mire-config.toml` without consulting project
+/// manifests, registries, lockfiles, or dependency metadata.
+pub fn load_config_file(config_path: &Path) -> Result<MireManifest> {
+    let raw = fs::read_to_string(config_path).map_err(|err| {
+        MireError::runtime(format!(
+            "Could not read compiler config '{}': {}",
+            config_path.display(),
+            err
+        ))
+    })?;
+    let config: MireConfigFile = toml::from_str(&raw).map_err(|err| {
+        MireError::runtime(format!(
+            "Invalid compiler config '{}': {}",
+            config_path.display(),
+            err
+        ))
+    })?;
+    let mut c = CDefs {
+        runtime: config.build.runtime,
+        target: config.build.target,
+        artifact: config.build.artifact,
+        libs: config.cfg.libs,
+        sources: config.cfg.sources,
+        cflags: config
+            .cfg
+            .link_dirs
+            .into_iter()
+            .map(|dir| format!("-L{dir}"))
+            .collect(),
+        ..CDefs::default()
+    };
+    c.cflags.extend(config.cfg.cflags);
+    let config_root = config_path.parent().unwrap_or_else(|| Path::new("."));
+    let default_entry = if config_root.join("mod.mire").exists() {
+        "mod.mire"
+    } else {
+        "mod.mr"
+    };
+    Ok(MireManifest {
+        project: MireProject {
+            name: config.project.name,
+            version: config.project.version,
+            entry: if config.project.entry.is_empty() {
+                default_entry.to_string()
+            } else {
+                config.project.entry
+            },
+        },
+        c,
+        security: config.security,
+        paths: Some(config.paths),
+        ..MireManifest::default()
+    })
+}
+
 pub fn load_project_manifest(cwd: &Path) -> Result<Option<MireManifest>> {
     let manifest_path = project_manifest_path(cwd);
     if !manifest_path.exists() {
@@ -77,8 +203,10 @@ pub fn resolve_export_path(
         if canonical.starts_with(canonical_root.as_path()) {
             if canonical.extension().is_some() {
                 Some(canonical)
-            } else {
+            } else if canonical.join("mod.mire").exists() {
                 Some(canonical.join("mod.mire"))
+            } else {
+                Some(canonical.join("mod.mr"))
             }
         } else {
             None

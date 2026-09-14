@@ -14,7 +14,6 @@ enum UnitStatus {
 }
 
 pub(crate) fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
-    let c_defs = c_defs_for(cwd);
     let mut run = true;
     let mut verbose = false;
     let mut jobs: usize = 0;
@@ -27,6 +26,7 @@ pub(crate) fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError
     let mut no_warn_cats: Vec<String> = Vec::new();
     let mut lib_dir: Option<String> = None;
     let mut cache_dir: Option<String> = None;
+    let mut config_path: Option<PathBuf> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -52,6 +52,7 @@ pub(crate) fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError
                 println!("  --log                   Write tests/log/<family>/ metrics");
                 println!("  --lib-dir <path>        Package directory supplied by Owl");
                 println!("  --cache-dir <path>     Incremental cache directory");
+                println!("  --config <file>        Owl-generated normalized compiler config");
                 println!("  --help, -h          Show this help message");
                 return Ok(0);
             }
@@ -76,6 +77,13 @@ pub(crate) fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError
                         .ok_or_else(|| cli_msg("Missing value for --cache-dir"))?
                         .clone(),
                 );
+            }
+            "--config" => {
+                i += 1;
+                config_path =
+                    Some(PathBuf::from(args.get(i).ok_or_else(|| {
+                        cli_msg("Missing config path after --config")
+                    })?));
             }
             "--no-warn" => {
                 i += 1;
@@ -117,6 +125,8 @@ pub(crate) fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError
         }
         i += 1;
     }
+
+    let c_defs = c_defs_for(cwd, config_path.as_deref())?;
 
     if let Some(path) = lib_dir {
         // Package installation and selection remain Owl responsibilities;
@@ -235,7 +245,7 @@ pub(crate) fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError
                     stack.push(path.clone());
                 } else if path
                     .file_name()
-                    .map(|n| n == "program.mire")
+                    .map(|n| n == "program.mire" || n == "program.mr")
                     .unwrap_or(false)
                 {
                     let dir = path.parent().unwrap();
@@ -374,8 +384,9 @@ pub(crate) fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError
         let mut golden_programs: HashSet<PathBuf> = HashSet::new();
         for gd in &golden_dirs {
             golden_programs.insert(gd.join("program.mire"));
+            golden_programs.insert(gd.join("program.mr"));
         }
-        let mut files = walkdir(root, "*.mire")?;
+        let mut files = walkdir(root, "*.mire|*.mr")?;
         files.retain(|path| !is_build_artifact(path) && !is_log_web_source(path));
         files.sort();
         for file in files {
@@ -436,7 +447,7 @@ pub(crate) fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError
             let category = if use_key_cat {
                 key.clone()
             } else {
-                unit_category(root, &gd.join("program.mire"))
+            unit_category(root, &gd.join("program.mire"))
             };
             units.push(Unit {
                 category,
@@ -451,7 +462,12 @@ pub(crate) fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError
 
     // backward-compat: run the project's own entry as a smoke test
     if paths.is_empty() {
-        for candidate in [cwd.join("code/main.mire"), cwd.join("main.mire")] {
+        for candidate in [
+            cwd.join("code/main.mire"),
+            cwd.join("code/main.mr"),
+            cwd.join("main.mire"),
+            cwd.join("main.mr"),
+        ] {
             if candidate.exists() {
                 let display = candidate
                     .strip_prefix(cwd)

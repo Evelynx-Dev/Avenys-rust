@@ -1,4 +1,4 @@
-# Avenys v3.24.36
+# Avenys v4.0.0
 
 **A compiled, ownership-aware systems language with an LLVM backend.**
 
@@ -46,6 +46,9 @@ file. When no output or cache path is supplied, standalone compilation uses
 `<source-directory>/bin/{debug,release}` and `<source-directory>/bin/.cache`;
 project builds use the project's `bin/` directory.
 
+Source files may use either `.mire` or `.mr`; source discovery, local module
+loads, package exports and the test harness treat both extensions equivalently.
+
 ```bash
 mire build src/main.mire \
   --lib-dir ~/.owl/libs \
@@ -70,7 +73,29 @@ These paths are compiler inputs, not dependency management. Avenys does not
 install packages, consult registries, or choose a project entry from a
 manifest.
 
-## New in v3.24.36
+## New in v4.0.0
+
+### Owl-managed compiler boundary
+
+Avenys 4.0.0 is the restricted compiler interface managed by Owl 1.0.0.
+Project discovery, dependency resolution, registries, lockfiles and package
+validation are Owl responsibilities. Owl passes a generated configuration with
+`--config`; standalone compiler invocations must provide their input and build
+paths explicitly.
+
+The managed configuration uses `runtime = "minimal"`, target
+`x86_64-unknown-linux-gnu`, and `artifact = "bin"` unless Owl or an explicit
+flag selects another value. The old `--libt` spelling is intentionally removed.
+
+On older Linux distributions, run `install/install.sh --check` before
+installing a release binary. If the audit reports an incompatible glibc or
+missing native library, use `owl/scripts/install.sh --yes` to compile Avenys
+against the target distribution instead of replacing system libraries.
+
+```bash
+mire build --config .mire-config.toml code/main.mire
+mire build code/main.mire --artifact shared --output lib/libdemo.so
+```
 
 ### LLVM object pipeline and reproducible Mire tests
 
@@ -195,26 +220,31 @@ chmod +x install.sh && ./install.sh --compiler
 # User-local install (no sudo, installs to ~/.local/bin)
 curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --prefix ~/.local --compiler
 
-# Specific versions
-curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --tag-compiler v3.24.33 --tag-kioto v2.4.8
+# Check prerequisites without changing the host
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --check
+
+# Specific versions (when release artifacts exist)
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --tag-compiler v4.0.0 --tag-kioto v2.4.9
 ```
 
 ### Prerequisites
 
-The script installs these automatically via your package manager:
-- `curl`, `tar`, `clang`, `llvm`, `libssl`, `libsdl2`
+The script installs these automatically via your package manager when
+`--yes` is supplied (or asks for confirmation): `curl`, `tar`, `git`, Rust/
+Cargo, Clang/LLVM, `pkg-config`, OpenSSL, libsodium, zlib and zstd. SDL is a
+project dependency, not a compiler prerequisite.
 
 Or install them manually:
 
 ```bash
 # Debian/Ubuntu
-sudo apt install curl tar clang llvm-dev libssl-dev libsdl2-dev
+sudo apt install curl tar git clang llvm-dev cargo pkg-config libssl-dev libsodium-dev zlib1g-dev libzstd-dev
 
 # Arch Linux
-sudo pacman -S curl tar clang llvm openssl sdl2
+sudo pacman -S curl tar git clang llvm rust openssl libsodium zlib zstd
 
 # Fedora/RHEL
-sudo dnf install curl tar clang llvm-devel openssl-devel SDL2-devel
+sudo dnf install curl tar git clang llvm-devel rust cargo pkgconf-pkg-config openssl-devel libsodium-devel zlib-devel zstd-devel
 ```
 
 ### Post-install
@@ -499,7 +529,7 @@ owl debug [FILE] [--tokens] [--ast] [--ir] [--run]
 
 # Native compiler link/runtime controls are available on build/run/debug:
 # --target <triple>  -L, --link <dir>  -l, --link-lib <name>
-# --libt <bin|static|shared>  --runtime <full|minimal|none>
+# --artifact <bin|static|shared>  --runtime <full|minimal|none>
 ```
 
 Warnings are **off by default**. Enable with:

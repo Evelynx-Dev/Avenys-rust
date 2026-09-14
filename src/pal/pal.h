@@ -286,6 +286,8 @@ pal_listener_t pal_listener_bind(uint16_t port, pal_socket_flags flags);
 pal_socket_t pal_listener_accept(pal_listener_t listener);
 int64_t pal_socket_send(pal_socket_t sock, const void *buf, int64_t length);
 int64_t pal_socket_recv(pal_socket_t sock, void *buf, int64_t capacity);
+int64_t pal_listener_send(pal_listener_t listener, const void *buf, int64_t length);
+int64_t pal_listener_recv(pal_listener_t listener, void *buf, int64_t capacity);
 void pal_socket_close(pal_socket_t sock);
 void pal_listener_close(pal_listener_t listener);
 

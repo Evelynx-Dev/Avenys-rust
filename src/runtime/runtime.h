@@ -581,6 +581,8 @@ char   *rt_cpu_elapsed_ms_str(int64_t start_ns);
 // ═══════════════════════════════════════════════════════════════════════
 
 int64_t rt_crypto_byte_at(const char *s, int64_t i);
+char   *rt_crypto_sha256_hex(const char *s);
+char   *rt_crypto_sha512_hex(const char *s);
 char   *rt_read_bytes(const char *path);
 int     rt_hex_to_file(const char *path, const char *hex);
 

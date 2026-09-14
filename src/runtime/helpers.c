@@ -9,6 +9,7 @@
 #include <sys/wait.h>
 #include "runtime.h"
 #include "pal.h"
+#include "../pal/pal_crypto.h"
 
 #if PAL_ALLOW_LEGACY_SHELL
 extern const char *pal_proc_capture_output(const char *cmd);
@@ -113,6 +114,35 @@ int64_t rt_web_log_append(const char *path, const char *line) {
 int64_t rt_crypto_byte_at(const char *s, int64_t i) {
     if (!s || i < 0) return 0;
     return (int64_t)(unsigned char)s[i];
+}
+
+/* Hash helpers are runtime-owned so Kioto, Owl and ordinary Mire programs
+ * share one vetted libsodium implementation. The returned strings are owned
+ * by the Mire runtime and use lowercase hexadecimal encoding. */
+static char *rt_crypto_hex(const unsigned char *digest, size_t digest_len) {
+    static const char hex[] = "0123456789abcdef";
+    char encoded[129];
+    if (!digest || digest_len > 64) return rt_managed_from_cstr("");
+    for (size_t i = 0; i < digest_len; i++) {
+        encoded[i * 2] = hex[digest[i] >> 4];
+        encoded[i * 2 + 1] = hex[digest[i] & 0x0f];
+    }
+    encoded[digest_len * 2] = '\0';
+    return rt_managed_from_cstr(encoded);
+}
+
+char *rt_crypto_sha256_hex(const char *s) {
+    unsigned char digest[PAL_CRYPTO_SHA256_BYTES];
+    if (!s || pal_crypto_sha256((const unsigned char *)s, strlen(s), digest) != PAL_ERR_OK)
+        return rt_managed_from_cstr("");
+    return rt_crypto_hex(digest, sizeof(digest));
+}
+
+char *rt_crypto_sha512_hex(const char *s) {
+    unsigned char digest[PAL_CRYPTO_SHA512_BYTES];
+    if (!s || pal_crypto_sha512((const unsigned char *)s, strlen(s), digest) != PAL_ERR_OK)
+        return rt_managed_from_cstr("");
+    return rt_crypto_hex(digest, sizeof(digest));
 }
 
 // Read an entire file as a managed string (binary-safe).

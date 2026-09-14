@@ -70,13 +70,13 @@ fn compile_file_inner(
         .and_then(|s| s.to_str())
         .unwrap_or("main");
     // For libraries, use project name with proper prefix/suffix
-    let binary_path = if matches!(options.c_defs.libt, LibType::Static | LibType::Shared) {
+    let binary_path = if matches!(options.c_defs.artifact, LibType::Static | LibType::Shared) {
         // Try to get project name from manifest
         let project_name = find_project_root(source_path)
             .and_then(|root| load_project_manifest(&root).ok().flatten())
             .map(|m| m.project.name)
             .unwrap_or_else(|| stem.to_string());
-        let (prefix, suffix) = match options.c_defs.libt {
+        let (prefix, suffix) = match options.c_defs.artifact {
             LibType::Static => ("lib", ".a"),
             LibType::Shared => ("lib", ".so"),
             _ => ("", ""),
@@ -269,9 +269,9 @@ fn compile_file_inner(
         options.opt_level,
         options.emit_binary,
         &format!(
-            "{:x}|libt={:?}|runtime={:?}|target={:?}|nostartfiles={}|nostdlib={}|cflags={:?}|libs={:?}",
+            "{:x}|artifact={:?}|runtime={:?}|target={:?}|nostartfiles={}|nostdlib={}|cflags={:?}|libs={:?}",
             c_sources_hash,
-            options.c_defs.libt,
+            options.c_defs.artifact,
             options.c_defs.runtime,
             options.c_defs.target,
             options.c_defs.nostartfiles,
@@ -332,6 +332,11 @@ fn compile_file_inner(
         match cached {
             CachedAnalysis::Success(mut program) => {
                 apply_cfg_filter(&mut program);
+                // Macro injection is part of the effective program, not just
+                // a first-build preprocessing step. Reapply it after loading
+                // cached analysis so newly added or changed library macros
+                // cannot disappear from incremental builds.
+                inject_macros(&mut program, source_path);
                 program
             }
             CachedAnalysis::Error(error) => return Err(error),
@@ -745,6 +750,8 @@ fn compile_file_inner(
             results
         };
         let has_pal_objects = c_source_files.iter().any(|f| f.contains("pal/"));
+        let needs_sodium = has_pal_objects
+            || used.runtime.iter().any(|symbol| symbol.starts_with("rt_crypto_"));
         compile_binary_from_ir(
             &final_ir,
             &c_objects,
@@ -752,7 +759,7 @@ fn compile_file_inner(
             &extern_libs,
             options.opt_level,
             source_filename,
-            has_pal_objects,
+            needs_sodium,
         )?;
         let phase_link = build_start.elapsed().as_millis() as u64;
         progress_phase("link", source_filename, phase_link - phase_llvm, phase_link);
@@ -801,6 +808,11 @@ fn compile_file_inner(
 }
 
 pub fn default_output_dir(source_path: &Path, mode: BuildMode) -> PathBuf {
+    // Owl's normalized config supplies an exact output directory. It must win
+    // over project auto-discovery so managed builds are reproducible.
+    if let Some(output_dir) = std::env::var_os("MIRE_OUTPUT_DIR") {
+        return PathBuf::from(output_dir);
+    }
     if let Some(project_root) =
         find_project_root(source_path.parent().unwrap_or_else(|| Path::new(".")))
     {
@@ -810,14 +822,10 @@ pub fn default_output_dir(source_path: &Path, mode: BuildMode) -> PathBuf {
         });
     }
 
-    std::env::var_os("MIRE_OUTPUT_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            source_path
-                .parent()
-                .unwrap_or_else(|| Path::new("."))
-                .join("bin")
-        })
+    source_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("bin")
         .join(match mode {
             BuildMode::Debug => "debug",
             BuildMode::Release => "release",

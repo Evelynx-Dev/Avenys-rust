@@ -123,7 +123,13 @@ pub(super) fn resolve_package(
     let entry = manifest
         .as_ref()
         .map(|m| m.project.entry.clone())
-        .unwrap_or_else(|| "mod.mire".to_string());
+        .unwrap_or_else(|| {
+            if canonical_root.join("mod.mire").exists() {
+                "mod.mire".to_string()
+            } else {
+                "mod.mr".to_string()
+            }
+        });
 
     // Path containment (docs/SECURITY.md item 5): a manifest entry that is
     // absolute or resolves outside the package root must not be loaded.
