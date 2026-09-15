@@ -28,7 +28,10 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq llvm-dev clang libssl-dev libsdl2-dev libsodium-dev
+          sudo apt-get install -y -qq wget ca-certificates pkg-config libsodium-dev zlib1g-dev libzstd-dev libarchive-dev
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 22
+          sudo apt-get install -y -qq llvm-22 llvm-22-dev llvm-22-tools clang-22 lld-22
+          echo "/usr/lib/llvm-22/bin" >> "$GITHUB_PATH"
 
       - name: Checkout kioto (up-to-date Evelynx-Dev fork, PR #2 = v2.4.7)
         uses: actions/checkout@v4
@@ -51,10 +54,25 @@ jobs:
         run: cp -r mire-src ../mire
 
       - name: Build
+        env:
+          LLVM_CONFIG_PATH: /usr/bin/llvm-config-22
         run: cargo build --release
 
       - name: Test
+        env:
+          LLVM_CONFIG_PATH: /usr/bin/llvm-config-22
         run: cargo test --release
+
+      - name: Run modular Mire tests
+        env:
+          LLVM_CONFIG_PATH: /usr/bin/llvm-config-22
+        run: |
+          rm -rf "$HOME/.owl/libs" /tmp/avenys-tests-cache
+          mkdir -p "$HOME/.owl/libs"
+          cp -a kioto-src "$HOME/.owl/libs/kioto"
+          cp -a mire-src "$HOME/.owl/libs/mire"
+          ./target/release/mire test tests -j 8 --release --log \
+            --lib-dir "$HOME/.owl/libs" --cache-dir /tmp/avenys-tests-cache
 
       - name: Prepare artifact
         run: |
@@ -77,7 +95,10 @@ jobs:
       - name: Install runtime dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq llvm-dev clang libssl-dev libsdl2-dev libsodium-dev
+          sudo apt-get install -y -qq wget ca-certificates pkg-config libsodium-dev zlib1g-dev libzstd-dev libarchive-dev
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 22
+          sudo apt-get install -y -qq llvm-22 llvm-22-dev llvm-22-tools clang-22 lld-22
+          echo "/usr/lib/llvm-22/bin" >> "$GITHUB_PATH"
 
       - name: Download mire artifact
         uses: actions/download-artifact@v4

@@ -12,26 +12,10 @@ RUN apt-get update && apt-get install -y \
     lld \
     libssl-dev \
     pkg-config \
-    libsdl2-dev \
-    libasound2-dev \
-    libx11-dev \
-    libxext-dev \
-    libxrandr-dev \
-    libxi-dev \
-    libxxf86vm-dev \
-    libxcursor-dev \
-    libxinerama-dev \
-    libgl1-mesa-dev \
-    libglu1-mesa-dev \
-    libpulse-dev \
-    libdbus-1-dev \
-    libudev-dev \
-    libwayland-dev \
-    libxkbcommon-dev \
-    libffi-dev \
-    libunwind-dev \
-    libdw-dev \
-    libelf-dev \
+    libsodium-dev \
+    zstd \
+    libzstd-dev \
+    libarchive-dev \
     zlib1g-dev \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
