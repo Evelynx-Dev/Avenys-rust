@@ -80,7 +80,7 @@ pub struct BuildResult {
     pub warnings_raw: Vec<Diagnostic>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MireManifest {
     #[serde(alias = "package")]
     #[serde(alias = "owl")]
@@ -101,7 +101,19 @@ pub struct MireManifest {
     #[serde(default)]
     pub security: Option<SecurityConfig>,
     #[serde(default)]
+    pub paths: Option<MirePaths>,
+    #[serde(default)]
     pub c: CDefs,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MirePaths {
+    #[serde(default)]
+    pub bin: Option<PathBuf>,
+    #[serde(default)]
+    pub cache: Option<PathBuf>,
+    #[serde(default)]
+    pub generated: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,11 +126,11 @@ pub struct CDefs {
     pub cflags: Vec<String>,
     #[serde(default)]
     pub libs: Vec<String>,
-    /// Runtime tier: full (default) | minimal (demand-driven) | none (freestanding).
+    /// Runtime tier: minimal (default) | full | none (freestanding).
     #[serde(default)]
     pub runtime: RuntimeTier,
-    /// LLVM target triple override (e.g. "aarch64-unknown-linux-gnu").
-    /// If omitted, defaults to the host triple.
+    /// LLVM target triple. Avenys 4 defaults to the supported Linux host ABI;
+    /// Owl may replace it with a target selected by its toolchain resolver.
     #[serde(default)]
     pub target: Option<String>,
     /// Skip C runtime startup files (crt1.o, crti.o, crtn.o) for true
@@ -130,9 +142,9 @@ pub struct CDefs {
     /// Requires `runtime = "none"` and `nostartfiles = true`.
     #[serde(default)]
     pub nostdlib: bool,
-    /// Library type for --libt flag and libt config.
+    /// Output artifact: executable, static archive, or shared object.
     #[serde(default)]
-    pub libt: LibType,
+    pub artifact: LibType,
 }
 
 impl Default for CDefs {
@@ -143,10 +155,10 @@ impl Default for CDefs {
             cflags: Vec::new(),
             libs: Vec::new(),
             runtime: RuntimeTier::default(),
-            target: None,
+            target: Some("x86_64-unknown-linux-gnu".to_string()),
             nostartfiles: false,
             nostdlib: false,
-            libt: LibType::default(),
+            artifact: LibType::default(),
         }
     }
 }
@@ -164,7 +176,6 @@ pub struct MireMacros {
 }
 
 /// Controls how much of the Mire runtime is linked into the final binary.
-/// - `full`:  every runtime and PAL symbol is available (default, backward-compatible).
 /// - `minimal`: only symbols actually referenced in the program are declared and linked.
 /// - `none`:  no Mire runtime at all; the program must provide its own panic handler
 ///            and any PAL symbols it needs.  PAL declarations are still emitted when
@@ -187,7 +198,7 @@ impl RuntimeTier {
     }
 }
 
-/// Library type for `--libt` flag and libt config.
+/// Output artifact selected by `--artifact` or Owl's normalized config.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum LibType {
@@ -225,7 +236,7 @@ impl<'de> serde::Deserialize<'de> for LibType {
 
 impl Default for RuntimeTier {
     fn default() -> Self {
-        Self::Full
+        Self::Minimal
     }
 }
 
@@ -272,19 +283,19 @@ pub enum TrustTier {
     Ffi,
 }
 
-/// Library type for --libt flag and libt config.
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SecurityConfig {
     #[serde(default)]
     pub mode: SecurityMode,
     #[serde(default)]
+    #[serde(alias = "allow-unsafe")]
     pub unsafe_allowed: bool,
     #[serde(default)]
     pub asm_allowed: bool,
     #[serde(default)]
     pub externs: Vec<String>,
     #[serde(default)]
+    #[serde(alias = "extern-libs")]
     pub extern_libs: Vec<String>,
     #[serde(default)]
     pub macros: Vec<String>,

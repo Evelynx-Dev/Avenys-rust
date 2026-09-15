@@ -4,7 +4,7 @@ set -e
 # ── Mire Toolchain Install ────────────────────────────────────────────
 #
 # Usage:
-#   curl -fsSL <url> | sh                        # install owl + kioto (default)
+#   curl -fsSL <url> | sh                        # install Owl + Kioto (default)
 #   curl -fsSL <url> | sh -s -- --compiler       # also install mire compiler
 #   curl -fsSL <url> | sh -s -- --compiler-only   # compiler only
 #   curl -fsSL <url> | sh -s -- --kioto-only      # kioto stdlib only
@@ -19,6 +19,7 @@ TAG_COMPILER=""
 TAG_KIOTO=""
 YES=0
 NO_PROFILE=0
+CHECK_ONLY=0
 INSTALL_COMPILER=0
 INSTALL_OWL=1
 INSTALL_KIOTO=1
@@ -40,6 +41,7 @@ Options:
   --kioto-only           Install kioto stdlib only (sets up ~/.owl/)
   --owl-only             Install owl only (no compiler, no kioto)
   --no-profile           Skip shell profile PATH modification
+  --check                Check prerequisites only; never install packages
   --tag-compiler <tag>   Specific release tag (default: latest)
   --tag-kioto <tag>      Specific kioto release tag (default: latest)
   --help, -h             Show this help
@@ -61,6 +63,7 @@ while [ $# -gt 0 ]; do
         --kioto-only)           KIOTO_ONLY=1; INSTALL_COMPILER=0; INSTALL_OWL=0; shift ;;
         --owl-only)             INSTALL_OWL=1; INSTALL_KIOTO=0; INSTALL_COMPILER=0; shift ;;
         --no-profile)          NO_PROFILE=1; shift ;;
+        --check)               CHECK_ONLY=1; shift ;;
         --tag-owl)              TAG_COMPILER="$2"; shift 2 ;;
         --tag-compiler)         TAG_COMPILER="$2"; shift 2 ;;
         --tag-kioto)            TAG_KIOTO="$2"; shift 2 ;;
@@ -106,8 +109,9 @@ banner() {
 
 banner
 
-if [ ! -t 0 ] && [ "$YES" != "1" ]; then
-    exec </dev/tty 2>/dev/null || true
+if [ ! -t 0 ] && [ "$YES" != "1" ] && [ "$CHECK_ONLY" != "1" ] \
+    && tty -s </dev/tty 2>/dev/null; then
+    exec </dev/tty
 fi
 
 needs_sudo() {
@@ -138,7 +142,7 @@ detect_pkg_manager() {
 install_deps() {
     local pm="$1"
     echo ""
-    echo "  installing: curl tar git clang llvm libssl libsodium libsdl2 openssl"
+    echo "  installing: curl tar git clang llvm lld cargo libssl libsodium zlib zstd libarchive"
     echo "  manager: ${pm}"
 
     if [ "$YES" != "1" ]; then
@@ -151,21 +155,19 @@ install_deps() {
     case "$pm" in
         apt)
             sudo apt-get update -qq
-            sudo apt-get install -y -qq curl tar git clang llvm-dev libssl-dev libsodium-dev libsdl2-dev 2>/dev/null || \
-            sudo apt-get install -y -qq curl tar git clang llvm-18-dev libssl-dev libsodium-dev libsdl2-dev 2>/dev/null || \
-            sudo apt-get install -y -qq curl tar git clang libssl-dev libsodium-dev libsdl2-dev
+            sudo apt-get install -y -qq curl tar git clang-22 llvm-22 llvm-22-dev llvm-22-tools lld-22 cargo pkg-config libssl-dev libsodium-dev zlib1g-dev libzstd-dev libarchive-dev
             ;;
         pacman)
-            sudo pacman -Sy --noconfirm curl tar git clang llvm openssl libsodium sdl2
+            sudo pacman -Sy --needed --noconfirm curl tar git clang llvm lld rust openssl libsodium zlib zstd libarchive
             ;;
         dnf|yum)
-            sudo "$pm" install -y curl tar git clang llvm-devel openssl-devel libsodium-devel SDL2-devel
+            sudo "$pm" install -y curl tar git clang llvm-devel lld rust cargo pkgconf-pkg-config openssl-devel libsodium-devel zlib-devel zstd-devel libarchive-devel
             ;;
         apk)
-            sudo apk add curl tar git gcompat libgcc clang llvm-dev openssl-dev libsodium-dev sdl2-dev
+            sudo apk add curl tar git gcompat libgcc clang llvm-dev lld cargo openssl-dev libsodium-dev zlib-dev zstd-dev libarchive-dev
             ;;
         zypper)
-            sudo zypper install -y curl tar git clang llvm-devel libopenssl-devel libsodium-devel libSDL2-devel
+            sudo zypper install -y curl tar git clang llvm-devel lld rust cargo pkg-config libopenssl-devel libsodium-devel zlib-devel libzstd-devel libarchive-devel
             ;;
     esac
 }
@@ -179,11 +181,37 @@ check_prerequisites() {
         missing="$missing tar"
     fi
     if [ "$INSTALL_COMPILER" = "1" ] || [ "$COMPILER_ONLY" = "1" ]; then
+        if ! command -v cargo >/dev/null 2>&1; then
+            missing="$missing cargo"
+        else
+            cargo_version="$(cargo --version 2>/dev/null | sed -n 's/^cargo \([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2/p')"
+            cargo_major="${cargo_version%% *}"
+            cargo_minor="${cargo_version##* }"
+            if [ -z "$cargo_version" ] || [ "$cargo_major" -lt 1 ] || { [ "$cargo_major" = "1" ] && [ "$cargo_minor" -lt 85 ]; }; then
+                missing="$missing cargo>=1.85"
+            fi
+        fi
         if ! command -v clang >/dev/null 2>&1; then
             missing="$missing clang"
         fi
-        if ! command -v llvm-config >/dev/null 2>&1 && ! command -v llvm-config-18 >/dev/null 2>&1; then
-            missing="$missing llvm"
+        llvm_config=""
+        if command -v llvm-config-22 >/dev/null 2>&1; then llvm_config="llvm-config-22"; elif command -v llvm-config >/dev/null 2>&1; then llvm_config="llvm-config"; fi
+        if [ -z "$llvm_config" ] || [ "$("$llvm_config" --version 2>/dev/null | cut -d. -f1)" != "22" ]; then
+            missing="$missing llvm-22"
+        fi
+        if ! command -v llc-22 >/dev/null 2>&1 && ! command -v llc >/dev/null 2>&1; then
+            missing="$missing llc-22"
+        fi
+        if ! command -v llvm-ar-22 >/dev/null 2>&1 && ! command -v llvm-ar >/dev/null 2>&1; then
+            missing="$missing llvm-ar-22"
+        fi
+        if ! command -v ld.lld-22 >/dev/null 2>&1 && ! command -v ld.lld >/dev/null 2>&1; then
+            missing="$missing lld-22"
+        fi
+        if ! command -v pkg-config >/dev/null 2>&1; then
+            missing="$missing pkg-config"
+        elif ! pkg-config --exists openssl libsodium zlib libzstd libarchive 2>/dev/null; then
+            missing="$missing native-dev-libraries"
         fi
     fi
     if ! command -v openssl >/dev/null 2>&1; then
@@ -200,6 +228,11 @@ check_prerequisites() {
         return 0
     fi
 
+    if [ "$CHECK_ONLY" = "1" ]; then
+        echo "  missing:${missing}"
+        return 1
+    fi
+
     local pm
     pm="$(detect_pkg_manager)"
 
@@ -207,7 +240,7 @@ check_prerequisites() {
         echo ""
         echo "  warning: missing:${missing}"
         echo "  install these and re-run."
-        return 0
+        return 1
     fi
 
     install_deps "$pm"
@@ -305,7 +338,7 @@ if [ "$KIOTO_ONLY" = "1" ]; then
 
     if [ "$YES" != "1" ]; then
         echo "  Will install:"
-        echo "    • kioto stdlib   → ${OWL_HOME}/modules/kioto/"
+        echo "    • kioto stdlib   → ${OWL_HOME}/libs/kioto/"
         echo "    • owl home       → ${OWL_HOME}/"
         echo ""
         read -r -p "  continue? [Y/n] " ans
@@ -314,15 +347,15 @@ if [ "$KIOTO_ONLY" = "1" ]; then
         esac
     fi
 
-    mkdir -p "${OWL_HOME}/modules" "${OWL_HOME}/tmp" "${OWL_HOME}/cfg"
+    mkdir -p "${OWL_HOME}/libs" "${OWL_HOME}/tmp" "${OWL_HOME}/cfg"
 
     if [ ! -f "$OWL_HOME/config.toml" ]; then
-        cat > "$OWL_HOME/config.toml" << 'CONFIG'
+        cat > "$OWL_HOME/config.toml" <<CONFIG
 [owl]
 version = "1.0.0"
 
-[modules]
-path = "~/.owl/modules"
+[libs]
+path = "$OWL_HOME/libs"
 
 [download]
 timeout = 30
@@ -345,16 +378,15 @@ CONFIG
         exit 1
     fi
 
-    rm -rf "${OWL_HOME}/modules/kioto"
-    cp -r kioto-clone "${OWL_HOME}/modules/kioto"
+    rm -rf "${OWL_HOME}/libs/kioto"
+    cp -r kioto-clone "${OWL_HOME}/libs/kioto"
 
-    echo "  installed kioto to ${OWL_HOME}/modules/kioto/"
+    echo "  installed kioto to ${OWL_HOME}/libs/kioto/"
     echo ""
     echo "  ─────────────────────────────────────────────────────────────────"
     echo "  kioto install complete"
     echo ""
-    echo "  To use kioto, add to your owl.toml sources path:"
-    echo "    sources = \"code,/root/.owl/modules/kioto/core\""
+    echo "  Owl will resolve kioto from ${OWL_HOME}/libs/kioto/"
     echo ""
     exit 0
 fi
@@ -369,7 +401,7 @@ if [ "$INSTALL_OWL" = "1" ]; then
         echo "  Will install:"
         echo "    • owl (pm)       → ${BIN_DIR}/owl"
         if [ "$INSTALL_KIOTO" = "1" ]; then
-            echo "    • kioto stdlib   → ${OWL_HOME}/modules/kioto/"
+            echo "    • kioto stdlib   → ${OWL_HOME}/libs/kioto/"
         fi
         echo "    • owl home       → ${OWL_HOME}/"
         if needs_sudo; then
@@ -402,19 +434,19 @@ if [ "$INSTALL_OWL" = "1" ]; then
         fi
 
         if [ -d "$TMPDIR/owl/kioto" ] && [ "$INSTALL_KIOTO" = "1" ]; then
-            mkdir -p "${OWL_HOME}/modules" "${OWL_HOME}/tmp" "${OWL_HOME}/cfg"
-            rm -rf "${OWL_HOME}/modules/kioto"
-            cp -r "$TMPDIR/owl/kioto" "${OWL_HOME}/modules/kioto"
+            mkdir -p "${OWL_HOME}/libs" "${OWL_HOME}/tmp" "${OWL_HOME}/cfg"
+            rm -rf "${OWL_HOME}/libs/kioto"
+            cp -r "$TMPDIR/owl/kioto" "${OWL_HOME}/libs/kioto"
         fi
 
         if [ ! -f "$OWL_HOME/config.toml" ]; then
             mkdir -p "$OWL_HOME"
-            cat > "$OWL_HOME/config.toml" << 'CONFIG'
+            cat > "$OWL_HOME/config.toml" <<CONFIG
 [owl]
 version = "1.0.0"
 
-[modules]
-path = "~/.owl/modules"
+[libs]
+path = "$OWL_HOME/libs"
 
 [download]
 timeout = 30

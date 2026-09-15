@@ -71,7 +71,7 @@ pub(super) fn compile_binary_from_ir(
     link_crypto_libs: bool,
 ) -> Result<()> {
     let c_defs = super::build_support::c_defs();
-    if matches!(c_defs.libt, super::config::LibType::Static) {
+    if matches!(c_defs.artifact, super::config::LibType::Static) {
         // A static library is an archive of objects, not a linked executable
         // with an `.a` suffix. Compile the generated LLVM IR separately and
         // package it together with the runtime/PAL objects using llvm-ar.
@@ -161,7 +161,7 @@ pub(super) fn compile_binary_from_ir(
         return Ok(());
     }
 
-    if matches!(c_defs.libt, super::config::LibType::Shared) {
+    if matches!(c_defs.artifact, super::config::LibType::Shared) {
         // A shared library has no process startup objects. Lower Mire IR with
         // LLVM and link the resulting object with the C PAL/runtime objects.
         let is_none_tier = matches!(c_defs.runtime, super::config::RuntimeTier::None);
@@ -253,11 +253,11 @@ pub(super) fn compile_binary_from_ir(
     clang.arg(opt_level.as_opt_flag());
 
     let is_none_tier = matches!(c_defs.runtime, super::config::RuntimeTier::None);
-    let is_libt = matches!(
-        c_defs.libt,
+    let is_library = matches!(
+        c_defs.artifact,
         super::config::LibType::Static | super::config::LibType::Shared
     );
-    let is_shared = matches!(c_defs.libt, super::config::LibType::Shared);
+    let is_shared = matches!(c_defs.artifact, super::config::LibType::Shared);
 
     // For shared libraries, pass -shared and -fPIC to clang
     if is_shared {
@@ -280,10 +280,10 @@ pub(super) fn compile_binary_from_ir(
 
     // Skip C runtime startup files for libraries (shared/static) and when
     // explicitly requested via nostartfiles.  Libraries don't need a main entry point.
-    let needs_nostartfiles = c_defs.nostartfiles || (is_libt && !is_shared);
+    let needs_nostartfiles = c_defs.nostartfiles || (is_library && !is_shared);
     if needs_nostartfiles {
         // Allow nostartfiles for libraries regardless of tier; for binaries it requires none tier.
-        if c_defs.nostartfiles && !is_none_tier && !is_libt {
+        if c_defs.nostartfiles && !is_none_tier && !is_library {
             return Err(MireError::new(ErrorKind::Runtime {
                 span: crate::error::Span::unknown(),
                 message: "`nostartfiles = true` requires `runtime = \"none\"` or library type (static/shared)".to_string(),

@@ -65,11 +65,12 @@ pub(crate) fn print_help() {
     println!("  --lib-dir <path>      Extra fallback package directory");
     println!("  --output-dir <path>   Output directory");
     println!("  --cache-dir <path>    Incremental cache directory");
+    println!("  --config <file>       Owl-generated normalized compiler config");
     println!("  -L, --link <path>     Native linker search directory");
     println!("  -l, --link-lib <name> Native library to link");
     println!("  --target <triple>     LLVM/Clang target triple");
     println!("  --runtime <tier>      full|minimal|none");
-    println!("  --libt <type>         bin|static|shared");
+    println!("  --artifact <type>     bin|static|shared");
     println!("\nWarnings (for build/run/test):");
     println!("  --show-warn           Show warning summary");
     println!("  --position            Show per-file warning locations");

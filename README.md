@@ -547,6 +547,7 @@ Warnings are **off by default**. Enable with:
 ### Core References
 | Document | Description |
 |----------|-------------|
+| [Release notes](./docs/RELEASE-4.0.0.md) | Avenys 4.0.0 migration and compatibility notes |
 | [SYNTAX.md](./SYNTAX.md) | Complete language reference with examples |
 | [docs/Changelog.md](./docs/Changelog.md) | **Monolithic changelog** (all versions) |
 
@@ -557,121 +558,6 @@ Warnings are **off by default**. Enable with:
 | [docs/PAL/README.md](./docs/PAL/README.md) | PAL v4 Platform Abstraction Layer |
 | [docs/RT/README.md](./docs/RT/README.md) | Runtime tiers (full/minimal/none) |
 | [docs/libs/README.md](./docs/libs/README.md) | Building libraries (kioto/mire model) |
-
-## Avenys 4.0.0 release notes
-
-**Release status:** breaking release. The version jump is intentional: Avenys
-is no longer a project manager wearing a compiler costume. Avenys 4.0.0 is the
-compiler; Owl 1.0.0 owns projects, dependencies, registries and lockfiles.
-
-These notes compare the current tree with the last upstream Avenys baseline,
-`v3.18.0`, and include the intermediate 3.x development milestones that led
-to this release. The milestones were useful migration steps, but they are not
-promised compatibility points.
-
-### What changed
-
-- **Project boundary:** project discovery, dependency resolution, package
-  registries, installation, lockfiles and project repair moved to Owl.
-  Avenys receives explicit compiler inputs and, for managed projects, a
-  generated `--config` file.
-- **CLI boundary:** the compiler focuses on `build`, `run`, `test` and
-  `debug`, plus their compiler flags. Project-oriented commands are no longer
-  part of Avenys' contract.
-- **Build configuration:** `artifact = "bin" | "static" | "shared"` replaces
-  the ambiguous `libt` spelling. Runtime tier, target, output, cache, link
-  directories and library inputs are explicit instead of being guessed from a
-  project directory.
-- **Source discovery:** `.mire` and `.mr` are accepted consistently by the
-  compiler, local loads, package exports, macro files and the test harness.
-- **LLVM pipeline:** object generation, `llvm-ar` static archives and `ld.lld`
-  shared linking are first-class build paths. Clang remains a target-aware
-  compilation/linking helper where needed; it is not a runtime dependency of a
-  compiled Mire program.
-- **Runtime and PAL:** the demand-driven runtime tiers, PAL v4 handles,
-  process integration, crypto boundary and TCP/UDP networking were expanded.
-  The new PAL network operations include listener datagram send/receive and
-  are covered by a native loopback smoke test.
-- **Crypto and libraries:** libsodium-backed hashing, secure randomness and
-  Ed25519 paths are exercised through Mire integration tests. Base64 decoding
-  now validates RFC 4648 padding and terminal data instead of politely eating
-  malformed input.
-- **Tests and diagnostics:** the Mire suite is modular by family, includes
-  real crypto/proc/net/`.mr` integration tests, records logs when `--log` is
-  requested, and runs in CI in addition to Rust unit tests. Warnings remain
-  opt-in, with promotion and denial flags for stricter builds.
-- **Toolchain hygiene:** unused SDL/desktop packages were removed from the
-  compiler CI image. The Docker fixture remains because it is useful for
-  reproducible library/runtime checks, but it is no longer treated as a
-  production dependency.
-
-### Compatibility changes
-
-The following changes are deliberately incompatible with the 3.x project
-workflow:
-
-1. Avenys no longer auto-resolves a project from `owl.toml` or a package
-   registry. Use Owl, or pass the compiler's input/configuration explicitly.
-2. Package management commands and dependency installation are not Avenys
-   responsibilities. Existing scripts that invoke those commands through
-   `mire` must call `owl` instead.
-3. `--libt` is removed in favour of `--artifact`.
-4. Implicit project paths and guessed dependency roots are not portable
-   compiler inputs anymore. CI and build tooling must pass `--config`,
-   `--lib-dir`, `--cache-dir`, `--output` and related flags where required.
-5. The old flat network constructors are replaced by explicit namespaces:
-   `net::socket::connect::tcp/udp` and
-   `net::listener::bind::tcp/udp`. Listener datagrams use
-   `net::listener::send/recv`.
-6. The Mire ABI/PAL surface has grown and is still being versioned. The PAL
-   contract is structured and tested, but the broader Mire ABI is not claimed
-   to be frozen for arbitrary third-party consumers yet. Pin the compiler,
-   runtime and libraries together for production artifacts.
-7. Historical benchmark and syntax-helper directories were removed from the
-   repository workflow. Performance checks now belong in reproducible CI or
-   dedicated benchmark projects rather than silently shipping as compiler
-   commands.
-
-### Migration sketch
-
-```text
-3.x:  mire -> discovers project -> resolves packages -> builds
-4.0:  owl  -> validates owl.toml/lockfile -> emits config -> mire builds
-```
-
-For a standalone compiler invocation:
-
-```bash
-mire build code/main.mr \
-  --config .mire-config.toml \
-  --runtime minimal \
-  --artifact bin \
-  --cache-dir bin/.cache
-```
-
-For a managed project, use `owl build`, `owl run` or `owl test`; Owl supplies
-the resolved libraries and compiler configuration. The migration is meant to
-make failures boring and traceable: when a path or dependency is wrong, one
-tool owns the explanation instead of two tools playing telephone.
-
-### Development timeline
-
-- **3.18.0 baseline:** the last upstream release baseline used for this
-  comparison.
-- **3.24.x pipeline milestones:** MIR drop/concat work, demand-driven runtime
-  linking, freestanding experiments, static/shared artifact support, explicit
-  cache/output paths, warning controls and the first Owl/Avenys boundary.
-- **4.0.0:** the boundary becomes the contract. `.mr` support, PAL/runtime
-  integration tests, hierarchical network APIs, crypto coverage and CI
-  execution complete the migration surface.
-
-### Release verification
-
-The release gate includes Rust compiler tests, the modular Mire test tree,
-native PAL smoke tests, crypto/proc/net integration coverage and a Docker
-environment representative of CI. The local sandbox may deny network sockets;
-that is reported as an environment restriction, not converted into a fake
-`return true` victory lap. Even `dasu` deserves better jokes than that.
 
 ### Compiler Architecture
 | Document | Description |

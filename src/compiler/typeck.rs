@@ -15,7 +15,6 @@ mod typeck_validate;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use crate::avens::load_project_manifest;
 use crate::avens::{SecurityConfig, SecurityMode};
 
 use self::typeck_returns::{implicit_return_expression_mut, statements_contain_explicit_return};
@@ -211,8 +210,8 @@ impl TypeChecker {
     /// permitted; everything else is rejected at call sites. When the section
     /// is absent the behavior is unchanged (all builtins allowed).
     fn load_allowed_builtins() -> Option<HashSet<String>> {
-        let cwd = std::env::current_dir().ok()?;
-        let manifest = load_project_manifest(&cwd).ok()??;
+        let config_path = std::env::var("MIRE_CONFIG").ok()?;
+        let manifest = crate::avens::load_config_file(std::path::Path::new(&config_path)).ok()?;
         let builtins = manifest.builtins?;
         if !builtins.enabled {
             return None;
@@ -226,9 +225,13 @@ impl TypeChecker {
     /// Loads the `[security]` configuration from the project's owl.toml.
     /// When the section is absent, returns None (open mode, backward compatible).
     fn load_security_config() -> Option<SecurityConfig> {
-        let cwd = std::env::current_dir().ok()?;
-        let manifest = load_project_manifest(&cwd).ok()??;
-        manifest.security
+        if let Ok(config_path) = std::env::var("MIRE_CONFIG") {
+            if let Ok(manifest) = crate::avens::load_config_file(std::path::Path::new(&config_path))
+            {
+                return manifest.security;
+            }
+        }
+        None
     }
 
     /// Check if an extern symbol is allowed in strict mode.

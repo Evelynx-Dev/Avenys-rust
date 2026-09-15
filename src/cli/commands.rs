@@ -19,17 +19,18 @@ pub(crate) fn run_command(cwd: &Path, args: &[String]) -> Result<i32, MireError>
         println!("  -o, --output <file>   Output executable");
         println!("  --output-dir <dir>    Output directory");
         println!("  --cache-dir <dir>     Incremental cache directory");
+        println!("  --config <file>       Owl-generated normalized compiler config");
         println!("  -L, --link <dir>      Native linker search directory");
         println!("  -l, --link-lib <name> Native library to link");
         println!("  --target <triple>     LLVM/Clang target triple");
-        println!("  --libt <bin|static|shared>  Output type");
+        println!("  --artifact <bin|static|shared>  Output type");
         return Ok(0);
     }
     let (common, file, pass_through) = parse_run_options(cwd, args)?;
     let path = resolve_source_path(cwd, file)?;
     configure_build_paths(cwd, &common, &path);
     set_lib_dir_env(&common.lib_dir);
-    let c_defs = c_defs_for(cwd);
+    let c_defs = c_defs_for(cwd, common.config.as_deref())?;
     let mut c_defs = c_defs;
     apply_cli_c_defs(&mut c_defs, &common);
     let test_roots = read_test_roots(cwd);
@@ -77,7 +78,8 @@ pub(crate) fn build_help() {
     println!("  -o, --output <file>   Output binary path (default: <input>.out)");
     println!("  --output-dir <dir>    Output directory (default: bin/<profile>)");
     println!("  --cache-dir <dir>     Incremental cache directory (default: bin/.cache)");
-    println!("  --libt <type>         Library type: bin|static|shared (default: bin)");
+    println!("  --config <file>       Owl-generated normalized compiler config");
+    println!("  --artifact <type>     Output type: bin|static|shared (default: bin)");
     println!("  --runtime <tier>      Runtime tier: full|minimal|none");
     println!("  --target <triple>     LLVM/Clang target triple");
     println!("  -L, --link <dir>      Native linker search directory");
@@ -104,7 +106,7 @@ pub(crate) fn build_command(cwd: &Path, args: &[String]) -> Result<i32, MireErro
     set_lib_dir_env(&common.lib_dir);
     let test_roots = read_test_roots(cwd);
     let suppress_warn = is_under_test_path(&path, &test_roots);
-    let mut c_defs = c_defs_for(cwd);
+    let mut c_defs = c_defs_for(cwd, common.config.as_deref())?;
     apply_cli_c_defs(&mut c_defs, &common);
     let options = BuildOptions {
         mode: common.mode,
@@ -213,7 +215,7 @@ pub(crate) fn debug_command(cwd: &Path, args: &[String]) -> Result<i32, MireErro
     let path = resolve_source_path(cwd, options.file.clone())?;
     configure_build_paths(cwd, &options.common, &path);
     set_lib_dir_env(&options.common.lib_dir);
-    let c_defs = c_defs_for(cwd);
+    let c_defs = c_defs_for(cwd, options.common.config.as_deref())?;
     let mut c_defs = c_defs;
     apply_cli_c_defs(&mut c_defs, &options.common);
     let source = fs::read_to_string(&path).map_err(runtime_err)?;

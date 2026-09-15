@@ -25,11 +25,11 @@ mod toolchain;
 pub use build_pipeline::{compile_file_with_avenys, default_output_dir};
 pub use config::{
     BuildMode, BuildOptions, BuildResult, CDefs, ImportMode, LibType, MireCacheConfig,
-    MireDependency, MireMacros, MireManifest, MireProject, OptLevel, RuntimeTier, SecurityConfig,
-    SecurityMode, TrustTier,
+    MireDependency, MireMacros, MireManifest, MirePaths, MireProject, OptLevel, RuntimeTier,
+    SecurityConfig, SecurityMode, TrustTier,
 };
 pub use manifest::{
-    EntryContainment, check_entry_containment, find_project_root, load_exports,
+    EntryContainment, check_entry_containment, find_project_root, load_config_file, load_exports,
     load_project_manifest, resolve_export_path,
 };
 use reuse::prepare_program_with_partial_analysis_reuse;

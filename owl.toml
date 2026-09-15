@@ -1,6 +1,6 @@
 [project]
 name = "avenys"
-version = "3.24.28"
+version = "4.0.0"
 entry = "tests/mod.mire"
 
 [build]
@@ -11,11 +11,8 @@ opt-level = 0
 [paths]
 sources = "code"
 tests = "tests"
-output = "bin"
-cache = "bin/.cache"
-
-[tests]
-path = "tests"
+output = "tests/log/bin"
+cache = "tests/log/bin/.cache"
 
 [dependencies]
 kioto = { path = "../kioto", version = "2.4.7" }
@@ -28,3 +25,10 @@ sources = ["../sqlite/native/sqlite_bridge.c"]
 
 [macros]
 ensure_answer = "tests/Macros/Custom/mod.mire"
+assert = "../mire/core/macros/assert.mire"
+assert_eq = "../mire/core/macros/checks.mire"
+assert_ne = "../mire/core/macros/checks.mire"
+dbg = "../mire/core/macros/dbg.mire"
+trace_i64 = "../mire/core/macros/checks.mire"
+panic = "../mire/core/macros/panic.mire"
+unreachable = "../mire/core/macros/panic.mire"
