@@ -133,6 +133,7 @@ const char *(*fs_name)(const char *path);
 bool (*fs_is_file)(const char *path);
 bool (*fs_copy)(const char *src, const char *dst);
 bool (*fs_move)(const char *src, const char *dst);
+bool (*fs_chmod)(const char *path, const char *mode);
 
 // Extended environment
 const char *(*env_all)(void);

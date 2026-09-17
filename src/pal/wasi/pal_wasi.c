@@ -118,6 +118,7 @@ const char *pal_fs_name(const char *path) { (void)path; return ""; }
 bool pal_fs_is_file(const char *path) { (void)path; return false; }
 bool pal_fs_copy(const char *src, const char *dst) { (void)src; (void)dst; return false; }
 bool pal_fs_move(const char *src, const char *dst) { (void)src; (void)dst; return false; }
+bool pal_fs_chmod(const char *path, const char *mode) { (void)path; (void)mode; return false; }
 const char *pal_env_all(void) { return ""; }
 
 // PAL backend operations table for WASI
@@ -194,6 +195,7 @@ static const pal_ops_t wasi_ops = {
     .fs_is_file = pal_fs_is_file,
     .fs_copy = pal_fs_copy,
     .fs_move = pal_fs_move,
+    .fs_chmod = pal_fs_chmod,
     .env_all = pal_env_all,
     .io_print_err = pal_io_print_err,
 };

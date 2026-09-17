@@ -1,10 +1,26 @@
-// Variables and scalar type syntax: inference, mutation and explicit ascription.
+// Variable declarations and scalar type management
 
 @[test]
-pub fn inferred_and_mutable_values: () :bool {
+pub fn variable_integer_mutation: () :bool {
     set count = 2 mut
     set count = count + 3
+
+    // Tests integer variable with mutation
+    return count == 5
+}
+
+@[test]
+pub fn variable_boolean_declaration: () :bool {
     set enabled = true
+
+    // Tests boolean variable declaration
+    return enabled == true
+}
+
+@[test]
+pub fn variable_f64_explicit_type: () :bool {
     set ratio = 2.5 :f64
-    return count == 5 && enabled && ratio > 2.0
+
+    // Tests float variable with explicit type ascription
+    return ratio > 2.0
 }

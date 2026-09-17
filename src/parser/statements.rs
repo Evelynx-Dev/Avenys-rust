@@ -308,7 +308,8 @@ impl Parser {
         let crate::parser::ast::AssignmentTarget::Variable(target_name) = &target else {
             unreachable!("non-variable assignment target handled above");
         };
-        let already_declared = self.is_declared(target_name);
+        let already_declared =
+            self.is_declared(target_name) && !self.function_names.contains(target_name);
         if declared_type.is_none() && !is_constant && already_declared {
             return Ok(Statement::Assignment {
                 target,

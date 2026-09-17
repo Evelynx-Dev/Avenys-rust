@@ -1,7 +1,10 @@
+// Module LoadBang: external load + use! invocation
 load! /tests/Modules/LoadBang/helper
 
 @[test]
-pub fn local_load_requires_local_use: () :bool {
+pub fn loadbang_helper_loaded: () :bool {
     set value = use! helper::answer()
+
+    // Verifies loaded helper symbol is accessible
     return value == 42
 }

@@ -1,4 +1,4 @@
-// Enum construction and matching remain independent from the POO scenario.
+// Enum variants with payload data
 
 enum Phase { Draft Published Archived }
 
@@ -17,18 +17,6 @@ pub fn published_variant: () :bool { return phase_is_published(Phase.Published) 
 pub fn archived_variant: () :bool { return phase_is_published(Phase.Archived) == false }
 
 @[test]
-pub fn draft_is_distinct: () :bool { return Phase.Draft != Phase.Published }
-
-@[test]
-pub fn published_is_distinct: () :bool { return Phase.Published != Phase.Archived }
-
-@[test]
-pub fn enum_match_expression: () :bool {
-    set phase = Phase.Published
-    return phase_is_published(phase)
-}
-
-@[test]
 pub fn enum_value_reassignment: () :bool {
     set phase = Phase.Draft mut
     set phase = Phase.Archived
@@ -37,3 +25,14 @@ pub fn enum_value_reassignment: () :bool {
 
 @[test]
 pub fn enum_boolean_decision: () :bool { return phase_is_published(Phase.Published) && !phase_is_published(Phase.Draft) }
+
+@[test]
+pub fn enum_match_expression: () :bool {
+    set phase = Phase.Published
+    return phase_is_published(phase)
+}
+
+@[test]
+pub fn distinct_variants: () :bool {
+    return Phase.Draft != Phase.Published && Phase.Published != Phase.Archived
+}

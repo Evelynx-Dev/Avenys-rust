@@ -546,8 +546,17 @@ fn compile_file_inner(
                 .into_owned();
             needed.contains(&fname)
         });
-        // Add PAL files on demand: only if the program uses PAL symbols
-        if !used.pal.is_empty() {
+        // Add PAL files on demand: when the program's IR uses PAL symbols OR a
+        // retained runtime .c file bridges into PAL at the C level (helpers.c,
+        // thread.c call pal_* directly, invisible to the IR symbol scan).
+        let runtime_needs_pal = c_source_files.iter().any(|path| {
+            let fname = std::path::Path::new(path)
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy();
+            matches!(fname.as_ref(), "helpers.c" | "thread.c")
+        });
+        if !used.pal.is_empty() || runtime_needs_pal {
             let pal_platform = pal_platform_for_target(
                 options
                     .c_defs

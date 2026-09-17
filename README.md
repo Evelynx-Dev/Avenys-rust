@@ -1,4 +1,4 @@
-# Avenys v4.0.0
+# Avenys v4.1.0
 
 **A compiled, ownership-aware systems language with an LLVM backend.**
 
@@ -27,6 +27,23 @@ strings, collections, math, filesystem, processes, and more.
 | Debug | `owl debug` | `mire debug` |
 | Dependencies | `owl load <name>` | — |
 | Package install | `owl install <name>` | — |
+
+
+## Recent Changes (4.1.0)
+- **Ownership fix**: `Drop` now releases the owned value held by a variable
+  slot (previously it freed the stack address of the slot, a silent no-op that
+  leaked every reassigned string/collection). `set y = x` retains a borrowed
+  source, and string concatenation releases its fresh operands.
+- `pal_file_chmod` PAL capability implemented (enables `fs::permission`)
+- File-based crypto runtime helpers: SHA-256/SHA-512 of a file, base64 of a
+  file, and Ed25519 signature verification against a file or base64 payload
+- Raw byte/buffer helpers split into `src/runtime/bytes.c` (PAL-free) so the
+  minimal runtime tier can pull them in without `helpers.c`
+- Parser: `@[attr]` starting a new line is no longer parsed as an index
+  expression; a function name can be shadowed by a local `set`
+- Range arity dispatch fix: `range`/`to` dispatches by arg count
+- Documentation coherence initiative: `docs/` reorganized into ABI, CLI,
+  compiler, errors, FAQ, libraries, PAL, runtime, syntax, and WASM sections
 
 The `mire` CLI is the raw compiler interface; `owl` handles project management,
 dependency resolution, build caching, tests, and delegates to `mire`
@@ -224,7 +241,7 @@ curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/
 curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --check
 
 # Specific versions (when release artifacts exist)
-curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --tag-compiler v4.0.0 --tag-kioto v2.4.9
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --tag-compiler v4.1.0 --tag-kioto v2.4.9
 ```
 
 ### Prerequisites
@@ -544,66 +561,63 @@ Warnings are **off by default**. Enable with:
 
 ## Documentation
 
-### Core References
-| Document | Description |
-|----------|-------------|
-| [Release notes](./docs/RELEASE-4.0.0.md) | Avenys 4.0.0 migration and compatibility notes |
-| [SYNTAX.md](./SYNTAX.md) | Complete language reference with examples |
-| [docs/Changelog.md](./docs/Changelog.md) | **Monolithic changelog** (all versions) |
+> Modularized reference. Each section has its own README.md with comprehensive coverage.
 
-### ABI & Runtime
-| Document | Description |
-|----------|-------------|
-| [docs/ABI/README.md](./docs/ABI/README.md) | Mire ABI v4 specification |
-| [docs/PAL/README.md](./docs/PAL/README.md) | PAL v4 Platform Abstraction Layer |
-| [docs/RT/README.md](./docs/RT/README.md) | Runtime tiers (full/minimal/none) |
-| [docs/libs/README.md](./docs/libs/README.md) | Building libraries (kioto/mire model) |
+### Language Syntax
 
-### Compiler Architecture
-| Document | Description |
-|----------|-------------|
-| [docs/compiler/README.md](./docs/compiler/README.md) | Compiler pipeline & internals |
-| [docs/mir-pipeline.md](./docs/mir-pipeline.md) | MIR design and optimization passes |
-| [docs/incremental-design.md](./docs/incremental-design.md) | Cache architecture and fingerprinting |
+All language syntax topics are organized under [docs/syntax/](docs/syntax/README.md) with a [main index](docs/syntax/README.md) for navigation:
 
-### Platform Support
-| Document | Description |
-|----------|-------------|
-| [docs/WASM/README.md](./docs/WASM/README.md) | WebAssembly & WASI support |
-| [docs/WASM/runtime-requirements.md](./docs/WASM/runtime-requirements.md) | WASM runtime specifics |
+| Section | Description |
+|---------|-------------|
+| [Program Structure](docs/syntax/program-structure/README.md) | Entry point, comments, attributes, modules |
+| [Variables](docs/syntax/variables/README.md) | Declaration, mutability, constants, scope |
+| [Types](docs/syntax/types/README.md) | Primitive, composite, type ascription, conversion |
+| [Functions](docs/syntax/fn/README.md) | Declaration, calls, methods, generics, closures |
+| [Control Flow](docs/syntax/control-flow/README.md) | if/else, loops, match, break/continue |
+| [Pattern Matching](docs/syntax/pattern-matching/README.md) | match expressions and statements |
+| [Structs & Inheritance](docs/syntax/poo/README.md) | Structs, methods, `extends`, `impl` |
+| [Enums](docs/syntax/enums/README.md) | Enum declarations, payloads, matching |
+| [Skills](docs/syntax/skills/README.md) | Traits, `super` inheritance, generic bounds |
+| [Generics](docs/syntax/generics/README.md) | Generic functions, structs, trait bounds |
+| [Collections](docs/syntax/collections/README.md) | vec, map, array, Box |
+| [Strings](docs/syntax/strings/README.md) | String operations and methods |
+| [Operators](docs/syntax/operators/README.md) | Arithmetic, comparison, bitwise, pipeline |
+| [Modules](docs/syntax/modules/README.md) | load, load!, exports, namespace access |
+| [FFI](docs/syntax/ffi/README.md) | C external function interface |
+| [Macros](docs/syntax/macros/README.md) | Macro system, `@[macro!]`, hygiene |
+| [Error Handling](docs/syntax/error-handling/README.md) | Result, Maybe, panic, `?` operator |
+| [Testing](docs/syntax/testing/README.md) | `@[test]`, test framework, assertions |
+| [Builtins I/O](docs/syntax/builtins-io/README.md) | dasu, ireru, proc I/O |
+| [Pipeline](docs/syntax/pipeline/README.md) | Pipeline operators `=>` and `?=>` |
+| [Memory Ownership](docs/syntax/memory-ownership/README.md) | Move, borrow, ownership semantics |
 
-### Language Syntax (Modular)
-| Document | Description |
-|----------|-------------|
-| [docs/syntax/program-structure/README.md](./docs/syntax/program-structure/README.md) | Program entry, comments, attributes |
-| [docs/syntax/variables/README.md](./docs/syntax/variables/README.md) | Declaration, mutability, constants |
-| [docs/syntax/types/README.md](./docs/syntax/types/README.md) | Primitive and composite types |
-| [docs/syntax/memory-ownership/README.md](./docs/syntax/memory-ownership/README.md) | Move/borrow semantics |
-| [docs/syntax/fn/README.md](./docs/syntax/fn/README.md) | Functions, methods, generics |
-| [docs/syntax/closures/README.md](./docs/syntax/closures/README.md) | Anonymous functions |
-| [docs/syntax/control-flow/README.md](./docs/syntax/control-flow/README.md) | if, loops, match |
-| [docs/syntax/pattern-matching/README.md](./docs/syntax/pattern-matching/README.md) | match patterns |
-| [docs/syntax/pipeline/README.md](./docs/syntax/pipeline/README.md) | Pipeline operators |
-| [docs/syntax/poo/README.md](./docs/syntax/poo/README.md) | Structs, inheritance, methods |
-| [docs/syntax/enums/README.md](./docs/syntax/enums/README.md) | Enum declarations |
-| [docs/syntax/skills/README.md](./docs/syntax/skills/README.md) | Traits/interfaces |
-| [docs/syntax/generics/README.md](./docs/syntax/generics/README.md) | Generic types |
-| [docs/syntax/collections/README.md](./docs/syntax/collections/README.md) | vec, map, array, Box |
-| [docs/syntax/strings/README.md](./docs/syntax/strings/README.md) | String operations |
-| [docs/syntax/operators/README.md](./docs/syntax/operators/README.md) | All operators & precedence |
-| [docs/syntax/error-handling/README.md](./docs/syntax/error-handling/README.md) | Result, Maybe, panic |
-| [docs/syntax/modules/README.md](./docs/syntax/modules/README.md) | load, load!, exports |
-| [docs/syntax/ffi/README.md](./docs/syntax/ffi/README.md) | C FFI |
-| [docs/syntax/macros/README.md](./docs/syntax/macros/README.md) | Macro system |
-| [docs/syntax/builtins-io/README.md](./docs/syntax/builtins-io/README.md) | dasu, ireru, proc I/O |
-| [docs/syntax/testing/README.md](./docs/syntax/testing/README.md) | Testing framework |
+Full language reference: [SYNTAX.md](./SYNTAX.md)
 
-### Additional References
+### Compiler, ABI & Runtime
+
 | Document | Description |
 |----------|-------------|
-| [docs/FFI.md](./docs/FFI.md) | Foreign Function Interface |
-| [docs/LIBRARIES.md](./docs/LIBRARIES.md) | Module loading, owl.toml, exports |
-| [docs/ERROR_CODES.md](./docs/ERROR_CODES.md) | Error code reference |
+| [Compiler Architecture](docs/compiler/README.md) | Pipeline stages, internals, configuration |
+| [Command Line Interface](docs/cli/README.md) | Compiler flags and build paths |
+| [Mire ABI v4](docs/abi/README.md) | ABI specification, type layout, calling convention |
+| [Runtime](docs/rt/README.md) | Tier system (full/minimal/none), symbol reference |
+| [PAL v4](docs/pal/README.md) | Platform Abstraction Layer with tests |
+| [Error Codes](docs/errors/README.md) | All compiler and runtime error codes |
+
+### Platform, Libraries & Help
+
+| Document | Description |
+|----------|-------------|
+| [WebAssembly & WASI](docs/wasm/README.md) | WASM targets, host imports |
+| [Building Libraries](docs/lib/README.md) | Library types, structure, exports, Owl integration |
+| [FAQ](docs/faq/README.md) | Frequently asked questions |
+| [Changelog](CHANGELOG.md) | Version history |
+
+---
+
+## Documentation Index
+
+For the full modularized documentation, see [docs/README.md](docs/README.md).
 
 ---
 

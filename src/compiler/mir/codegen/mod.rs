@@ -154,7 +154,11 @@ fn sanitize_fn_name(name: &str) -> String {
 
 pub(crate) fn compile_function_to_llvm(func: &MirFunction, ctx: &mut LlvmCtx) -> String {
     let llvm_name = format!("@fn_{}", sanitize_fn_name(&func.name));
-    let ret_type = llvm_type_str(&func.ret_type);
+    let ret_type = if matches!(func.ret_type, DataType::None) {
+        "void".to_string()
+    } else {
+        llvm_type_str(&func.ret_type)
+    };
     let saved_vars = std::mem::take(&mut ctx.vars);
     let saved_temp_types = std::mem::take(&mut ctx.temp_types);
     let saved_next_tmp = ctx.next_tmp;
@@ -308,6 +312,7 @@ fn const_str(c: &MirConst, ctx: &mut LlvmCtx) -> String {
 
 fn default_return_for_type(ret_type: &str) -> String {
     match ret_type {
+        "void" => "ret void".to_string(),
         "ptr" => "ret ptr null".to_string(),
         "double" => "ret double 0.0".to_string(),
         "float" => "ret float 0.0".to_string(),
@@ -332,7 +337,7 @@ fn compile_terminator(term: &MirTerminator, ctx: &mut LlvmCtx, ret_type: &str) -
             let (v, t) = resolve_typed(val, ctx);
             format!("ret {} {}", t, v)
         }
-        MirTerminator::Ret(None) => default_return_for_type(ret_type),
+        MirTerminator::Ret(None) => "ret void".to_string(),
         MirTerminator::Unreachable => "unreachable".to_string(),
     }
 }

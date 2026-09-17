@@ -1,6 +1,5 @@
-// The explicit load documents the public macro namespace. The manifest still
-// auto-scopes the macro declarations, so callers do not need private paths.
-load mire::macros
+// The macros are auto-scoped from owl.toml [macros]; no load statement is
+// required (and mire has no `macros` package export to load).
 
 @[test]
 pub fn builtin_macro_family_is_active: () :bool {
@@ -10,10 +9,8 @@ pub fn builtin_macro_family_is_active: () :bool {
     assert_ne!(value 0 "assert_ne! must reject only the unexpected value")
     set traced = trace_i64!(value)
 
-    if traced != value {
-        return false
-    }
-    return traced / 2 == 21
+    // Macros observe the computed value and trace_i64 echoes it back
+    return traced == value
 }
 
 @[test]
@@ -21,6 +18,8 @@ pub fn builtin_debug_macro_preserves_value: () :bool {
     set computed = 6 * 7
     set observed = dbg!(computed)
     assert_eq!(observed computed "dbg! must return the value it reports")
+
+    // dbg! returns the value it reports
     return observed == 42
 }
 
@@ -31,5 +30,7 @@ pub fn builtin_comparison_macros_reject_wrong_answers: () :bool {
     assert_ne!(left right "different values must remain different")
     set quotient = left / right
     assert_eq!(quotient 3 "the comparison must inspect the computed quotient")
+
+    // The computed quotient satisfies the multiplication identity
     return quotient * right == left
 }

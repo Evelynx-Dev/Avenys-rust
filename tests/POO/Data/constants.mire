@@ -1,6 +1,11 @@
-cons MAX_STOCK = 10 :i64
+// POO Data: constants are module-level immutable bindings
+
+cons MAX_STOCK = 10
 
 @[test]
-pub fn constant_is_readable: () :bool {
-    return MAX_STOCK == 10
+pub fn constant_max_stock_readable: () :bool {
+    set max_val = MAX_STOCK
+
+    // Tests constant MAX_STOCK can be read into a variable
+    return max_val == 10
 }

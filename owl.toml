@@ -1,12 +1,13 @@
 [project]
 name = "avenys"
-version = "4.0.0"
+version = "4.1.0"
 entry = "tests/mod.mire"
 
 [build]
 compiler = "mire"
 profile = "debug"
 opt-level = 0
+runtime = "full"
 
 [paths]
 sources = "code"

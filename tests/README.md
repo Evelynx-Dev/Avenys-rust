@@ -22,6 +22,9 @@ Reproducible command from the repository root:
 
 ```text
 owl test --log -j 8 --verbose
+
+The suite resolves Mire and Kioto from `~/.owl/libs/`; local copies under the
+workspace are development sources only and are not test dependencies.
 ```
 
 Logging is opt-in. Without `--log`, tests execute without creating or
@@ -33,10 +36,10 @@ executable smoke tests live beside each artifact, so a successful link is not
 mistaken for a successful runtime call:
 
 ```text
-mire build ../kioto/code/mod.mire --libt shared --output tests/libs/kioto/kioto.so
-mire build ../kioto/code/mod.mire --libt static --output tests/libs/kioto/kioto.a
-mire build ../mire/code/mod.mire --libt shared --output tests/libs/mire/mire.so
-mire build ../mire/code/mod.mire --libt static --output tests/libs/mire/mire.a
+mire build ../kioto/code/mod.mire --artifact shared --output tests/libs/kioto/kioto.so
+mire build ../kioto/code/mod.mire --artifact static --output tests/libs/kioto/kioto.a
+mire build ../mire/code/mod.mire --artifact shared --output tests/libs/mire/mire.so
+mire build ../mire/code/mod.mire --artifact static --output tests/libs/mire/mire.a
 cp /usr/lib/libsqlite3.so tests/libs/sqlite/libsqlite3.so
 cp tests/libs/sqlite/libsqlite3.so tests/libs/sqlite/libsqlite3.so.0
 ```

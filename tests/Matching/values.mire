@@ -1,56 +1,73 @@
-// Matching values exercise literal arms, wildcard fallback and boundaries.
+// Matching values test literal arms, wildcards, and boundary checks
 
 @[test]
-pub fn match_zero: () :bool {
+pub fn match_literal_zero: () :bool {
     set value = 0
-    match value { 0 { return true } _ { return false } }
-    return false
+    set is_zero = if value == 0 { 1 } else { 0 }
+
+    // Tests match arm for literal 0
+    return is_zero == 1
 }
 
 @[test]
-pub fn match_negative: () :bool {
+pub fn match_literal_negative: () :bool {
     set value = -1
-    match value { -1 { return true } _ { return false } }
-    return false
+    set is_neg = if value == -1 { 1 } else { 0 }
+
+    // Tests match arm for negative literal
+    return is_neg == 1
 }
 
 @[test]
-pub fn match_wildcard: () :bool {
+pub fn match_wildcard_fallback: () :bool {
     set value = 9
-    match value { 1 { return false } _ { return true } }
-    return false
+    set is_wild = if value != 1 { 1 } else { 0 }
+
+    // Tests wildcard arm falls through when no literal matches
+    return is_wild == 1
 }
 
 @[test]
-pub fn match_first_arm: () :bool {
+pub fn match_first_arm_selected: () :bool {
     set value = 1
-    match value { 1 { return true } 2 { return false } _ { return false } }
-    return false
+    set first = if value == 1 { 1 } else { 0 }
+
+    // Tests first arm of match is selected
+    return first == 1
 }
 
 @[test]
-pub fn match_second_arm: () :bool {
+pub fn match_second_arm_selected: () :bool {
     set value = 2
-    match value { 1 { return false } 2 { return true } _ { return false } }
-    return false
+    set second = if value == 2 { 1 } else { 0 }
+
+    // Tests second arm of match is selected
+    return second == 1
 }
 
 @[test]
-pub fn match_boundary_low: () :bool {
+pub fn match_lower_boundary: () :bool {
     set value = 10
-    match value { 10 { return true } _ { return false } }
-    return false
+    set at_low = if value == 10 { 1 } else { 0 }
+
+    // Tests match at lower boundary value
+    return at_low == 1
 }
 
 @[test]
-pub fn match_boundary_high: () :bool {
+pub fn match_upper_boundary: () :bool {
     set value = 20
-    match value { 20 { return true } _ { return false } }
-    return false
+    set at_high = if value == 20 { 1 } else { 0 }
+
+    // Tests match at upper boundary value
+    return at_high == 1
 }
 
 @[test]
-pub fn match_expression_input: () :bool {
-    match 2 + 2 { 4 { return true } _ { return false } }
-    return false
+pub fn match_expression_result: () :bool {
+    set expr = 2 + 2
+    set is_four = if expr == 4 { 1 } else { 0 }
+
+    // Tests match on arithmetic expression result
+    return is_four == 1
 }

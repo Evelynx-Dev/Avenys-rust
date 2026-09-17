@@ -1,41 +1,29 @@
-// Map cases use the Mire runtime collection instead of a scalar placeholder.
+// Map insert, lookup, remove, and multi-key tracking
 load mire::map
 load mire::vec
 
 @[test]
-pub fn map_insert_lookup_and_remove: () :bool {
+pub fn map_insert_lookup_remove_single: () :bool {
     set values = {} :map[str i64] mut
     set values = map::set::i64(values "answer" 42)
-
-    if !map::has(values "answer") {
-        return false
-    }
-
+    set has_key = map::has(values "answer")
     set observed = map::get::i64(values "answer")
-
-    if observed != 42 {
-        return false
-    }
-
     map::remove(values "answer")
+    set is_empty = map::is::empty(values)
 
-    return !map::has(values "answer") && map::is::empty(values)
+    // Verifies set, has, get, remove, and empty check all work
+    return has_key && observed == 42 && is_empty && map::len(values) == 0
 }
 
 @[test]
-pub fn map_tracks_multiple_keys_and_values: () :bool {
+pub fn map_multiple_keys_values_len: () :bool {
     set values = {} :map[str i64] mut
     set values = map::set::i64(values "alpha" 10)
     set values = map::set::i64(values "beta" 20)
-
+    set len_val = map::len(values)
     set keys = map::keys(values)
     set stored = map::values::i64(values)
 
-    if map::len(values) != 2 {
-        return false
-    }
-    if vec::len(keys) != 2 {
-        return false
-    }
-    return vec::len(stored) == 2
+    // Verifies multiple keys, len, keys, and values access
+    return len_val == 2 && vec::len(keys) == 2 && vec::len(stored) == 2
 }

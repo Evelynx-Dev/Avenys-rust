@@ -2,6 +2,8 @@
 
 Version: **3.24.32**
 
+For the modularized documentation with topic-by-topic indexes, see [docs/README.md](docs/README.md).
+
 ---
 
 ## 1. First program
@@ -1620,3 +1622,33 @@ clamp = "core/macros/clamp.mire"
 
 The macro file must contain a function with the `@[macro!]`
 attribute matching the declared name.
+
+---
+
+## Syntax Topic Index
+
+For a modularized, topic-by-topic reference with examples, rules, and error cases, see the [Language Syntax documentation](docs/syntax/README.md). Each topic has its own sub-directory:
+
+| Topic | Path |
+|-------|------|
+| Program Structure | `docs/syntax/program-structure/` |
+| Variables | `docs/syntax/variables/` |
+| Types | `docs/syntax/types/` |
+| Functions | `docs/syntax/fn/` |
+| Control Flow | `docs/syntax/control-flow/` |
+| Pattern Matching | `docs/syntax/pattern-matching/` |
+| Structs & Inheritance | `docs/syntax/poo/` |
+| Enums | `docs/syntax/enums/` |
+| Skills | `docs/syntax/skills/` |
+| Generics | `docs/syntax/generics/` |
+| Collections | `docs/syntax/collections/` |
+| Strings | `docs/syntax/strings/` |
+| Operators | `docs/syntax/operators/` |
+| Modules | `docs/syntax/modules/` |
+| FFI | `docs/syntax/ffi/` |
+| Macros | `docs/syntax/macros/` |
+| Error Handling | `docs/syntax/error-handling/` |
+| Testing | `docs/syntax/testing/` |
+| Builtins I/O | `docs/syntax/builtins-io/` |
+| Pipeline | `docs/syntax/pipeline/` |
+| Memory Ownership | `docs/syntax/memory-ownership/` |

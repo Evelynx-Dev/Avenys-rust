@@ -65,6 +65,7 @@ impl Parser {
         self.expect_block_close()?;
         self.pop_type_param_scope();
         self.declare(&name);
+        self.function_names.insert(name.clone());
 
         let attributes = std::mem::take(&mut self.pending_attributes);
         Ok(Statement::Function {

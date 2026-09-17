@@ -30,6 +30,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 // ── Cross-platform export macros ─────────────────────────────────────
 // WASM: mark functions for JavaScript interop via wasm-ld
@@ -583,6 +584,14 @@ char   *rt_cpu_elapsed_ms_str(int64_t start_ns);
 int64_t rt_crypto_byte_at(const char *s, int64_t i);
 char   *rt_crypto_sha256_hex(const char *s);
 char   *rt_crypto_sha512_hex(const char *s);
+char   *rt_crypto_sha256_file_hex(const char *path);
+char   *rt_crypto_sha512_file_hex(const char *path);
+char   *rt_crypto_base64_file(const char *path);
+bool    rt_crypto_ed25519_verify_b64(const char *pubkey_b64, const char *data_file,
+                                     const char *sig_b64);
+bool    rt_crypto_ed25519_verify_file(const char *pubkey_b64, const char *data_file,
+                                      const char *sig_file);
+char   *rt_crypto_ed25519_pubkey_raw_b64(const char *pem_path);
 char   *rt_read_bytes(const char *path);
 int     rt_hex_to_file(const char *path, const char *hex);
 

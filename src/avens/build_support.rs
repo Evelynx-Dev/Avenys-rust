@@ -152,6 +152,14 @@ pub(super) fn generate_runtime_declarations(ir: &str) -> String {
             "declare ptr @rt_math_range_i64(i64)",
         ),
         (
+            "declare ptr @rt_math_range_between_i64(",
+            "declare ptr @rt_math_range_between_i64(i64, i64)",
+        ),
+        (
+            "declare ptr @rt_math_range_step_i64(",
+            "declare ptr @rt_math_range_step_i64(i64, i64, i64)",
+        ),
+        (
             "@.fmt_str =",
             "@.fmt_str = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\"",
         ),
@@ -201,6 +209,10 @@ pub(super) fn generate_runtime_declarations(ir: &str) -> String {
         (
             "declare void @rt_managed_free(",
             "declare void @rt_managed_free(ptr)",
+        ),
+        (
+            "call void @rt_managed_retain(",
+            "declare void @rt_managed_retain(ptr)",
         ),
         (
             "declare ptr @rt_string_concat(",
@@ -1001,14 +1013,27 @@ fn runtime_symbol_to_c_file(sym: &str) -> Option<&'static str> {
         Some("strings.c")
     } else if sym.starts_with("rt_closure_env") {
         Some("safety.c")
+    } else if sym.starts_with("rt_read_bytes") || sym.starts_with("rt_read_tty") {
+        // File/tty readers (need POSIX; stay in helpers.c)
+        Some("helpers.c")
     } else if sym.starts_with("rt_crypto_")
         || sym.starts_with("rt_hex_to_file")
+        || sym.starts_with("rt_proc_")
+        || sym.starts_with("rt_channel_recv")
+        || sym.starts_with("rt_fs_")
+        || sym.starts_with("rt_font_")
+        || sym.starts_with("rt_web_")
+        || sym.starts_with("rt_websocket_")
+    {
+        Some("helpers.c")
+    } else if sym.starts_with("rt_alloc_raw")
         || sym.starts_with("rt_free_raw")
         || sym.starts_with("rt_blend_")
         || sym.starts_with("rt_read_")
         || sym.starts_with("rt_write_")
     {
-        Some("helpers.c")
+        // Pure byte-access helpers (PAL-free; math.c, FFI bindings)
+        Some("bytes.c")
     } else if sym.starts_with("rt_thread_") {
         Some("thread.c")
     } else if sym.starts_with("rt_get_args") || sym.starts_with("rt_free_argv") {
@@ -1039,9 +1064,10 @@ pub(crate) fn minimal_runtime_c_files(used_runtime: &HashSet<String>) -> Vec<Str
             // required for minimal runtime builds and shared-library tests.
             "maps.c" => &["maps_internal.c", "vecs.c", "managed.c"],
             "maps_internal.c" => &["managed.c"],
-            "math.c" => &["vecs.c"],
+            "math.c" => &["vecs.c", "bytes.c"],
             "random.c" => &[],
             "mire_types.c" => &["strings.c", "managed.c", "safety.c"],
+            "bytes.c" => &["strings.c"],
             "helpers.c" => &["strings.c", "managed.c"],
             "mire_io.c" => &["managed.c"],
             "thread.c" => &[],

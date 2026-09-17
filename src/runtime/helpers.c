@@ -145,6 +145,205 @@ char *rt_crypto_sha512_hex(const char *s) {
     return rt_crypto_hex(digest, sizeof(digest));
 }
 
+// Reads a whole file as raw bytes (binary-safe, embedded NULs preserved).
+// On success returns a malloc'd buffer and stores the byte count in *out_len;
+// the caller owns the buffer. Returns NULL on any failure.
+static unsigned char *rt_read_file_raw(const char *path, size_t *out_len) {
+    if (!path) return NULL;
+    FILE *file = fopen(path, "rb");
+    if (!file) return NULL;
+    if (fseek(file, 0, SEEK_END) != 0) { fclose(file); return NULL; }
+    long length = ftell(file);
+    if (length < 0) { fclose(file); return NULL; }
+    if (fseek(file, 0, SEEK_SET) != 0) { fclose(file); return NULL; }
+    unsigned char *buf = (unsigned char *)malloc(length ? (size_t)length : 1);
+    if (!buf) { fclose(file); return NULL; }
+    size_t read = fread(buf, 1, (size_t)length, file);
+    fclose(file);
+    if (read != (size_t)length) { free(buf); return NULL; }
+    *out_len = (size_t)length;
+    return buf;
+}
+
+char *rt_crypto_sha256_file_hex(const char *path) {
+    size_t length = 0;
+    unsigned char *data = rt_read_file_raw(path, &length);
+    if (!data) return rt_managed_from_cstr("");
+    unsigned char digest[PAL_CRYPTO_SHA256_BYTES];
+    pal_error_code_t rc = pal_crypto_sha256(data, length, digest);
+    free(data);
+    if (rc != PAL_ERR_OK) return rt_managed_from_cstr("");
+    return rt_crypto_hex(digest, sizeof(digest));
+}
+
+char *rt_crypto_sha512_file_hex(const char *path) {
+    size_t length = 0;
+    unsigned char *data = rt_read_file_raw(path, &length);
+    if (!data) return rt_managed_from_cstr("");
+    unsigned char digest[PAL_CRYPTO_SHA512_BYTES];
+    pal_error_code_t rc = pal_crypto_sha512(data, length, digest);
+    free(data);
+    if (rc != PAL_ERR_OK) return rt_managed_from_cstr("");
+    return rt_crypto_hex(digest, sizeof(digest));
+}
+
+// ── Base64 (shared by kioto's crypto bindings) ──────────────────────────────
+static const char rt_b64_alphabet[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static char *rt_base64_encode(const unsigned char *data, size_t length) {
+    if (!data) return rt_managed_from_cstr("");
+    size_t out_len = 4 * ((length + 2) / 3);
+    char *out = (char *)malloc(out_len + 1);
+    if (!out) return rt_managed_from_cstr("");
+    size_t i = 0, j = 0;
+    while (i + 3 <= length) {
+        unsigned int triple = ((unsigned int)data[i] << 16) |
+                              ((unsigned int)data[i + 1] << 8) |
+                              (unsigned int)data[i + 2];
+        out[j++] = rt_b64_alphabet[(triple >> 18) & 0x3F];
+        out[j++] = rt_b64_alphabet[(triple >> 12) & 0x3F];
+        out[j++] = rt_b64_alphabet[(triple >> 6) & 0x3F];
+        out[j++] = rt_b64_alphabet[triple & 0x3F];
+        i += 3;
+    }
+    size_t rem = length - i;
+    if (rem == 1) {
+        unsigned int triple = (unsigned int)data[i] << 16;
+        out[j++] = rt_b64_alphabet[(triple >> 18) & 0x3F];
+        out[j++] = rt_b64_alphabet[(triple >> 12) & 0x3F];
+        out[j++] = '=';
+        out[j++] = '=';
+    } else if (rem == 2) {
+        unsigned int triple = ((unsigned int)data[i] << 16) |
+                              ((unsigned int)data[i + 1] << 8);
+        out[j++] = rt_b64_alphabet[(triple >> 18) & 0x3F];
+        out[j++] = rt_b64_alphabet[(triple >> 12) & 0x3F];
+        out[j++] = rt_b64_alphabet[(triple >> 6) & 0x3F];
+        out[j++] = '=';
+    }
+    out[j] = '\0';
+    char *managed = rt_managed_from_cstr(out);
+    free(out);
+    return managed;
+}
+
+static int rt_b64_value(int c) {
+    if (c >= 'A' && c <= 'Z') return c - 'A';
+    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+    if (c >= '0' && c <= '9') return c - '0' + 52;
+    if (c == '+') return 62;
+    if (c == '/') return 63;
+    return -1;
+}
+
+// Decodes base64 text into a malloc'd byte buffer (caller frees). Whitespace is
+// ignored; padding is honoured. Returns NULL on malformed input.
+static unsigned char *rt_base64_decode(const char *s, size_t s_len, size_t *out_len) {
+    if (!s) return NULL;
+    unsigned char *out = (unsigned char *)malloc((s_len / 4 + 2) * 3);
+    if (!out) return NULL;
+    int accum = 0, bits = 0;
+    size_t n = 0;
+    for (size_t i = 0; i < s_len; i++) {
+        int c = (unsigned char)s[i];
+        if (c == '=' || c == '\n' || c == '\r' || c == ' ' || c == '\t') continue;
+        int v = rt_b64_value(c);
+        if (v < 0) { free(out); return NULL; }
+        accum = (accum << 6) | v;
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            out[n++] = (unsigned char)((accum >> bits) & 0xFF);
+        }
+    }
+    *out_len = n;
+    return out;
+}
+
+char *rt_crypto_base64_file(const char *path) {
+    size_t length = 0;
+    unsigned char *data = rt_read_file_raw(path, &length);
+    if (!data) return rt_managed_from_cstr("");
+    char *out = rt_base64_encode(data, length);
+    free(data);
+    return out;
+}
+
+bool rt_crypto_ed25519_verify_b64(const char *pubkey_b64, const char *data_file,
+                                  const char *sig_b64) {
+    size_t pk_len = 0, sg_len = 0, data_len = 0;
+    unsigned char *pk = rt_base64_decode(pubkey_b64, pubkey_b64 ? strlen(pubkey_b64) : 0, &pk_len);
+    unsigned char *sg = rt_base64_decode(sig_b64, sig_b64 ? strlen(sig_b64) : 0, &sg_len);
+    unsigned char *data = rt_read_file_raw(data_file, &data_len);
+    bool ok = false;
+    if (pk && sg && data &&
+        pk_len == PAL_CRYPTO_ED25519_PUBLICKEYBYTES &&
+        sg_len == PAL_CRYPTO_ED25519_BYTES) {
+        ok = pal_crypto_ed25519_verify(data, data_len, sg, sg_len, pk) == PAL_ERR_OK;
+    }
+    free(pk);
+    free(sg);
+    free(data);
+    return ok;
+}
+
+bool rt_crypto_ed25519_verify_file(const char *pubkey_b64, const char *data_file,
+                                   const char *sig_file) {
+    size_t pk_len = 0, sg_len = 0, data_len = 0;
+    unsigned char *pk = rt_base64_decode(pubkey_b64, pubkey_b64 ? strlen(pubkey_b64) : 0, &pk_len);
+    unsigned char *sg = rt_read_file_raw(sig_file, &sg_len);
+    unsigned char *data = rt_read_file_raw(data_file, &data_len);
+    bool ok = false;
+    if (pk && sg && data &&
+        pk_len == PAL_CRYPTO_ED25519_PUBLICKEYBYTES &&
+        sg_len == PAL_CRYPTO_ED25519_BYTES) {
+        ok = pal_crypto_ed25519_verify(data, data_len, sg, sg_len, pk) == PAL_ERR_OK;
+    }
+    free(pk);
+    free(sg);
+    free(data);
+    return ok;
+}
+
+// Extracts the raw 32-byte Ed25519 public key from a PEM file and returns it
+// base64-encoded. The SubjectPublicKeyInfo DER ends with the raw key, so the
+// trailing 32 bytes are used. Returns "" on failure.
+char *rt_crypto_ed25519_pubkey_raw_b64(const char *pem_path) {
+    size_t pem_len = 0;
+    unsigned char *pem = rt_read_file_raw(pem_path, &pem_len);
+    if (!pem) return rt_managed_from_cstr("");
+    char *body = (char *)malloc(pem_len + 1);
+    if (!body) { free(pem); return rt_managed_from_cstr(""); }
+    size_t bn = 0;
+    size_t i = 0;
+    while (i < pem_len) {
+        size_t start = i;
+        while (i < pem_len && pem[i] != '\n') i++;
+        size_t line_len = i - start;
+        if (i < pem_len) i++;
+        size_t s = start;
+        while (s < start + line_len && (pem[s] == ' ' || pem[s] == '\r' || pem[s] == '\t')) s++;
+        if (start + line_len - s >= 5 && pem[s] == '-' && pem[s + 1] == '-') continue;
+        for (size_t k = s; k < start + line_len; k++) {
+            if (pem[k] != '\r' && pem[k] != ' ' && pem[k] != '\t') body[bn++] = (char)pem[k];
+        }
+    }
+    body[bn] = '\0';
+    free(pem);
+    size_t der_len = 0;
+    unsigned char *der = rt_base64_decode(body, bn, &der_len);
+    free(body);
+    if (!der || der_len < PAL_CRYPTO_ED25519_PUBLICKEYBYTES) {
+        free(der);
+        return rt_managed_from_cstr("");
+    }
+    unsigned char *raw = der + (der_len - PAL_CRYPTO_ED25519_PUBLICKEYBYTES);
+    char *out = rt_base64_encode(raw, PAL_CRYPTO_ED25519_PUBLICKEYBYTES);
+    free(der);
+    return out;
+}
+
 // Read an entire file as a managed string (binary-safe).
 char *rt_read_bytes(const char *path) {
     FILE *f = fopen(path, "rb");
@@ -401,126 +600,6 @@ int64_t rt_channel_recv_into(int64_t ch_handle, char *buf, int64_t capacity) {
     if (n > 0) memcpy(buf, out.data, (size_t)n);
     pal_free(out.data);
     return n;
-}
-
-// ── Raw buffer allocation ─────────────────────────────────────────
-// Unmanaged malloc/free for passing opaque buffers (SDL_Event, SDL_Rect,
-// pixel data) across FFI. Caller is responsible for pairing these; the
-// runtime never touches the memory (not managed, not GC'd).
-void *rt_alloc_raw(int64_t size) {
-    if (size <= 0) return NULL;
-    return malloc((size_t)size);
-}
-void rt_free_raw(void *ptr) {
-    if (ptr) free(ptr);
-}
-
-// ── Raw memory readers (little-endian) ────────────────────────────
-// Little-endian typed reads from arbitrary buffers (used by FFI bindings
-// to decode C structs such as SDL_Event without needing struct support).
-int64_t rt_read_u8(const void *ptr) {
-    return (int64_t)(unsigned char)((const unsigned char *)ptr)[0];
-}
-int64_t rt_read_u16(const void *ptr) {
-    const unsigned char *p = (const unsigned char *)ptr;
-    return (int64_t)(p[0] | ((unsigned int)p[1] << 8));
-}
-int64_t rt_read_u32(const void *ptr) {
-    const unsigned char *p = (const unsigned char *)ptr;
-    return (int64_t)((unsigned int)p[0] | ((unsigned int)p[1] << 8) |
-                     ((unsigned int)p[2] << 16) | ((unsigned int)p[3] << 24));
-}
-// Blend `color` (RGBA packed) into the u32 at `ptr` with the given alpha
-// (0..255). Used for anti-aliased font edges and translucent shadows.
-void rt_blend_u32(void *ptr, int64_t color, int64_t alpha) {
-    if (ptr == NULL) return;
-    if (alpha <= 0) return;
-    if (alpha >= 255) {
-        rt_write_u32(ptr, color);
-        return;
-    }
-    uint32_t dst = (uint32_t)rt_read_u32(ptr);
-    uint32_t src = (uint32_t)color;
-    int a = (int)alpha;
-    int ia = 255 - a;
-    uint8_t r = (uint8_t)(((src & 0xFF) * a + (dst & 0xFF) * ia) / 255);
-    uint8_t g = (uint8_t)((((src >> 8) & 0xFF) * a + ((dst >> 8) & 0xFF) * ia) / 255);
-    uint8_t b = (uint8_t)((((src >> 16) & 0xFF) * a + ((dst >> 16) & 0xFF) * ia) / 255);
-    uint8_t al = (uint8_t)((((src >> 24) & 0xFF) * a + ((dst >> 24) & 0xFF) * ia) / 255);
-    uint32_t out = (uint32_t)r | ((uint32_t)g << 8) | ((uint32_t)b << 16) | ((uint32_t)al << 24);
-    rt_write_u32(ptr, out);
-}
-int64_t rt_read_i32(const void *ptr) {
-    const unsigned char *p = (const unsigned char *)ptr;
-    uint32_t v = (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
-                 ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
-    return (int64_t)(int32_t)v;
-}
-int64_t rt_read_u64(const void *ptr) {
-    uint64_t v = 0;
-    const unsigned char *p = (const unsigned char *)ptr;
-    for (int i = 0; i < 8; i++) v |= (uint64_t)p[i] << (8 * i);
-    return (int64_t)v;
-}
-int64_t rt_read_ptr(const void *ptr) {
-    return rt_read_u64(ptr);
-}
-double rt_read_f64(const void *ptr) {
-    union { uint64_t u; double f; } conv;
-    conv.u = 0;
-    const unsigned char *p = (const unsigned char *)ptr;
-    for (int i = 0; i < 8; i++) conv.u |= (uint64_t)p[i] << (8 * i);
-    return conv.f;
-}
-double rt_read_f32(const void *ptr) {
-    union { uint32_t u; float f; } conv;
-    conv.u = 0;
-    const unsigned char *p = (const unsigned char *)ptr;
-    for (int i = 0; i < 4; i++) conv.u |= (uint32_t)p[i] << (8 * i);
-    return (double)conv.f;
-}
-
-// ── Raw memory writers ────────────────────────────────────────────
-void rt_write_u8(void *ptr, int64_t value) {
-    ((unsigned char *)ptr)[0] = (unsigned char)value;
-}
-void rt_write_u16(void *ptr, int64_t value) {
-    unsigned char *p = (unsigned char *)ptr;
-    p[0] = (unsigned char)value;
-    p[1] = (unsigned char)(value >> 8);
-}
-void rt_write_u32(void *ptr, int64_t value) {
-    unsigned char *p = (unsigned char *)ptr;
-    p[0] = (unsigned char)value;
-    p[1] = (unsigned char)(value >> 8);
-    p[2] = (unsigned char)(value >> 16);
-    p[3] = (unsigned char)(value >> 24);
-}
-void rt_write_i32(void *ptr, int64_t value) {
-    rt_write_u32(ptr, (int64_t)(int32_t)value);
-}
-void rt_write_f32(void *ptr, double value) {
-    union { uint32_t u; float f; } conv;
-    conv.f = (float)value;
-    rt_write_u32(ptr, (int64_t)conv.u);
-}
-void rt_write_f64(void *ptr, double value) {
-    union { uint64_t u; double f; } conv;
-    conv.f = value;
-    rt_write_u64(ptr, (int64_t)conv.u);
-}
-void rt_write_u64(void *ptr, int64_t value) {
-    unsigned char *p = (unsigned char *)ptr;
-    uint64_t v = (uint64_t)value;
-    for (int i = 0; i < 8; i++) p[i] = (unsigned char)(v >> (8 * i));
-}
-
-// ── C-string → managed string ────────────────────────────────────
-// Reads a null-terminated C string at `ptr` and returns a managed copy.
-// Used by FFI bindings to decode `const char *` fields inside C structs
-// (e.g. SDL_TextInputEvent.text in SDL3).
-char *rt_read_cstr(const void *ptr) {
-    return rt_string_copy((const char *)ptr);
 }
 
 // ── 5x7 bitmap font (public domain, standard font5x7) ────────────────

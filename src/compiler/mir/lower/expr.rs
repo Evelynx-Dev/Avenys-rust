@@ -1,5 +1,6 @@
 use super::MirLower;
 use super::collections::lower_index_read;
+use super::stmt::is_owned_ptr_type;
 use super::types::{
     data_type_to_kind, extract_data_type, is_map_or_dict_type, is_trivial_deref,
     llvm_elem_type_str, llvm_type_byte_size,
@@ -20,9 +21,27 @@ fn is_int_division(left: &Expression, right: &Expression) -> bool {
     !is_float_dt(&lt) && !is_float_dt(&rt)
 }
 
+/// True when `expr` evaluates to a freshly allocated managed pointer that this
+/// evaluation owns (a string-returning call). Variable/field reads are borrows
+/// and array element reads do not retain, so neither is included.
+fn concat_operand_is_owned(expr: &Expression) -> bool {
+    match expr {
+        Expression::Call { data_type, .. } => is_owned_ptr_type(data_type),
+        Expression::Ascription { expr, .. } => concat_operand_is_owned(expr),
+        _ => false,
+    }
+}
+
 /// Collects all operands in a string concatenation chain.
 /// For `a + b + c + d`, this will return [a, b, c, d] in order.
-fn collect_concat_operands(lower: &mut MirLower, expr: &Expression, operands: &mut Vec<MirValue>) {
+/// Owned operands (fresh allocations used only by the concat) are recorded in
+/// `to_free` so the caller can release them after `Concat` copies their bytes.
+fn collect_concat_operands(
+    lower: &mut MirLower,
+    expr: &Expression,
+    operands: &mut Vec<MirValue>,
+    to_free: &mut Vec<MirValue>,
+) {
     if let Expression::BinaryOp {
         operator,
         left,
@@ -35,14 +54,18 @@ fn collect_concat_operands(lower: &mut MirLower, expr: &Expression, operands: &m
             let right_ty = extract_data_type(right);
             if left_ty == DataType::Str && right_ty == DataType::Str {
                 // Recursively collect operands from left and right
-                collect_concat_operands(lower, left, operands);
-                collect_concat_operands(lower, right, operands);
+                collect_concat_operands(lower, left, operands, to_free);
+                collect_concat_operands(lower, right, operands, to_free);
                 return;
             }
         }
     }
     // Not a string concat, add the expression as a single operand
-    operands.push(lower.lower_expression(expr));
+    let value = lower.lower_expression(expr);
+    if concat_operand_is_owned(expr) && matches!(value, MirValue::Temp(_)) {
+        to_free.push(value.clone());
+    }
+    operands.push(value);
 }
 
 impl MirLower {
@@ -219,6 +242,32 @@ impl MirLower {
                 data_type,
                 ..
             } => {
+                // String concatenation: build the whole flattened operand chain
+                // lazily. Lowering left/right eagerly below would evaluate every
+                // operand a second time (dead temporaries) and leak intermediate
+                // strings; the flattened `Concat` is the single evaluation point.
+                if operator == "+"
+                    && extract_data_type(left) == DataType::Str
+                    && extract_data_type(right) == DataType::Str
+                {
+                    let result = self.new_temp();
+                    let mut operands = Vec::new();
+                    let mut to_free = Vec::new();
+                    collect_concat_operands(self, left, &mut operands, &mut to_free);
+                    collect_concat_operands(self, right, &mut operands, &mut to_free);
+                    let last = self.current_block;
+                    self.func
+                        .blocks[last]
+                        .push(Some(result), MirOp::Concat(operands), loc);
+                    // `Concat` copies the operand bytes, so fresh operand
+                    // allocations can be released immediately.
+                    for operand in to_free {
+                        let last = self.current_block;
+                        self.func.blocks[last].push(None, MirOp::Drop(operand), loc);
+                    }
+                    return MirValue::temp(result);
+                }
+
                 let l = self.lower_expression(left);
                 let r = self.lower_expression(right);
 
@@ -285,41 +334,27 @@ impl MirLower {
                     return MirValue::temp(result);
                 }
 
-                let left_ty = extract_data_type(left);
-                let right_ty = extract_data_type(right);
-
                 let result = self.new_temp();
-                let mir_op = if operator.as_str() == "+"
-                    && left_ty == DataType::Str
-                    && right_ty == DataType::Str
-                {
-                    // Collect all operands in a string concatenation chain
-                    let mut operands = Vec::new();
-                    collect_concat_operands(self, left, &mut operands);
-                    collect_concat_operands(self, right, &mut operands);
-                    MirOp::Concat(operands)
-                } else {
-                    match operator.as_str() {
-                        "+" => MirOp::Add(l, r),
-                        "-" => MirOp::Sub(l, r),
-                        "*" => MirOp::Mul(l, r),
-                        "/" => MirOp::SDiv(l, r),
-                        "%" => MirOp::SRem(l, r),
-                        "==" => MirOp::ICmp(MirCmp::Eq, l, r),
-                        "!=" => MirOp::ICmp(MirCmp::Ne, l, r),
-                        "<" => MirOp::ICmp(MirCmp::Lt, l, r),
-                        "<=" => MirOp::ICmp(MirCmp::Le, l, r),
-                        ">" => MirOp::ICmp(MirCmp::Gt, l, r),
-                        ">=" => MirOp::ICmp(MirCmp::Ge, l, r),
-                        "&&" => MirOp::And(l, r),
-                        "||" => MirOp::Or(l, r),
-                        "&" => MirOp::BitAnd(l, r),
-                        "|" => MirOp::BitOr(l, r),
-                        "^" => MirOp::Xor(l, r),
-                        "<<" => MirOp::Shl(l, r),
-                        ">>" => MirOp::Shr(l, r),
-                        _ => MirOp::Add(l, r),
-                    }
+                let mir_op = match operator.as_str() {
+                    "+" => MirOp::Add(l, r),
+                    "-" => MirOp::Sub(l, r),
+                    "*" => MirOp::Mul(l, r),
+                    "/" => MirOp::SDiv(l, r),
+                    "%" => MirOp::SRem(l, r),
+                    "==" => MirOp::ICmp(MirCmp::Eq, l, r),
+                    "!=" => MirOp::ICmp(MirCmp::Ne, l, r),
+                    "<" => MirOp::ICmp(MirCmp::Lt, l, r),
+                    "<=" => MirOp::ICmp(MirCmp::Le, l, r),
+                    ">" => MirOp::ICmp(MirCmp::Gt, l, r),
+                    ">=" => MirOp::ICmp(MirCmp::Ge, l, r),
+                    "&&" => MirOp::And(l, r),
+                    "||" => MirOp::Or(l, r),
+                    "&" => MirOp::BitAnd(l, r),
+                    "|" => MirOp::BitOr(l, r),
+                    "^" => MirOp::Xor(l, r),
+                    "<<" => MirOp::Shl(l, r),
+                    ">>" => MirOp::Shr(l, r),
+                    _ => MirOp::Add(l, r),
                 };
                 let last = self.current_block;
                 self.func.blocks[last].push(Some(result), mir_op, loc);
@@ -403,10 +438,15 @@ impl MirLower {
                     args.iter().map(|a| self.lower_expression(a)).collect();
                 let result = self.new_temp();
                 let last = self.current_block;
+                let callee = match mir_args.len() {
+                    3 => "rt_math_range_step_i64",
+                    2 => "rt_math_range_between_i64",
+                    _ => "rt_math_range_i64",
+                };
                 self.func.blocks[last].push(
                     Some(result),
                     MirOp::Call(
-                        MirValue::Global("rt_math_range_i64".to_string()),
+                        MirValue::Global(callee.to_string()),
                         mir_args,
                         MirType {
                             data_type: DataType::Unknown,

@@ -770,6 +770,11 @@ bool pal_fs_move(const char *src, const char *dst) {
     return ops->fs_move(src, dst);
 }
 
+bool pal_fs_chmod(const char *path, const char *mode) {
+    if (!ops || !ops->fs_chmod) return false;
+    return ops->fs_chmod(path, mode);
+}
+
 #endif // PAL_ALLOW_UNSANDBOXED
 
 // ── Extended Environment ────────────────────────────

@@ -1,5 +1,9 @@
+// Pipeline operator: data flow through chain of operations
+
 @[test]
-pub fn pipeline_family_is_discoverable: () :bool {
-    set value = 42
-    return value == 42
+pub fn pipeline_with_dasu: () :bool {
+    set value = dasu("output")
+    set result = value == "output"
+// Tests pipeline with dasu returning string
+    return result == true
 }

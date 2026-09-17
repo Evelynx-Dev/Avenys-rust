@@ -230,6 +230,7 @@ const char *pal_fs_name(const char *path);
 bool pal_fs_is_file(const char *path);
 bool pal_fs_copy(const char *src, const char *dst);
 bool pal_fs_move(const char *src, const char *dst);
+bool pal_fs_chmod(const char *path, const char *mode);
 #endif // PAL_ALLOW_UNSANDBOXED
 
 // ── Environment ──────────────────────────────────────────

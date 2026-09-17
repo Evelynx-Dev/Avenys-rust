@@ -85,6 +85,7 @@ pub(crate) fn pal_extern_decls() -> Vec<String> {
         "declare ptr @rt_bool_to_string(i64)".to_string(),
         "declare ptr @rt_managed_from_cstr(ptr)".to_string(),
         "declare ptr @rt_managed_ensure_managed(ptr)".to_string(),
+        "declare void @rt_managed_retain(ptr)".to_string(),
         "declare void @rt_managed_free(ptr)".to_string(),
         "declare void @free(ptr)".to_string(),
         "declare ptr @malloc(i64)".to_string(),

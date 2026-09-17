@@ -885,6 +885,10 @@ static bool linux_fs_rmdir(const char *path) {
     return rmdir(path) == 0;
 }
 
+static bool linux_fs_chmod(const char *path, const char *mode) {
+    return chmod(path, strtol(mode, NULL, 8)) == 0;
+}
+
 static bool linux_fs_unlink(const char *path) {
     return unlink(path) == 0;
 }
@@ -1144,6 +1148,7 @@ static const pal_ops_t linux_ops = {
     .fs_is_file = linux_fs_is_file,
     .fs_copy = linux_fs_copy,
     .fs_move = linux_fs_move,
+    .fs_chmod = linux_fs_chmod,
     .cpu_time_ms = linux_cpu_time_ms,
     .cpu_snapshot = linux_cpu_snapshot,
     .mem_format = linux_mem_format,
