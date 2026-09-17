@@ -29,5 +29,5 @@ tests/loads/bin/
 .branch
 TODO.md
 owl.lock
-tests/log/web/
-tests/log/bin/
+# Generated `mire test --log` transcripts and fixtures
+tests/log/

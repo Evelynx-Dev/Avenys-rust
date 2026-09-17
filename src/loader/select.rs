@@ -110,9 +110,14 @@ pub(super) fn select_imported_statements(
             );
         }
 
+        // Module-level constants (`cons`) are part of a module's implementation:
+        // exported functions may reference them even though the constants
+        // themselves are not exported. They must always travel with the module
+        // so a consumer that selects a subset of the module's functions still
+        // gets every constant those functions read.
         let mut reachable = Vec::new();
         for (idx, statement) in statements.iter().enumerate() {
-            if selected.contains(&idx) {
+            if selected.contains(&idx) || is_module_constant(&statement.statement) {
                 reachable.push(statement.clone());
             }
         }
@@ -124,10 +129,17 @@ pub(super) fn select_imported_statements(
         .filter(|statement| {
             statement_export_name(&statement.statement).is_some()
                 || matches!(&statement.statement, Statement::Impl { .. })
+                || is_module_constant(&statement.statement)
         })
         .cloned()
         .collect();
     Ok(result)
+}
+
+/// A module-level constant (`cons`). These are retained alongside any module
+/// selection so exported functions that read them always resolve.
+fn is_module_constant(statement: &Statement) -> bool {
+    matches!(statement, Statement::Let { is_constant: true, .. })
 }
 
 /// Resolve transitive dependencies of a single statement, adding any
