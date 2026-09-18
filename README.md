@@ -1,4 +1,4 @@
-# Avenys v4.1.0
+# Avenys v4.1.1
 
 **A compiled, ownership-aware systems language with an LLVM backend.**
 
@@ -28,6 +28,11 @@ strings, collections, math, filesystem, processes, and more.
 | Dependencies | `owl load <name>` | — |
 | Package install | `owl install <name>` | — |
 
+
+## Recent Changes (4.1.1)
+- **`[c]` cflags no longer reach `llc`**: project include paths (forwarded by
+  Owl from `[c] include`) were crashing the IR lowering step (`llc` rejects
+  `-I...`); they now flow only to `clang` for C compilation/link.
 
 ## Recent Changes (4.1.0)
 - **Ownership fix**: `Drop` now releases the owned value held by a variable
@@ -241,7 +246,7 @@ curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/
 curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --check
 
 # Specific versions (when release artifacts exist)
-curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --tag-compiler v4.1.0 --tag-kioto v2.4.9
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --tag-compiler v4.1.1 --tag-kioto v2.4.9
 ```
 
 ### Prerequisites

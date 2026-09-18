@@ -2,6 +2,17 @@
 
 All notable changes to Avenys will be documented in this file.
 
+## 4.1.1 — 2026-09-18
+
+### Fixed
+- **`[c]` user cflags are C-only flags**: `c_defs.cflags` (e.g. `-I...`
+  include paths forwarded by Owl from a project's `[c] include`) were also
+  passed to the `llc` invocations that lower Mire IR. `llc` rejects C driver
+  flags and exits immediately, killing the IR pipe (`Failed to stream LLVM IR
+  into llc: Broken pipe`). `cflags` now reach only `clang` (C compilation and
+  link) and project C object compilation; `llc` is driven solely by the
+  configured `--target`/`-mtriple`.
+
 ## 4.1.0 — 2026-09-17
 
 ### Fixed

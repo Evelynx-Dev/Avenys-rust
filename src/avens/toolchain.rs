@@ -98,9 +98,6 @@ pub(super) fn compile_binary_from_ir(
         if let Some(target) = &c_defs.target {
             compile.arg("--target").arg(target);
         }
-        for flag in &c_defs.cflags {
-            compile.arg(flag);
-        }
         let mut child = compile.spawn().map_err(|err| {
             MireError::new(ErrorKind::Runtime {
                 span: crate::error::Span::unknown(),
@@ -170,7 +167,6 @@ pub(super) fn compile_binary_from_ir(
             ir,
             &ir_object,
             c_defs.target.as_deref(),
-            &c_defs.cflags,
             opt_level,
             source_filename,
             true,
@@ -230,7 +226,6 @@ pub(super) fn compile_binary_from_ir(
         ir,
         &ir_object,
         c_defs.target.as_deref(),
-        &c_defs.cflags,
         opt_level,
         source_filename,
         true,
@@ -409,7 +404,6 @@ fn lower_ir_to_object(
     ir: &str,
     output: &Path,
     target: Option<&str>,
-    cflags: &[String],
     opt_level: OptLevel,
     source_filename: &str,
     position_independent: bool,
@@ -435,9 +429,6 @@ fn lower_ir_to_object(
     }
     if let Some(target) = target {
         command.arg("-mtriple").arg(target);
-    }
-    for flag in cflags {
-        command.arg(flag);
     }
     let mut child = command.spawn().map_err(|err| {
         MireError::runtime(format!("Failed to run llc: {err}"))
