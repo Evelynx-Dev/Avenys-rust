@@ -178,11 +178,13 @@ pub struct MireMacros {
 /// Controls how much of the Mire runtime is linked into the final binary.
 /// - `minimal`: only symbols actually referenced in the program are declared and linked.
 /// - `none`:  no Mire runtime at all; the program must provide its own panic handler
-///            and any PAL symbols it needs.  PAL declarations are still emitted when
-///            the program actually calls PAL functions (PAL is separate from the runtime).
+///   and any PAL symbols it needs.  PAL declarations are still emitted when
+///   the program actually calls PAL functions (PAL is separate from the runtime).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Default)]
 pub enum RuntimeTier {
     Full,
+    #[default]
     Minimal,
     None,
 }
@@ -234,11 +236,6 @@ impl<'de> serde::Deserialize<'de> for LibType {
     }
 }
 
-impl Default for RuntimeTier {
-    fn default() -> Self {
-        Self::Minimal
-    }
-}
 
 impl serde::Serialize for RuntimeTier {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>

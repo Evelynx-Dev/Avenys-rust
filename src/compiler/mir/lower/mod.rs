@@ -37,8 +37,12 @@ struct MirLower {
     filename: String,
 }
 
+// Family metric counter (u32: passed, u32: failed, u32: filtered,
+// Vec<String>: families with warnings, u64: peak RAM, u128: peak time,
+// f64: peak CPU). Flat record so clippy::type_complexity stays off.
+type RawStructMap = HashMap<String, (Option<String>, Vec<(String, DataType)>)>;
 fn extract_struct_types(program: &Program) -> HashMap<String, Vec<(String, DataType)>> {
-    let mut raw: HashMap<String, (Option<String>, Vec<(String, DataType)>)> = HashMap::new();
+    let mut raw: RawStructMap = HashMap::new();
     for stmt in &program.statements {
         if let Statement::Type {
             name,
@@ -61,7 +65,7 @@ fn extract_struct_types(program: &Program) -> HashMap<String, Vec<(String, DataT
     }
     fn flatten(
         name: &str,
-        raw: &HashMap<String, (Option<String>, Vec<(String, DataType)>)>,
+        raw: &RawStructMap,
         seen: &mut HashSet<String>,
     ) -> Vec<(String, DataType)> {
         if !seen.insert(name.to_string()) {
@@ -321,6 +325,12 @@ pub fn lower_program_with_filename(program: &Program, filename: &str) -> MirProg
             name: "rt_list_push_ptr".to_string(),
             lib_name: "c".to_string(),
             params: vec![DataType::Unknown, DataType::Unknown],
+            return_type: DataType::Unknown,
+        },
+        MirExternFunction {
+            name: "rt_list_push_scalar".to_string(),
+            lib_name: "c".to_string(),
+            params: vec![DataType::Unknown, DataType::I64, DataType::I64],
             return_type: DataType::Unknown,
         },
         MirExternFunction {

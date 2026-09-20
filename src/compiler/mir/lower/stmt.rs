@@ -215,9 +215,11 @@ impl MirLower {
                                     loc,
                                 );
                                 let last = self.current_block;
-                                self.func
-                                    .blocks[last]
-                                    .push(None, MirOp::Drop(MirValue::temp(loaded)), loc);
+                                self.func.blocks[last].push(
+                                    None,
+                                    MirOp::Drop(MirValue::temp(loaded)),
+                                    loc,
+                                );
                             }
                             let last = self.current_block;
                             self.func.blocks[last].push(
@@ -389,9 +391,7 @@ impl MirLower {
                 // `__do_while` name with two closures: (body statements) and
                 // (cond as a `return` expression). Lower it to real control
                 // flow instead of emitting an undefined external call.
-                if let Expression::Call {
-                    name, args, ..
-                } = expr
+                if let Expression::Call { name, args, .. } = expr
                     && name == "__do_while"
                     && args.len() == 2
                 {

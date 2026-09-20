@@ -137,6 +137,7 @@ pub(crate) fn build_command(cwd: &Path, args: &[String]) -> Result<i32, MireErro
     Ok(0)
 }
 
+#[allow(dead_code)]
 pub(crate) fn check_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
     if args.iter().any(|a| a == "--help") {
         build_help();
@@ -287,6 +288,7 @@ pub(crate) fn debug_command(cwd: &Path, args: &[String]) -> Result<i32, MireErro
 /// Usage: `mire --lsp [file] [--root <path>]`
 ///   - no file: project mode (resolve owl.toml root) — reserved for later.
 ///   - file given: focus mode — tokenize that single file only.
+#[allow(dead_code)]
 pub(crate) fn lsp_command(cwd: &Path, args: &[String]) -> Result<i32, MireError> {
     let mut file: Option<String> = None;
     let mut _root: Option<String> = None;

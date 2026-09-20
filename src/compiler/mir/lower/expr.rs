@@ -48,8 +48,7 @@ fn collect_concat_operands(
         right,
         ..
     } = expr
-    {
-        if operator == "+" {
+        && operator == "+" {
             let left_ty = extract_data_type(left);
             let right_ty = extract_data_type(right);
             if left_ty == DataType::Str && right_ty == DataType::Str {
@@ -59,7 +58,6 @@ fn collect_concat_operands(
                 return;
             }
         }
-    }
     // Not a string concat, add the expression as a single operand
     let value = lower.lower_expression(expr);
     if concat_operand_is_owned(expr) && matches!(value, MirValue::Temp(_)) {
@@ -158,10 +156,10 @@ impl MirLower {
             Expression::Literal { lit, .. } => {
                 let expr_ty = extract_data_type(expr);
                 // Special handling for None literal when target is Maybe[T]
-                if matches!(lit, Literal::None) && matches!(&expr_ty, DataType::Maybe { inner }) {
+                if matches!(lit, Literal::None) && matches!(&expr_ty, DataType::Maybe { inner: _ }) {
                     // Unboxed Maybe: { i1 tag, T value } with tag = 0
                     // Allocate struct (zero-initialized = {i1 0, T zero}), then load
-                    let inner_ty = match &expr_ty {
+                    let _inner_ty = match &expr_ty {
                         DataType::Maybe { inner } => *inner.clone(),
                         _ => DataType::Unknown,
                     };
@@ -256,9 +254,7 @@ impl MirLower {
                     collect_concat_operands(self, left, &mut operands, &mut to_free);
                     collect_concat_operands(self, right, &mut operands, &mut to_free);
                     let last = self.current_block;
-                    self.func
-                        .blocks[last]
-                        .push(Some(result), MirOp::Concat(operands), loc);
+                    self.func.blocks[last].push(Some(result), MirOp::Concat(operands), loc);
                     // `Concat` copies the operand bytes, so fresh operand
                     // allocations can be released immediately.
                     for operand in to_free {
@@ -460,8 +456,8 @@ impl MirLower {
                 let arg_val = self.lower_expression(&args[0]);
                 let arg_type = extract_data_type(&args[0]);
                 // Constant folding: if len() is called on a string literal, emit the length directly.
-                if let MirValue::Const(MirConst::Str(s)) = &arg_val {
-                    if matches!(
+                if let MirValue::Const(MirConst::Str(s)) = &arg_val
+                    && matches!(
                         arg_type,
                         DataType::Str | DataType::Ref { .. } | DataType::RefMut { .. }
                     ) {
@@ -474,7 +470,6 @@ impl MirLower {
                         );
                         return MirValue::temp(result);
                     }
-                }
                 let rt_name = match arg_type {
                     DataType::Str | DataType::Ref { .. } | DataType::RefMut { .. } => {
                         "rt_strings_len"
@@ -1227,13 +1222,21 @@ impl MirLower {
                         loc,
                     );
                     let init = self.new_temp();
+                    // Boolean vectors store 1 byte per element (bool is i1);
+                    // every other element type keeps the 8-byte slot layout
+                    // (i64/char via push_i64, pointers via push_ptr).
+                    let elem_size = if matches!(element_type.as_ref(), DataType::Bool) {
+                        1
+                    } else {
+                        8
+                    };
                     self.func.blocks[last].push(
                         Some(init),
                         MirOp::Call(
                             MirValue::Global("rt_list_create".to_string()),
                             vec![
                                 MirValue::Const(MirConst::Int(4)),
-                                MirValue::Const(MirConst::Int(8)),
+                                MirValue::Const(MirConst::Int(elem_size)),
                             ],
                             MirType {
                                 data_type: DataType::Unknown,
@@ -1249,6 +1252,7 @@ impl MirLower {
                     );
                     let push_fn = match element_type.as_ref() {
                         DataType::I64 | DataType::U64 | DataType::Char => "rt_list_push_i64",
+                        DataType::Bool => "rt_list_push_scalar",
                         _ => "rt_list_push_ptr",
                     };
                     for elem in elements {
@@ -1266,12 +1270,16 @@ impl MirLower {
                             loc,
                         );
                         let pushed = self.new_temp();
+                        let mut push_args = vec![MirValue::temp(loaded), elem_val];
+                        if push_fn == "rt_list_push_scalar" {
+                            push_args.push(MirValue::Const(MirConst::Int(elem_size)));
+                        }
                         let last = self.current_block;
                         self.func.blocks[last].push(
                             Some(pushed),
                             MirOp::Call(
                                 MirValue::Global(push_fn.to_string()),
-                                vec![MirValue::temp(loaded), elem_val],
+                                push_args,
                                 MirType {
                                     data_type: DataType::Unknown,
                                 },
@@ -1415,13 +1423,23 @@ impl MirLower {
                         || vt == &DataType::Bool
                         || vt == &DataType::I32
                         || vt == &DataType::U32;
-                    let set_fn = if is_scalar {
+                    let is_bool = vt == &DataType::Bool;
+                    let set_fn = if is_bool {
+                        "rt_dict_set_i64"
+                    } else if is_scalar {
                         "rt_dicts_set_i64"
                     } else {
                         "rt_dicts_set_with_kind"
                     };
-                    let mut call_args = vec![MirValue::temp(cur_dict), key_val, val_val];
-                    if !is_scalar {
+                    let mut call_args = vec![MirValue::temp(cur_dict), key_val.clone(), val_val];
+                    if is_bool {
+                        // Dict literal keys are always coerced to strings, so key
+                        // kind is MIRE_KIND_STR (3) and key_i64 is 0. value_kind
+                        // is MIRE_KIND_BOOL (2) → mire_kind_size = 1 → 1-byte slots.
+                        call_args.insert(1, MirValue::Const(MirConst::Int(3)));
+                        call_args.insert(2, MirValue::Const(MirConst::Int(data_type_to_kind(vt))));
+                        call_args.insert(3, MirValue::Const(MirConst::Int(0)));
+                    } else if !is_scalar {
                         call_args.push(MirValue::Const(MirConst::Int(data_type_to_kind(vt))));
                     }
                     let pushed = self.new_temp();
@@ -1462,7 +1480,7 @@ impl MirLower {
                 // Unboxed Maybe: { i1 tag, T value }
                 // tag = 1 for Some
                 let lowered_value = self.lower_expression(value);
-                let inner_ty = match data_type {
+                let _inner_ty = match data_type {
                     DataType::Maybe { inner } => *inner.clone(),
                     _ => DataType::Unknown,
                 };
@@ -1791,7 +1809,7 @@ impl MirLower {
             DataType::Maybe { inner } => *inner.clone(),
             _ => DataType::Unknown,
         };
-        let struct_ty = MirType {
+        let _struct_ty = MirType {
             data_type: DataType::Maybe {
                 inner: Box::new(inner_ty.clone()),
             },

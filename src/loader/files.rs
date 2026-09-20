@@ -4,7 +4,6 @@
 //! and managing the incremental cache for fast recompilation.
 
 use super::{ImportResolver, ResolvedFile};
-use crate::avens::derive::expand_derives_source;
 use crate::error::{MireError, Result};
 use crate::incremental::{
     CachedParsedFile, collect_statement_bindings, collect_statement_dependencies, source_hash,
@@ -37,7 +36,7 @@ pub(super) fn load_or_parse_file(
 ) -> Result<ResolvedFile> {
     let (source, for_hash) = if let Some(expanded) = expanded_source {
         // Read original for potential error context, but use expanded for everything
-        let original = read_source_file(path)?;
+        let _original = read_source_file(path)?;
         (expanded.clone(), expanded)
     } else {
         let src = read_source_file(path)?;

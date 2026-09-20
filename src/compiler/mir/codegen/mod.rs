@@ -2,7 +2,6 @@ use super::*;
 use crate::canonical_fn_name;
 use std::collections::{HashMap, HashSet};
 
-use self::builtins::pal_extern_decls;
 use self::expr::compile_inst;
 use self::resolve::resolve_typed;
 use self::types::llvm_type_str;

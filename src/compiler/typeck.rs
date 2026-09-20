@@ -225,12 +225,11 @@ impl TypeChecker {
     /// Loads the `[security]` configuration from the project's owl.toml.
     /// When the section is absent, returns None (open mode, backward compatible).
     fn load_security_config() -> Option<SecurityConfig> {
-        if let Ok(config_path) = std::env::var("MIRE_CONFIG") {
-            if let Ok(manifest) = crate::avens::load_config_file(std::path::Path::new(&config_path))
+        if let Ok(config_path) = std::env::var("MIRE_CONFIG")
+            && let Ok(manifest) = crate::avens::load_config_file(std::path::Path::new(&config_path))
             {
                 return manifest.security;
             }
-        }
         None
     }
 
@@ -310,11 +309,10 @@ impl TypeChecker {
                 }
                 Statement::Function {
                     name, attributes, ..
-                } => {
-                    if attributes.iter().any(|a| a.name == "macro!") {
+                }
+                    if attributes.iter().any(|a| a.name == "macro!") => {
                         self.macro_names.insert(name.clone());
                     }
-                }
                 _ => {}
             }
         }

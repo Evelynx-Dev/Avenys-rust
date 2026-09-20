@@ -857,7 +857,7 @@ pub(crate) fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
         }
         MirOp::ExtractValue(agg, val, indices) => {
             let (a, at) = resolve_typed(agg, ctx);
-            let (v, _) = resolve_typed(val, ctx);
+            let (_v, _) = resolve_typed(val, ctx);
             // indices is a vec of field indices
             let idx_str = indices
                 .iter()

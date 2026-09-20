@@ -67,7 +67,7 @@ pub(crate) fn parse_run_options(
 }
 
 pub(crate) fn parse_common_with_file(
-    cwd: &Path,
+    _cwd: &Path,
     args: &[String],
 ) -> Result<(CommonOptions, Option<String>), MireError> {
     let mut mode = BuildMode::Debug;

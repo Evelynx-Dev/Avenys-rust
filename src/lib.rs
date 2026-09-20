@@ -43,7 +43,6 @@ pub use parser::{MireValue, Program};
 /// Typeck: push.i64         ← function lookup tables
 ///         ↓ canonical_fn_name
 /// MIR:    push.i64         ← LLVM identifiers
-
 #[inline]
 pub fn canonical_fn_name(name: &str) -> String {
     name.replace("::", ".")

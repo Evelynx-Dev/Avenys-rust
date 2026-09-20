@@ -223,7 +223,7 @@ impl Parser {
                 // the NEXT line, so walk back over them) — anything else
                 // starting a new line is the attribute syntax and must be left
                 // for the statement loop.
-                let mut at_line = self.peek().line;
+                let at_line = self.peek().line;
                 let mut prev = self.pos.saturating_sub(1);
                 while prev > 0 && self.tokens[prev].ttype == TokenType::Newline {
                     prev -= 1;

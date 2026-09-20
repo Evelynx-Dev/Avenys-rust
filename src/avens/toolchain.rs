@@ -1,5 +1,6 @@
 use super::*;
 
+#[allow(dead_code)]
 pub(super) fn collect_c_files(
     dir: &std::path::Path,
     files: &mut Vec<String>,
@@ -477,6 +478,7 @@ fn add_clang_library_search_paths(linker: &mut Command) {
     }
 }
 
+#[allow(dead_code)]
 pub(super) fn llvm_version() -> Result<String> {
     let output = Command::new("llvm-config")
         .arg("--version")

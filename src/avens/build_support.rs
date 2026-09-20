@@ -754,7 +754,7 @@ pub(super) fn inject_macros(
         .collect();
 
     let mut inject_from = |macros: &MireMacros, root: &Path, _source_label: &str| {
-        for (_name, rel_path) in macros.entries.iter() {
+        for rel_path in macros.entries.values() {
             let Some(file) = resolve_macro_file(root, rel_path) else {
                 continue;
             };
@@ -779,13 +779,12 @@ pub(super) fn inject_macros(
                         name: fname,
                         attributes,
                         ..
-                    } => {
+                    }
                         if attributes.iter().any(|a| a.name == "macro!")
                             && existing_fns.insert(fname.clone())
-                        {
+                        => {
                             program.statements.push(stmt);
                         }
-                    }
                     _ => {}
                 }
             }
@@ -947,6 +946,7 @@ pub(crate) fn filter_pal_decls(
 /// Strip unused PAL and runtime declarations from the IR.
 /// This is used post-generation to remove dead declarations that were emitted
 /// before the dependency collector ran (e.g., from the old `pal_extern_decls()` call).
+#[allow(dead_code)]
 pub(super) fn strip_unused_decls(ir: &str, used: &UsedSymbols) -> String {
     ir.lines()
         .filter(|line| {

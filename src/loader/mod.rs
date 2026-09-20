@@ -168,7 +168,7 @@ impl<'a> ImportResolver<'a> {
         } else {
             None
         };
-        let mut parsed = load_or_parse_file(self, &canonical, expanded_source)?;
+        let parsed = load_or_parse_file(self, &canonical, expanded_source)?;
         self.current_file = Some(canonical.display().to_string());
         let imported_symbol_candidates = collect_program_dependency_candidates(&parsed.program);
         let mut expanded = Vec::new();

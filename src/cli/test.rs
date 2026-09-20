@@ -447,7 +447,7 @@ pub(crate) fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError
             let category = if use_key_cat {
                 key.clone()
             } else {
-            unit_category(root, &gd.join("program.mire"))
+                unit_category(root, &gd.join("program.mire"))
             };
             units.push(Unit {
                 category,
@@ -753,6 +753,8 @@ pub(crate) fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError
 /// Writes reproducible per-family and global metrics for the modular Mire
 /// suite. The files are deliberately overwritten on every invocation so a log
 /// never combines results from different compiler revisions or test runs.
+type FamilyMetrics = (u32, u32, u32, Vec<String>, u64, u128, f64);
+#[allow(clippy::too_many_arguments)]
 fn write_test_logs(
     cwd: &Path,
     results: &[(String, String, UnitStatus)],
@@ -821,7 +823,7 @@ fn write_test_logs(
 
     let mut families: std::collections::BTreeMap<
         String,
-        (u32, u32, u32, Vec<String>, u64, u128, f64),
+        FamilyMetrics,
     > = std::collections::BTreeMap::new();
     for (family, display, status) in results {
         let key = if family.is_empty() {
@@ -912,15 +914,14 @@ fn run_binary_with_metrics(path: &Path) -> std::io::Result<(std::process::Output
     let mut peak_rss_kb = 0u64;
     let mut peak_cpu_runtime_ns = 0u64;
     loop {
-        if let Ok(status) = fs::read_to_string(format!("/proc/{}/status", child_pid)) {
-            if let Some(rss) = status.lines().find_map(|line| {
+        if let Ok(status) = fs::read_to_string(format!("/proc/{}/status", child_pid))
+            && let Some(rss) = status.lines().find_map(|line| {
                 line.strip_prefix("VmRSS:")
                     .and_then(|value| value.split_whitespace().next())
                     .and_then(|value| value.parse::<u64>().ok())
             }) {
                 peak_rss_kb = peak_rss_kb.max(rss);
             }
-        }
         peak_cpu_runtime_ns = peak_cpu_runtime_ns.max(proc_cpu_runtime_ns(child_pid));
         if child.try_wait()?.is_some() {
             break;
@@ -1076,11 +1077,10 @@ pub(crate) fn read_test_roots(cwd: &Path) -> Vec<PathBuf> {
             } else if let Some((_key, val)) = parse_generic_kv(line) {
                 found.push(val);
             }
-        } else if in_section == "paths" {
-            if let Some(v) = kv_string(line, "tests") {
+        } else if in_section == "paths"
+            && let Some(v) = kv_string(line, "tests") {
                 found.push(v);
             }
-        }
     }
     if found.is_empty() {
         found.push("tests".to_string());

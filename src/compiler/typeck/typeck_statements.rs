@@ -104,14 +104,13 @@ impl TypeChecker {
             ));
         }
 
-        if let AssignmentTarget::Variable(name) = target {
-            if self.is_constant(name) {
+        if let AssignmentTarget::Variable(name) = target
+            && self.is_constant(name) {
                 return Err(type_error_at_span(
                     self.current_span,
                     format!("Cannot reassign constant '{}'", name),
                 ));
             }
-        }
 
         if !is_target_mutable {
             return Err(type_error_at_span(
@@ -669,14 +668,13 @@ impl TypeChecker {
             Vec::new()
         };
         for parent_field in &parent_fields {
-            if let Statement::Let { name: pf_name, .. } = parent_field {
-                if !fields.iter().any(|f| match f {
+            if let Statement::Let { name: pf_name, .. } = parent_field
+                && !fields.iter().any(|f| match f {
                     Statement::Let { name, .. } => name == pf_name,
                     _ => false,
                 }) {
                     fields.push(parent_field.clone());
                 }
-            }
         }
         self.check_container_statements(fields)
     }

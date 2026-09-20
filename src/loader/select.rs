@@ -139,7 +139,13 @@ pub(super) fn select_imported_statements(
 /// A module-level constant (`cons`). These are retained alongside any module
 /// selection so exported functions that read them always resolve.
 fn is_module_constant(statement: &Statement) -> bool {
-    matches!(statement, Statement::Let { is_constant: true, .. })
+    matches!(
+        statement,
+        Statement::Let {
+            is_constant: true,
+            ..
+        }
+    )
 }
 
 /// Resolve transitive dependencies of a single statement, adding any

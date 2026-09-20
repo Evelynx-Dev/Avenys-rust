@@ -4,11 +4,10 @@ use crate::error::type_error_at_span;
 impl TypeChecker {
     fn all_fields<'a>(&'a self, class_sig: &'a ClassSig) -> Vec<&'a ClassFieldSig> {
         let mut fields: Vec<&ClassFieldSig> = Vec::new();
-        if let Some(parent_name) = &class_sig.parent {
-            if let Some(parent_sig) = self.classes.get(parent_name) {
+        if let Some(parent_name) = &class_sig.parent
+            && let Some(parent_sig) = self.classes.get(parent_name) {
                 fields.extend(self.all_fields(parent_sig));
             }
-        }
         for child_field in &class_sig.fields {
             if !fields.iter().any(|f| f.name == child_field.name) {
                 fields.push(child_field);
@@ -347,17 +346,14 @@ impl TypeChecker {
         if concrete_type_args.is_empty() {
             return HashMap::new();
         }
-        if let Some(class_sig) = self.classes.get(base_name) {
-            if !class_sig.type_params.is_empty()
+        if let Some(class_sig) = self.classes.get(base_name)
+            && !class_sig.type_params.is_empty()
                 && class_sig.type_params.len() == concrete_type_args.len()
-            {
-                if let Ok(b) =
+                && let Ok(b) =
                     self.bindings_for_nominal_type_args(&class_sig.type_params, &concrete_type_args)
                 {
                     return b;
                 }
-            }
-        }
         HashMap::new()
     }
 
@@ -376,8 +372,8 @@ impl TypeChecker {
                 continue;
             }
             for bound in bounds {
-                if let Some(trait_sig) = self.traits.get(bound) {
-                    if let Some(method) = trait_sig.methods.iter().find(|m| m.name == method_name) {
+                if let Some(trait_sig) = self.traits.get(bound)
+                    && let Some(method) = trait_sig.methods.iter().find(|m| m.name == method_name) {
                         if found_trait.is_some() {
                             return Err(type_error_at_span(
                                 self.current_span,
@@ -390,7 +386,6 @@ impl TypeChecker {
                         found_trait = Some(bound.clone());
                         found_method = Some(method.clone());
                     }
-                }
             }
         }
 

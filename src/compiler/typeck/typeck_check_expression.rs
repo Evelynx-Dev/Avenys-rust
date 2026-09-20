@@ -550,8 +550,8 @@ impl TypeChecker {
                     nominal_type_args_from_name
                 };
                 if let Some(class_sig) = self.classes.get(base_name).cloned() {
-                    if nominal_type_args.is_empty() && !class_sig.type_params.is_empty() {
-                        if let Some(ref impl_self_name) = self.impl_self_name {
+                    if nominal_type_args.is_empty() && !class_sig.type_params.is_empty()
+                        && let Some(ref impl_self_name) = self.impl_self_name {
                             let (impl_base, _) = Self::split_nominal_type_args(impl_self_name);
                             if impl_base == base_name {
                                 nominal_type_args = self
@@ -561,7 +561,6 @@ impl TypeChecker {
                                     .collect();
                             }
                         }
-                    }
                     let bindings = self.bindings_for_nominal_type_args(
                         &class_sig.type_params,
                         &nominal_type_args,

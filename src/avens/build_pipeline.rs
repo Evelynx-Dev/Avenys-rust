@@ -760,7 +760,10 @@ fn compile_file_inner(
         };
         let has_pal_objects = c_source_files.iter().any(|f| f.contains("pal/"));
         let needs_sodium = has_pal_objects
-            || used.runtime.iter().any(|symbol| symbol.starts_with("rt_crypto_"));
+            || used
+                .runtime
+                .iter()
+                .any(|symbol| symbol.starts_with("rt_crypto_"));
         compile_binary_from_ir(
             &final_ir,
             &c_objects,

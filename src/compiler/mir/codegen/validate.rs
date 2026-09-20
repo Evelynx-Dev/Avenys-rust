@@ -20,14 +20,13 @@ const SPECIAL_BARE_CALLS: &[&str] = &[
 fn pal_decl_names() -> HashSet<String> {
     let mut names = HashSet::new();
     for decl in pal_extern_decls() {
-        if let Some(rest) = decl.strip_prefix("declare ") {
-            if let Some(start) = rest.find('@') {
+        if let Some(rest) = decl.strip_prefix("declare ")
+            && let Some(start) = rest.find('@') {
                 let after = &rest[start + 1..];
                 if let Some(end) = after.find('(') {
                     names.insert(after[..end].trim().to_string());
                 }
             }
-        }
     }
     names
 }

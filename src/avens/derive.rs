@@ -40,7 +40,7 @@ pub fn expand_derives_source(source: &str) -> String {
         Err(_) => return source.to_string(), // On parse error, return original
     };
 
-    let (nominal, enums, owners) = collect_known_type_names(&program);
+    let (_nominal, _enums, _owners) = collect_known_type_names(&program);
 
     // Helper: convert (line, column) 1-indexed to byte index in source
     let line_to_byte = |line: usize, column: usize| -> usize {
@@ -70,7 +70,7 @@ pub fn expand_derives_source(source: &str) -> String {
                 attributes.iter().find(|a| a.name == "derive").map(|attr| {
                     attr.args
                         .iter()
-                        .filter_map(|arg| Some(arg.value.as_str()))
+                        .map(|arg| arg.value.as_str())
                         .map(|v| v.trim())
                         .filter(|v| !v.is_empty())
                         .collect()

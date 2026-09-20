@@ -33,3 +33,5 @@ dbg = "../mire/core/macros/dbg.mire"
 trace_i64 = "../mire/core/macros/checks.mire"
 panic = "../mire/core/macros/panic.mire"
 unreachable = "../mire/core/macros/panic.mire"
+["owl@lock"]
+version = "3"

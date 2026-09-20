@@ -236,16 +236,13 @@ fn wait_for_init_lock(lock_dir: &Path) {
         if !lock_dir.exists() {
             return;
         }
-        if let Ok(meta) = fs::metadata(lock_dir) {
-            if let Ok(mtime) = meta.modified() {
-                if let Ok(age) = mtime.elapsed() {
-                    if age > std::time::Duration::from_secs(INIT_LOCK_STALE_SECS) {
+        if let Ok(meta) = fs::metadata(lock_dir)
+            && let Ok(mtime) = meta.modified()
+                && let Ok(age) = mtime.elapsed()
+                    && age > std::time::Duration::from_secs(INIT_LOCK_STALE_SECS) {
                         let _ = fs::remove_dir(lock_dir);
                         return;
                     }
-                }
-            }
-        }
         if std::time::Instant::now() >= stale_cutoff {
             let _ = fs::remove_dir(lock_dir);
             return;
@@ -1503,7 +1500,7 @@ mod tests {
         fs::write(&stale, "{}").unwrap();
         let old = fs::File::options().write(true).open(&stale).unwrap();
         let ten_min_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(600);
-        old.set_modified(ten_min_ago.into()).unwrap();
+        old.set_modified(ten_min_ago).unwrap();
         drop(old);
 
         prune_stale_wal(&dir);
