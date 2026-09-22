@@ -1,4 +1,4 @@
-# PAL v4 — Platform Abstraction Layer
+# PAL v4 - Platform Abstraction Layer
 
 > Capability-based host interaction with tests and examples.
 
@@ -105,7 +105,7 @@ char *pal_fs_read_file(const char *path);    // [PAL-OWNED]
 
 - **Symlinks are NEVER followed** during capability operations
 - Trailing symlink is unlinked, not entered
-- Intermediate symlinks in path → `PAL_ERR_PERMISSION` (ELOOP)
+- Intermediate symlinks in path -> `PAL_ERR_PERMISSION` (ELOOP)
 - Symlinks pointing outside root are valid state
 
 ---
@@ -201,10 +201,10 @@ bool pal_env_unset(const char *name);
 | `[WRITE-INTO]` | Caller provides buffer; function writes into it |
 
 Examples:
-- `pal_fs_read_file()` → `[PAL-OWNED]`
-- `pal_proc_capture_output()` → `[PAL-OWNED]`
-- `pal_env_get()` → `[BORROWED]`
-- `pal_channel_recv()` → `[WRITE-INTO]`
+- `pal_fs_read_file()` -> `[PAL-OWNED]`
+- `pal_proc_capture_output()` -> `[PAL-OWNED]`
+- `pal_env_get()` -> `[BORROWED]`
+- `pal_channel_recv()` -> `[WRITE-INTO]`
 
 ---
 
@@ -241,14 +241,14 @@ cargo test --release --test pal_conformance
 
 ### Test Categories
 
-1. **fs** — `pal_root_open`, `pal_root_remove`, `pal_dir_open`, `pal_dir_next_name`, `pal_file_open`, `pal_file_read`, `pal_file_write`
-2. **proc** — `pal_proc_create`, `pal_proc_wait`, `pal_proc_kill`
-3. **channel** — `pal_channel_create`, `pal_channel_send`, `pal_channel_recv`, `pal_channel_close`
-4. **crypto** — `pal_crypto_sha256`, `pal_crypto_sha512`, `pal_crypto_ed25519_keypair`, `pal_crypto_ed25519_sign`, `pal_crypto_ed25519_verify`, `pal_crypto_random_bytes`
-5. **net** — `pal_socket_connect`, `pal_listener_bind`, `pal_listener_accept`
-6. **time** — `pal_time_now_ms`, `pal_time_now_ns`, `pal_time_sleep_ms`
-7. **env** — `pal_env_get`, `pal_env_cwd`, `pal_env_set`, `pal_env_unset`
-8. **handle safety** — validate/release/reuse of handle table slots
+1. **fs** - `pal_root_open`, `pal_root_remove`, `pal_dir_open`, `pal_dir_next_name`, `pal_file_open`, `pal_file_read`, `pal_file_write`
+2. **proc** - `pal_proc_create`, `pal_proc_wait`, `pal_proc_kill`
+3. **channel** - `pal_channel_create`, `pal_channel_send`, `pal_channel_recv`, `pal_channel_close`
+4. **crypto** - `pal_crypto_sha256`, `pal_crypto_sha512`, `pal_crypto_ed25519_keypair`, `pal_crypto_ed25519_sign`, `pal_crypto_ed25519_verify`, `pal_crypto_random_bytes`
+5. **net** - `pal_socket_connect`, `pal_listener_bind`, `pal_listener_accept`
+6. **time** - `pal_time_now_ms`, `pal_time_now_ns`, `pal_time_sleep_ms`
+7. **env** - `pal_env_get`, `pal_env_cwd`, `pal_env_set`, `pal_env_unset`
+8. **handle safety** - validate/release/reuse of handle table slots
 
 ---
 

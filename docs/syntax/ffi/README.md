@@ -94,10 +94,10 @@ pub fn remove: (path :&str) :bool {
 
 ## How It Works
 
-1. **Parser**: `extern fn` → `Statement::ExternFunction` with `lib_name`
-2. **MIR Lowering**: `ExternFunction` → `MirExternFunction`
-3. **Codegen**: `MirExternFunction` → LLVM `declare`
-3. **Linking**: `toolchain.rs` adds `-L/path -lname` for linker
+1. **Parser**: `extern fn` -> `Statement::ExternFunction` with `lib_name`
+2. **MIR Lowering**: `ExternFunction` -> `MirExternFunction`
+3. **Codegen**: `MirExternFunction` -> LLVM `declare`
+4. **Linking**: `toolchain.rs` adds `-L/path -lname` for linker
 
 ## Limitations
 
@@ -144,5 +144,5 @@ pub fn add: (a :i64, b :i64) :i64 {
 
 - FFI is **unsafe** by nature
 - Mire cannot verify C signatures
-- Wrong declarations → undefined behavior
+- Wrong declarations -> undefined behavior
 - Wrap in safe Mire functions (kioto pattern)

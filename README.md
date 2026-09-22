@@ -4,7 +4,7 @@
 
 Avenys is a statically typed programming language designed for clarity and control.
 It gives you structs, enums, generics, closures, pattern matching, and a borrow
-checker that tracks ownership at compile time — no garbage collector, no runtime
+checker that tracks ownership at compile time - no garbage collector, no runtime
 overhead beyond what you ask for.
 
 The compiler, Avenys, translates Mire source through a multi-stage pipeline into
@@ -19,14 +19,14 @@ strings, collections, math, filesystem, processes, and more.
 
 | Task | Use this | NOT this |
 |------|----------|----------|
-| Create project | `owl new myproject` | — |
+| Create project | `owl new myproject` | - |
 | Build | `owl build` | `mire build` |
 | Run | `owl run` | `mire run` |
 | Test | `owl test` | `mire test` |
 | Check | `owl check` | `mire check` |
 | Debug | `owl debug` | `mire debug` |
-| Dependencies | `owl load <name>` | — |
-| Package install | `owl install <name>` | — |
+| Dependencies | `owl load <name>` | - |
+| Package install | `owl install <name>` | - |
 
 
 ## Recent Changes (4.1.1)
@@ -109,10 +109,13 @@ The managed configuration uses `runtime = "minimal"`, target
 `x86_64-unknown-linux-gnu`, and `artifact = "bin"` unless Owl or an explicit
 flag selects another value. The old `--libt` spelling is intentionally removed.
 
-On older Linux distributions, run `install/install.sh --check` before
-installing a release binary. If the audit reports an incompatible glibc or
-missing native library, use `owl/scripts/install.sh --yes` to compile Avenys
-against the target distribution instead of replacing system libraries.
+Since v4.2.0 the installer (`install/install.sh`) detects the host
+architecture, pulls per-architecture release archives from the GitHub release,
+and supports `--check` (read-only audit), `--build-from-source` (compile the
+compiler against the target distribution instead of replacing system
+libraries), and `--docker` (run inside the provided toolchain container). Run
+`install/install.sh --check` before installing a release binary to confirm the
+glibc floor (2.39) and native libraries are satisfied.
 
 ```bash
 mire build --config .mire-config.toml code/main.mire
@@ -186,19 +189,19 @@ crate-type = "cdylib"   # or "staticlib", "bin"
 ```
 
 The install script supports modular installation of the Mire toolchain components:
-- **owl** — package manager
-- **mire** — compiler (Avenys)
-- **kioto** — standard library
+- **owl** - package manager
+- **mire** - compiler (Avenys)
+- **kioto** - standard library
 
 All install methods use the same script from `install/install.sh`.
 
-### Linux (x86_64)
+### Linux (x86_64, aarch64, riscv64)
 
 #### Option 1: Quick full install (recommended)
 
 ```bash
 # Installs: owl + kioto + mire compiler
-curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --compiler
 ```
 
 #### Option 2: Auditable install
@@ -207,13 +210,77 @@ curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/
 # Review the script before running
 curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh -o install.sh
 less install.sh
-chmod +x install.sh && ./install.sh
+chmod +x install.sh && ./install.sh --compiler
 ```
 
 #### Option 3: User-local install (no sudo)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --prefix ~/.local
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --prefix ~/.local --compiler
+```
+
+### Architecture detection and selection
+
+The installer picks a release triple from `uname -m` automatically. Override
+it with `--arch <triple>` (or the `MIRE_ARCH` environment variable). The
+supported triples are printed at the prompt, and an unsupported triple aborts
+before anything is downloaded or installed:
+
+```bash
+# Force a concrete release architecture
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh \
+  | sh -s -- --compiler --arch aarch64-unknown-linux-gnu
+```
+
+The host toolchain always runs the native toolchain; `--arch` only selects
+which release archive to install.
+
+### Audit before installing (does not touch the system)
+
+`--check` validates the host against the release requirements and prints an
+audit report, then exits 0 when everything is present and 1 otherwise
+(never installs packages, never downloads):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --check
+```
+
+```text
+  audit report
+  ------------
+  system : Ubuntu 24.04.4 LTS
+  libc   : glibc 2.39
+  arch   : x86_64-unknown-linux-gnu (detected)
+  pkg mgr: apt
+  llvm   : 18 (need >= 18 for compiles)
+
+  prerequisites check complete - all present.
+```
+
+### Build the compiler from source
+
+When a release binary does not match the host (older glibc, different libc
+variant, custom LLVM, or simply no prebuilt archive for the architecture),
+compile the compiler against the host instead:
+
+```bash
+# Fetches avenys-rust @ main, ensures rustc >= 1.85, builds with the local
+# LLVM (>= 18), installs the compiler. owl/kioto still come from the release.
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh \
+  | sh -s -- --build-from-source
+# SOURCE_URL / SOURCE_REF override the source location and ref; MIRE_RUSTUP_URL
+# overrides the rustup installer URL.
+```
+
+### Docker fallback
+
+If the toolchain container is available for the host architecture, install
+inside it instead of the host:
+
+```bash
+# Pulls mire-lang/toolchain:<arch> and runs the install inside the container.
+# Set MIRE_DOCKER_IMAGE to select another image.
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --docker
 ```
 
 ### Install options
@@ -234,20 +301,31 @@ curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/
 # Owl only (package manager, no kioto, no compiler)
 curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --owl-only
 
-# Auditable install (review script first)
-curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh -o install.sh
-less install.sh
-chmod +x install.sh && ./install.sh --compiler
-
-# User-local install (no sudo, installs to ~/.local/bin)
-curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --prefix ~/.local --compiler
-
-# Check prerequisites without changing the host
-curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --check
+# Non-interactive
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --compiler --yes
 
 # Specific versions (when release artifacts exist)
-curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --tag-compiler v4.1.1 --tag-kioto v2.4.9
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh \
+  | sh -s -- --tag-compiler v4.2.0 --tag-kioto v2.4.9
+
+# Skip shell profile PATH modification
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/install.sh | sh -s -- --compiler --no-profile
 ```
+
+### Release archives
+
+Releases publish per-architecture archives named by release triple, with a
+legacy fallback name for x86_64:
+
+| Component | Canonical (per-release) | Legacy fallback |
+| --- | --- | --- |
+| Compiler | `mire-compiler-<triple>.tar.gz` | `mire-compiler-linux-x86_64.tar.gz` |
+| Owl | `owl-<triple>.tar.gz` | `owl-linux-x86_64.tar.gz` |
+
+`--arch` selects a canonical archive for that triple only. When no `--arch` is
+given on x86_64, the installer tries the canonical x86_64 name first, then the
+legacy name. Owl bundles its runtime `libsodium.so` under `owl/lib/`, which the
+installer copies to `<prefix>/lib/mire/`.
 
 ### Prerequisites
 
@@ -343,25 +421,25 @@ Every Mire program passes through the following pipeline:
 
 ```
 Source (.mire)
-  │
-  ▼
-Lexer ──► Parser ──► Type checker ──► Borrow checker
-  │
-  ▼
-MIR lowering ──► MIR optimization (to fixed point)
-  │
-  ▼
-LLVM IR generation ──► opt (O0-O3) ──► LLVM object/archive tools ──► artifact
+  |
+  v
+Lexer -> Parser -> Type checker -> Borrow checker
+  |
+  v
+MIR lowering -> MIR optimization (to fixed point)
+  |
+  v
+LLVM IR generation -> opt (O0-O3) -> LLVM object/archive tools -> artifact
 ```
 
-**Stage 1 — Frontend:** The lexer tokenizes UTF-8 source, the parser builds an AST. The type checker infers and verifies every expression with real fixed-width types (i8..i128, u8..u128, f32/f64, bool, char, str). The borrow checker enforces ownership: no use-after-move, no mutation during shared borrows, no dangling references.
+**Stage 1 - Frontend:** The lexer tokenizes UTF-8 source, the parser builds an AST. The type checker infers and verifies every expression with real fixed-width types (i8..i128, u8..u128, f32/f64, bool, char, str). The borrow checker enforces ownership: no use-after-move, no mutation during shared borrows, no dangling references.
 
-**Stage 2 — MIR:** The AST lowers to a Mid-level Intermediate Representation. Optimization passes run to fixed point: constant folding, copy propagation, dead code elimination, branch folding, block merging, inlining, strength reduction, and more. New in v3.24+: division/remainder inlining (`sdiv`/`srem`), bounds-check inlining, string concat flattening (`MirOp::Concat`), and `MirOp::Drop` for explicit resource management.
+**Stage 2 - MIR:** The AST lowers to a Mid-level Intermediate Representation. Optimization passes run to fixed point: constant folding, copy propagation, dead code elimination, branch folding, block merging, inlining, strength reduction, and more. New in v3.24+: division/remainder inlining (`sdiv`/`srem`), bounds-check inlining, string concat flattening (`MirOp::Concat`), and `MirOp::Drop` for explicit resource management.
 
-**Stage 3 — Codegen:** MIR translates to LLVM IR text. The compiler invokes LLVM's `opt` for further optimization (O1-O3/Os/Oz), then `llc` lowers Mire IR to objects. Static Mire libraries use `llvm-ar`; PAL/runtime C objects remain compiled by the configured C compiler. Clang is retained only as the target-aware CRT/libc/native-library link driver for executables. Runtime tier controls what's linked:
+**Stage 3 - Codegen:** MIR translates to LLVM IR text. The compiler invokes LLVM's `opt` for further optimization (O1-O3/Os/Oz), then `llc` lowers Mire IR to objects. Static Mire libraries use `llvm-ar`; PAL/runtime C objects remain compiled by the configured C compiler. Clang is retained only as the target-aware CRT/libc/native-library link driver for executables. Runtime tier controls what's linked:
 - `Full` (default): all runtime + PAL symbols
-- `Minimal`: demand-driven — only used `rt_*`/`pal_*` symbols
-- `None`: freestanding — no runtime/PAL, user provides `_start`
+- `Minimal`: demand-driven - only used `rt_*`/`pal_*` symbols
+- `None`: freestanding - no runtime/PAL, user provides `_start`
 
 For `wasm32-wasip1`, Avenys uses the WASI SDK when `WASI_SDK_PATH` or
 `WASI_SYSROOT` is set. `wasm32-unknown-unknown` is a no-libc freestanding
@@ -374,7 +452,7 @@ are run with `MIRE_WASM_DOCKER_TESTS=1 tests/wasm_docker.sh`.
 
 ## The Mire Language
 
-[Full syntax reference →](./SYNTAX.md)
+[Full syntax reference ->](./SYNTAX.md)
 
 ---
 
@@ -423,7 +501,7 @@ pub fn main: () {
 }
 ```
 
-[Full syntax reference →](./SYNTAX.md)
+[Full syntax reference ->](./SYNTAX.md)
 
 ---
 
@@ -470,7 +548,7 @@ Kioto lives at `~/.owl/libs/kioto/` and provides:
 
 `fs::remove` removes a single entry (file, symlink, or empty dir) without ever
 following symlinks; `fs::remove_all` recursively removes a tree (still
-symlink-safe — external targets are never entered). On failure,
+symlink-safe - external targets are never entered). On failure,
 `fs::last_error()` returns the PAL error code (`11` = directory not empty).
 See `kioto/README.md` for examples.
 
@@ -504,18 +582,18 @@ Two new error codes enforce correct module call syntax:
 | **E0026** | Calling `load!` modules without `use!` | Wrap: `use! math::add(1, 2)` |
 
 ```mire
-// Package load (owl.toml dependency) — direct calls
+// Package load (owl.toml dependency) - direct calls
 load mire::str
 pub fn main: () {
-  set x = str::from_i64(42)  // ✓ direct call
-  // set x = use! str::from_i64(42)  // ✗ E0025
+  set x = str::from_i64(42)  // OK direct call
+  // set x = use! str::from_i64(42)  // E0025 forbidden
 }
 
-// Local load! — mandatory use!
+// Local load! - mandatory use!
 load! /math
 pub fn main: () {
-  set x = use! math::add(1, 2)  // ✓ mandatory use!
-  // set x = math::add(1, 2)  // ✗ E0026
+  set x = use! math::add(1, 2)  // OK mandatory use!
+  // set x = math::add(1, 2)  // E0026 rejected
 }
 ```
 
@@ -530,7 +608,7 @@ pub fn main: () {
 - Docker tests: `MIRE_WASM_DOCKER_TESTS=1 tests/wasm_docker.sh`
 
 ### Minimal runtime strings
-`strings_minimal.c` — POSIX-free string operations (no `clock_gettime`/`clock`)
+`strings_minimal.c` - POSIX-free string operations (no `clock_gettime`/`clock`)
 
 ---
 
@@ -555,12 +633,12 @@ owl debug [FILE] [--tokens] [--ast] [--ir] [--run]
 ```
 
 Warnings are **off by default**. Enable with:
-- `--show-warn` — show all warnings (summary)
-- `--position` — show per-file warning locations
-- `-W <code>` — promote a specific warning to error (e.g. `-W W0001`)
-- `--deny <code>` — deny a specific warning code
-- `--warnings-as-errors` — deny all default warnings (W0001–W0005, W0034, W0039)
-- `--no-warn <category>` — suppress warnings by category (e.g. `--no-warn Unused`)
+- `--show-warn` - show all warnings (summary)
+- `--position` - show per-file warning locations
+- `-W <code>` - promote a specific warning to error (e.g. `-W W0001`)
+- `--deny <code>` - deny a specific warning code
+- `--warnings-as-errors` - deny all default warnings (W0001-W0005, W0034, W0039)
+- `--no-warn <category>` - suppress warnings by category (e.g. `--no-warn Unused`)
 
 ---
 
@@ -629,8 +707,8 @@ For the full modularized documentation, see [docs/README.md](docs/README.md).
 ## ABI Verification
 
 The PAL ABI v4 is validated through:
-- `cargo test --release --test abi_consistency` — 8/8 pass
-- `cargo test --release --test pal_conformance` — 8/8 pass
+- `cargo test --release --test abi_consistency` - 8/8 pass
+- `cargo test --release --test pal_conformance` - 8/8 pass
 - Symbol count: 126 symbols (128 compiler-emitted minus 2 struct-return)
 - All documented symbols match compiler emission and C implementation
 

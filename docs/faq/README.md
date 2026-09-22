@@ -40,7 +40,7 @@ owl run
 
 Check that all dependencies are in `--lib-dir` or `owl.toml [dependencies]`. Common causes:
 - Missing `load` statements in source
-- Stale `bin/.cache` — run `rm -rf bin/.cache`
+- Stale `bin/.cache` - run `rm -rf bin/.cache`
 - Incompatible PAL ABI version
 
 ### What does "use of undefined value '@foo'" mean?
@@ -77,7 +77,7 @@ Disables the incremental compilation cache. Useful when:
 
 ### How do I print a value?
 
-Use `dasu(value)` — there is no `println` in Mire.
+Use `dasu(value)` - there is no `println` in Mire.
 
 ### How do I define a struct?
 
@@ -155,14 +155,14 @@ Use `mire debug --ir` to inspect memory accesses in the IR.
 ### How do I use Owl?
 
 Owl is the package manager for Mire projects:
-- `owl new` — create project
-- `owl build` — build
-- `owl run` — build and run
-- `owl test` — run tests
-- `owl load` — load from registry
-- `owl install` — install package
-- `owl checkup` — check and repair
-- `owl gc` — garbage collect unused packages
+- `owl new` - create project
+- `owl build` - build
+- `owl run` - build and run
+- `owl test` - run tests
+- `owl load` - load from registry
+- `owl install` - install package
+- `owl checkup` - check and repair
+- `owl gc` - garbage collect unused packages
 
 ### How do I manage dependencies?
 
@@ -176,7 +176,7 @@ Use `load kioto` to import. For nested modules: `load mire::vec`.
 
 ### How do I use the incremental cache?
 
-The cache is automatic — it lives in `bin/.cache`. To disable: `mire build --no-analysis-cache`. To clear: `rm -rf bin/.cache`.
+The cache is automatic - it lives in `bin/.cache`. To disable: `mire build --no-analysis-cache`. To clear: `rm -rf bin/.cache`.
 
 ---
 

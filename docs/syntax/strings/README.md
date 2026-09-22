@@ -97,8 +97,8 @@ s.len()
 s + " world"           // strings::concat(s, " world")
 ```
 
-- Parser normalizes `s.method()` → `strings::method(s)`
-- Nested namespaces: `s.starts::with("he")` → `strings::starts::with(s, "he")`
+- Parser normalizes `s.method()` -> `strings::method(s)`
+- Nested namespaces: `s.starts::with("he")` -> `strings::starts::with(s, "he")`
 - Overloads resolved by receiver type
 
 ## Concatenation
@@ -111,8 +111,8 @@ set c = strings::concat(a, " ", b)
 ```
 
 - `+` operator for string concatenation
-- Chained: `a + b + c` → single `rt_string_concat_n` call
-- Compile-time constant folding: `"a" + "b"` → `"ab"`
+- Chained: `a + b + c` -> single `rt_string_concat_n` call
+- Compile-time constant folding: `"a" + "b"` -> `"ab"`
 
 ## Interpolation (dasu)
 

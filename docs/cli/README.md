@@ -1,4 +1,4 @@
-# CLI — Compiler Command-Line Interface
+# CLI - Compiler Command-Line Interface
 
 > Avenys compiler commands, flags, and usage.
 

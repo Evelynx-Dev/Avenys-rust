@@ -2,7 +2,7 @@
 
 All notable changes to Avenys will be documented in this file.
 
-## 4.1.1 — 2026-09-18
+## 4.1.1 - 2026-09-18
 
 ### Fixed
 - **`[c]` user cflags are C-only flags**: `c_defs.cflags` (e.g. `-I...`
@@ -13,7 +13,7 @@ All notable changes to Avenys will be documented in this file.
   link) and project C object compilation; `llc` is driven solely by the
   configured `--target`/`-mtriple`.
 
-## 4.1.0 — 2026-09-17
+## 4.1.0 - 2026-09-17
 
 ### Fixed
 - **Ownership / memory leak (runtime)**: the `Drop` of a variable now loads the
@@ -27,8 +27,8 @@ All notable changes to Avenys will be documented in this file.
   the original variable is reassigned or dropped.
 - **Concat operand release**: `rt_string_concat` copies its operands, so fresh
   call-result operands of a string `+` are released after the concatenation.
-- **Range arity**: `range`/`to` dispatches by argument count: 1 arg →
-  `rt_math_range_i64`, 2 args → `rt_math_range_between_i64`, 3 args →
+- **Range arity**: `range`/`to` dispatches by argument count: 1 arg ->
+  `rt_math_range_i64`, 2 args -> `rt_math_range_between_i64`, 3 args ->
   `rt_math_range_step_i64`. LLVM declarations added.
 - **Void return codegen**: functions and `Ret(None)` now emit `ret void` for
   `()` functions instead of `ret null`-style defaults.

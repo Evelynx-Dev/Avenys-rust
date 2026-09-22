@@ -16,10 +16,10 @@
 ```mire
 set a = 10 / 3   // 3 (inline sdiv with zero check)
 set b = 10 % 3   // 1 (inline srem with zero check)
-// Division by zero → panic via rt_panic_loc
+// Division by zero -> panic via rt_panic_loc
 ```
 
-##// Float Division
+## Float Division
 
 ```mire
 set a = 10.0 / 3.0   // 3.333... (native fdiv)

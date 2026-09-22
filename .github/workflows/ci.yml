@@ -149,10 +149,36 @@ jobs:
           # the sibling checkout so `load kioto` resolves in CI.
           sed -i 's|"/home/Evelyn/.owl/libs/kioto"|"../kioto"|' owl-src/owl.toml
 
+      - name: Generate avenys config for the owl build
+        run: |
+          cat > owl-src/native/mire-config.toml <<'EOF'
+          [project]
+          name = "owl"
+          version = "1.1.1"
+          entry = "code/main.mire"
+
+          [build]
+          profile = "release"
+          opt-level = 3
+          artifact = "bin"
+          runtime = "minimal"
+          target = "x86_64-unknown-linux-gnu"
+
+          [paths]
+          bin = "${{ github.workspace }}/owl-src/bin"
+          cache = "/tmp/owl-archive-cache"
+
+          [cfg]
+          libs = ["archive"]
+          sources = ["native/archive.c"]
+          link-dirs = []
+          cflags = ["-Wl,--disable-new-dtags", "-Wl,-rpath,$ORIGIN/../lib/mire"]
+          EOF
+
       - name: Build owl
         working-directory: owl-src
         run: |
-          mire build code/main.mire --release -O3 --no-analysis-cache
+          mire build code/main.mire --release -O3 --no-analysis-cache --config native/mire-config.toml
 
       - name: Test owl
         working-directory: owl-src

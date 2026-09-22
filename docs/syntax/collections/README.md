@@ -44,7 +44,7 @@ v.contains(2)          // vec::contains(v, 2)
 v.filter((x) => x > 2) // vec::filter(v, ...)
 ```
 
-- Parser normalizes `v.method()` → `vec::method(v)`
+- Parser normalizes `v.method()` -> `vec::method(v)`
 - Overloads resolved by receiver type
 
 ## Maps (`map[K V]`)
@@ -101,7 +101,7 @@ arr.len()               // Returns N (compile-time constant)
 // Note: len() on array returns 1 (size of array as value), not N
 ```
 
-- Length part of type: `arr[i64 5]` ≠ `arr[i64 4]`
+- Length part of type: `arr[i64 5]` != `arr[i64 4]`
 - Passed by value (copied)
 - Bounds checking at runtime
 

@@ -1,4 +1,4 @@
-# Compiler — CLI, Configuration, and Internals
+# Compiler - CLI, Configuration, and Internals
 
 > Avenys compiler command-line interface, configuration, and pipeline internals.
 
@@ -121,21 +121,21 @@ assert = "core/macros/assert.mire"
 
 ```
 Source (.mire)
-    │
-    ▼
-Lexer ──► Parser ──► Type Checker ──► Borrow Checker
-    │
-    ▼
-MIR Lowering ──► MIR Optimization (fixed point)
-    │
-    ▼
-LLVM IR Generation ──► Dependency Collection
-    │
-    ▼
-opt (O0-O3) ──► llc ──► Object files
-    │
-    ▼
-C Runtime (tier-aware) ──► clang ──► Artifact
+    |
+    v
+Lexer -> Parser -> Type Checker -> Borrow Checker
+    |
+    v
+MIR Lowering -> MIR Optimization (fixed point)
+    |
+    v
+LLVM IR Generation -> Dependency Collection
+    |
+    v
+opt (O0-O3) -> llc -> Object files
+    |
+    v
+C Runtime (tier-aware) -> clang -> Artifact
 ```
 
 ### 1. Frontend
@@ -162,7 +162,7 @@ C Runtime (tier-aware) ──► clang ──► Artifact
 | Module | Responsibility |
 |--------|----------------|
 | `codegen/mod.rs` | `mir_to_llvm` entry |
-| `codegen/expr.rs` | Instruction → LLVM IR |
+| `codegen/expr.rs` | Instruction -> LLVM IR |
 | `codegen/builtins.rs` | `pal_extern_decls()`, `builtin_to_pal` |
 | `codegen/validate.rs` | Pre-codegen undefined-call check |
 | `codegen/resolve.rs` | Symbol resolution |

@@ -51,7 +51,7 @@ This design ensures safe, deterministic behavior in sandboxed WASI environments.
 ```
 Source ---> LLVM IR (@target wasm32-wasip1)
 
-opt (O0-O3) --> llc → .wasm
+opt (O0-O3) --> llc -> .wasm
 
 wasm-ld --> .wasm (or wasm-ld --target=wasm32-wasip1)
 ```
@@ -60,7 +60,7 @@ wasm-ld --> .wasm (or wasm-ld --target=wasm32-wasip1)
 
 The WASI target uses `wasm-ld` with WASI imports:
 - `wasi_snapshot_preview1` module imported for `fd_write`, `clock_time_get`, `random_get`
-- No dynamic linking — all WASI functions are imported by name
+- No dynamic linking - all WASI functions are imported by name
 
 ---
 
@@ -68,22 +68,22 @@ The WASI target uses `wasm-ld` with WASI imports:
 
 ### Memory Model
 
-- Linear memory (`i64` address space) — no GC in Wasm
-- Mire managed strings are allocated via `malloc` → freed via `free`
+- Linear memory (`i64` address space) - no GC in Wasm
+- Mire managed strings are allocated via `malloc` -> freed via `free`
 - No `weak` or `extern_weak` references (Wasm limitation)
 
 ### Imports
 
 The generated Wasm imports from `wasi_snapshot_preview1`:
-- `fd_write` — stderr output
-- `clock_time_get` — high-resolution time
-- `random_get` — cryptographically secure random
+- `fd_write` - stderr output
+- `clock_time_get` - high-resolution time
+- `random_get` - cryptographically secure random
 
 ### Exports
 
 The Wasm binary exports:
-- `_start` — WASI entry point
-- `_initialize` — WASI initialization (if applicable)
+- `_start` - WASI entry point
+- `_initialize` - WASI initialization (if applicable)
 - All public Mire functions as `@_name` symbols
 
 ---

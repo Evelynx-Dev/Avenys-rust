@@ -65,10 +65,10 @@ my-lib/
 
 ### Key Principles
 
-1. **`code/mod.mire` is the library root** — declares `@[no_main]`, loads submodules
-2. **Submodules in `core/`** — each is a namespace (e.g., `strings`, `fs`, `math`)
-3. **`extern fn` declarations** — at module root or in submodule `mod.mire`
-4. **`[exports]` in `owl.toml`** — maps public names to module paths
+1. **`code/mod.mire` is the library root** - declares `@[no_main]`, loads submodules
+2. **Submodules in `core/`** - each is a namespace (e.g., `strings`, `fs`, `math`)
+3. **`extern fn` declarations** - at module root or in submodule `mod.mire`
+4. **`[exports]` in `owl.toml`** - maps public names to module paths
 
 ---
 
@@ -139,7 +139,7 @@ mylib = { path = "../my-lib" }
 ### Loading Dependencies
 
 ```mire
-# Package load (from [dependencies]) — direct calls
+# Package load (from [dependencies]) - direct calls
 load kioto
 load mire::vec
 load mylib::strings
@@ -234,7 +234,7 @@ Owl handles all project management:
 ## Symbol Naming
 
 Mire functions compile to LLVM symbols with mangling:
-- `strings::len` → `@fn_strings_len` (with `env_ptr` first arg)
+- `strings::len` -> `@fn_strings_len` (with `env_ptr` first arg)
 - Use `nm -D libmylib.so | grep strings_len` to find symbols
 
 ---

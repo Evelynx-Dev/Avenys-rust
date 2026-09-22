@@ -64,7 +64,7 @@ macros = ["assert", "dbg", "panic", "unreachable"]
 
 ## How It Works
 
-1. **Parser**: `name!(args)` → `Expression::Macro`
+1. **Parser**: `name!(args)` -> `Expression::Macro`
 2. **Type Check**: Validates macro exists, whitelisted, args match
 3. **MIR Lowering**: Translates to `Call` to macro function
 4. **Codegen**: Regular function call

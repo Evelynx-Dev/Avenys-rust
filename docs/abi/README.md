@@ -14,10 +14,10 @@ The **Mire ABI v4** is the stable Application Binary Interface for the Mire prog
 
 ### What is the Mire ABI
 
-- **Memory layout** — size, alignment, padding, field offsets for all types
-- **Calling convention** — argument passing, return values, register usage
-- **Symbol naming and versioning** — mangling scheme, visibility, ELF versioning
-- **FFI boundary** — C interoperability rules
+- **Memory layout** - size, alignment, padding, field offsets for all types
+- **Calling convention** - argument passing, return values, register usage
+- **Symbol naming and versioning** - mangling scheme, visibility, ELF versioning
+- **FFI boundary** - C interoperability rules
 
 ### What is NOT the Mire ABI
 
@@ -91,7 +91,7 @@ fn_name(env_ptr, arg0, arg1, arg2, arg3, arg4, arg5, ...)
 ```
 
 - **Implicit `env_ptr`** (first arg): Always present, currently `null` for non-capturing functions
-- **Registers**: RDI, RSI, RDX, RCX, R8, R9 (INTEGER class), XMM0–XMM7 (SSE class)
+- **Registers**: RDI, RSI, RDX, RCX, R8, R9 (INTEGER class), XMM0-XMM7 (SSE class)
 - **Stack**: Remaining arguments, 16-byte aligned
 - **Aggregates > 16 bytes**: Passed via hidden sret pointer in RDI
 
@@ -140,7 +140,7 @@ Closure:   _C<capture_hash><func_len><func><types>
 ## Symbol Versioning
 
 - Uses **ELF symbol versioning** (`SHT_GNU_verdef` / `SHT_GNU_verneed`)
-- **No `@v1` in mangling** — versioning is separate from mangling
+- **No `@v1` in mangling** - versioning is separate from mangling
 - Compatible changes: new symbols, new optional parameters
 - Breaking changes: removed symbols, changed signatures, struct layout changes
 
@@ -157,9 +157,9 @@ Closure:   _C<capture_hash><func_len><func><types>
 
 ### Attributes
 
-- `#[export_c]` — emits C symbol, C calling convention
-- `extern "C" { ... }` — C calling convention, no env_ptr
-- `#[no_mangle]` — disable mangling
+- `#[export_c]` - emits C symbol, C calling convention
+- `extern "C" { ... }` - C calling convention, no env_ptr
+- `#[no_mangle]` - disable mangling
 
 ---
 

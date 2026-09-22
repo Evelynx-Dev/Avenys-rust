@@ -119,12 +119,12 @@ All symbols below are extracted from `src/runtime/runtime.h` and verified to exi
 | `rt_unicode_to_upper(c)` | `char` | Unicode to uppercase |
 | `rt_string_to_i64(value)` | `i64` | Parse i64 |
 | `rt_f64_to_i64(value)` | `i64` | Parse f64 to i64 |
-| `rt_i64_to_string(value)` | `*mut` | i64 → str |
-| `rt_bool_to_string(value)` | `*mut` | bool → str |
-| `rt_f64_to_string(value)` | `*mut` | f64 → str |
-| `rt_f32_to_string(value)` | `*mut` | f32 → str |
-| `rt_i128_to_string(value)` | `*mut` | i128 → str |
-| `rt_u128_to_string(value)` | `*mut` | u128 → str |
+| `rt_i64_to_string(value)` | `*mut` | i64 -> str |
+| `rt_bool_to_string(value)` | `*mut` | bool -> str |
+| `rt_f64_to_string(value)` | `*mut` | f64 -> str |
+| `rt_f32_to_string(value)` | `*mut` | f32 -> str |
+| `rt_i128_to_string(value)` | `*mut` | i128 -> str |
+| `rt_u128_to_string(value)` | `*mut` | u128 -> str |
 | `rt_string_append_owned(value, suffix)` | `*mut` | Append to owned string |
 | `rt_string_to_i64(value)` | `i64` | String to i64 |
 
@@ -280,9 +280,9 @@ All symbols below are extracted from `src/runtime/runtime.h` and verified to exi
 
 | Symbol | Return | Description |
 |--------|--------|-------------|
-| `rt_math_pi()` | `f64` | π |
+| `rt_math_pi()` | `f64` | pi |
 | `rt_math_e()` | `f64` | e |
-| `rt_math_tau()` | `f64` | τ |
+| `rt_math_tau()` | `f64` | tau |
 | `rt_math_sin(value)` | `f64` | Sine |
 | `rt_math_cos(value)` | `f64` | Cosine |
 | `rt_math_tan(value)` | `f64` | Tangent |
@@ -460,7 +460,7 @@ All symbols below are extracted from `src/runtime/runtime.h` and verified to exi
 
 ---
 
-## Symbol → C File Mapping
+## Symbol -> C File Mapping
 
 | Symbol Pattern | C File |
 |----------------|--------|
@@ -486,13 +486,13 @@ All symbols below are extracted from `src/runtime/runtime.h` and verified to exi
 ## C File Dependency Graph
 
 ```
-strings.c → vecs.c → strings.c  (cycle, resolved via fixed-point)
-maps.c → vecs.c → managed.c
-maps_internal.c → managed.c
-math.c → vecs.c
-helpers.c → strings.c → managed.c
-mire_types.c → strings.c → managed.c → safety.c
-mire_io.c → managed.c
+strings.c -> vecs.c -> strings.c  (cycle, resolved via fixed-point)
+maps.c -> vecs.c -> managed.c
+maps_internal.c -> managed.c
+math.c -> vecs.c
+helpers.c -> strings.c -> managed.c
+mire_types.c -> strings.c -> managed.c -> safety.c
+mire_io.c -> managed.c
 ```
 
 ---
