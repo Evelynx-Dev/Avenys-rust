@@ -110,3 +110,26 @@ All notable changes to Avenys will be documented in this file.
 
 ## 4.0.0
 - Initial release of Avenys v4.0.0 with PAL v4 hardening, range arity dispatch, and documentation coherence initiative.
+- **Owl-managed compiler boundary**: the compiler is a restricted interface;
+  project discovery, dependencies, registries and lockfiles belong to Owl,
+  which passes a generated config with `--config` (`runtime = "minimal"`,
+  `target x86_64-unknown-linux-gnu`, `artifact = "bin"` defaults). The old
+  `--libt` spelling was removed.
+- **LLVM object pipeline**: Mire IR is lowered to native objects with `llc`;
+  static libraries use `llvm-ar`, shared libraries use `ld.lld`, executables
+  use Clang only for target-aware CRT/libc linking.
+- **Explicit build paths**: `--cache-dir`/`--cache` and `--output-dir`, with
+  deterministic standalone defaults under `bin/`; `--lib-dir` supports multiple
+  search roots and `~` expansion. Package resolution no longer reads the
+  consumer's `[dependencies]` table.
+- **Shared libraries**: `crate-type = "cdylib"` / `"staticlib"` in `owl.toml`
+  (or `--crate-type` on the CLI) produce `.so`/`.a` with all symbols exported.
+- **Debug CLI help**: `mire debug --help` documents `--tokens`, `--ast`,
+  `--ir`, `--run`, profiles and output options.
+- **Load/use enforcement (E0025 / E0026)**: `use!` is forbidden on `load`
+  (package) modules (call directly); mandatory on `load!` (local) modules.
+- **Runtime tiers documented**: `full`/`minimal`/`none` C-file and library
+  sets, with demand-driven minimal compilation.
+- **WASM/WASI targets**: `wasm32-wasip1` (WASI SDK sysroot) and
+  `wasm32-unknown-unknown` (no-libc freestanding).
+- `strings_minimal.c`: POSIX-free string operations for the minimal tier.

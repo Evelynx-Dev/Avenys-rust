@@ -11,6 +11,16 @@ The compiler, Avenys, translates Mire source through a multi-stage pipeline into
 native binaries via LLVM. It ships with Kioto, a standard library covering
 strings, collections, math, filesystem, processes, and more.
 
+## Recent Changes (v4.2.0)
+- **Multi-arch installer**: `install/install.sh` detects the release triple
+  (`--arch` overrides), installs per-arch canonical archives, and adds
+  `--check` (read-only audit), `--build-from-source` (host LLVM build) and
+  `--docker` (toolchain container) paths. Release pipeline builds x86_64 +
+  aarch64 (+ riscv64 via QEMU, experimental) and publishes the toolchain
+  container to GHCR.
+
+See [CHANGELOG.md](CHANGELOG.md) for the full version history.
+
 ---
 
 ## Important: Always Use owl CLI
@@ -28,173 +38,7 @@ strings, collections, math, filesystem, processes, and more.
 | Dependencies | `owl load <name>` | - |
 | Package install | `owl install <name>` | - |
 
-
-## Recent Changes (4.2.0)
-- **Multi-arch installer**: `install/install.sh` detects the release triple
-  (`--arch` overrides), installs per-arch canonical archives, and adds
-  `--check` (read-only audit), `--build-from-source` (host LLVM build) and
-  `--docker` (toolchain container) paths. Release pipeline builds x86_64 +
-  aarch64 (+ riscv64 via QEMU, experimental) and publishes the toolchain
-  container to GHCR.
-
-## Recent Changes (4.1.1)
-- **`[c]` cflags no longer reach `llc`**: project include paths (forwarded by
-  Owl from `[c] include`) were crashing the IR lowering step (`llc` rejects
-  `-I...`); they now flow only to `clang` for C compilation/link.
-
-## Recent Changes (4.1.0)
-- **Ownership fix**: `Drop` now releases the owned value held by a variable
-  slot (previously it freed the stack address of the slot, a silent no-op that
-  leaked every reassigned string/collection). `set y = x` retains a borrowed
-  source, and string concatenation releases its fresh operands.
-- `pal_file_chmod` PAL capability implemented (enables `fs::permission`)
-- File-based crypto runtime helpers: SHA-256/SHA-512 of a file, base64 of a
-  file, and Ed25519 signature verification against a file or base64 payload
-- Raw byte/buffer helpers split into `src/runtime/bytes.c` (PAL-free) so the
-  minimal runtime tier can pull them in without `helpers.c`
-- Parser: `@[attr]` starting a new line is no longer parsed as an index
-  expression; a function name can be shadowed by a local `set`
-- Range arity dispatch fix: `range`/`to` dispatches by arg count
-- Documentation coherence initiative: `docs/` reorganized into ABI, CLI,
-  compiler, errors, FAQ, libraries, PAL, runtime, syntax, and WASM sections
-
-The `mire` CLI is the raw compiler interface; `owl` handles project management,
-dependency resolution, build caching, tests, and delegates to `mire`
-internally. Use `owl` for all day-to-day work.
-
----
-
-## CLI boundary: compiler versus Owl
-
-Avenys exposes only the compiler operations `build`, `run`, `test`, and
-`debug`. Project creation, dependency installation, registries, lockfiles,
-checks, and upgrades belong to Owl. Owl resolves dependencies first and passes
-their directories explicitly to Avenys with `--lib-dir`.
-
-Every compiler command that consumes a source file accepts an explicit input
-file. When no output or cache path is supplied, standalone compilation uses
-`<source-directory>/bin/{debug,release}` and `<source-directory>/bin/.cache`;
-project builds use the project's `bin/` directory.
-
-Source files may use either `.mire` or `.mr`; source discovery, local module
-loads, package exports and the test harness treat both extensions equivalently.
-
-```bash
-mire build src/main.mire \
-  --lib-dir ~/.owl/libs \
-  --output-dir bin/release \
-  --cache-dir bin/.cache \
-  --target x86_64-unknown-linux-gnu \
-  --runtime full
-```
-
-Relevant path flags are:
-
-- `--lib-dir <path>`: explicit package directory; repeat through a
-  colon-separated list when Owl has several resolved dependency roots.
-- `-o, --output <file>`: exact executable or library output.
-- `--output-dir <dir>`: output directory when the filename should be inferred.
-- `--cache-dir <dir>` (alias `--cache`): incremental cache location.
-
-The native C-object cache is stored below `<cache-dir>/cobjects` when this
-flag is used, so a build can be relocated or cleaned as one unit.
-
-These paths are compiler inputs, not dependency management. Avenys does not
-install packages, consult registries, or choose a project entry from a
-manifest.
-
-## New in v4.0.0
-
-### Owl-managed compiler boundary
-
-Avenys 4.0.0 is the restricted compiler interface managed by Owl 1.0.0.
-Project discovery, dependency resolution, registries, lockfiles and package
-validation are Owl responsibilities. Owl passes a generated configuration with
-`--config`; standalone compiler invocations must provide their input and build
-paths explicitly.
-
-The managed configuration uses `runtime = "minimal"`, target
-`x86_64-unknown-linux-gnu`, and `artifact = "bin"` unless Owl or an explicit
-flag selects another value. The old `--libt` spelling is intentionally removed.
-
-Since v4.2.0 the installer (`install/install.sh`) detects the host
-architecture, pulls per-architecture release archives from the GitHub release,
-and supports `--check` (read-only audit), `--build-from-source` (compile the
-compiler against the target distribution instead of replacing system
-libraries), and `--docker` (run inside the provided toolchain container). Run
-`install/install.sh --check` before installing a release binary to confirm the
-glibc floor (2.39) and native libraries are satisfied.
-
-```bash
-mire build --config .mire-config.toml code/main.mire
-mire build code/main.mire --artifact shared --output lib/libdemo.so
-```
-
-### LLVM object pipeline and reproducible Mire tests
-
-Mire IR is lowered to native objects with `llc` before linking. Static
-libraries use `llvm-ar`, shared libraries use `ld.lld`, and executables use
-Clang only for target-aware CRT/libc linking. The modular Mire suite can be
-run with reproducible per-family metrics:
-
-```bash
-mire test --log -j 8 --lib-dir ~/.owl/libs
-```
-
-Logs are overwritten under `tests/log/` on every execution.
-
-## New in v3.24.35
-
-### Explicit build paths
-
-Added `--cache-dir`/`--cache` and `--output-dir`, plus deterministic standalone
-defaults under `bin/`. `--lib-dir` now supports multiple search roots supplied
-by Owl, including `~` expansion.
-
-### Dependency boundary
-
-Package resolution no longer reads the consumer's `[dependencies]` table.
-Owl constructs the resolved search path and passes it to Avenys. Package export
-metadata remains readable so the language's `load` and namespace semantics can
-be checked safely.
-
-## New in v3.24.34
-
-### Shared Library Support
-
-```bash
-# Build a shared library (.so)
-owl build --crate-type cdylib
-
-# Build a static library (.a)
-owl build --crate-type staticlib
-```
-
-Or configure in `owl.toml`:
-
-```toml
-[build]
-crate-type = "cdylib"   # or "staticlib"
-```
-
-Produces `.so` (shared) or `.a` (static) libraries with all symbols exported for `dlopen`/`dlsym` use.
-
-### Debug CLI Help
-
-```bash
-mire debug --help
-```
-
-Shows all debug options: `--tokens`, `--ast`, `--ir`, `--run`, plus build profiles and output options.
-
-### Build Configuration Fix
-
-`crate-type` in `owl.toml [build]` now correctly parses the hyphenated key:
-
-```toml
-[build]
-crate-type = "cdylib"   # or "staticlib", "bin"
-```
+## Installation
 
 The install script supports modular installation of the Mire toolchain components:
 - **owl** - package manager
@@ -423,6 +267,54 @@ mire debug hello.mire --ir
 
 ---
 
+## CLI boundary: compiler versus Owl
+
+Avenys exposes only the compiler operations `build`, `run`, `test`, and
+`debug`. Project creation, dependency installation, registries, lockfiles,
+checks, and upgrades belong to Owl. Owl resolves dependencies first and passes
+their directories explicitly to Avenys with `--lib-dir`.
+
+Every compiler command that consumes a source file accepts an explicit input
+file. When no output or cache path is supplied, standalone compilation uses
+`<source-directory>/bin/{debug,release}` and `<source-directory>/bin/.cache`;
+project builds use the project's `bin/` directory.
+
+Source files may use either `.mire` or `.mr`; source discovery, local module
+loads, package exports and the test harness treat both extensions equivalently.
+
+```bash
+mire build src/main.mire \
+  --lib-dir ~/.owl/libs \
+  --output-dir bin/release \
+  --cache-dir bin/.cache \
+  --target x86_64-unknown-linux-gnu \
+  --runtime full
+```
+
+Relevant path flags are:
+
+- `--lib-dir <path>`: explicit package directory; repeat through a
+  colon-separated list when Owl has several resolved dependency roots.
+- `-o, --output <file>`: exact executable or library output.
+- `--output-dir <dir>`: output directory when the filename should be inferred.
+- `--cache-dir <dir>` (alias `--cache`): incremental cache location.
+
+The native C-object cache is stored below `<cache-dir>/cobjects` when this
+flag is used, so a build can be relocated or cleaned as one unit.
+
+These paths are compiler inputs, not dependency management. Avenys does not
+install packages, consult registries, or choose a project entry from a
+manifest.
+
+```bash
+mire build --config .mire-config.toml code/main.mire
+```
+
+Owl passes a generated configuration with `--config`; standalone compiler
+invocations must provide their input and build paths explicitly.
+
+---
+
 ## How it works
 
 Every Mire program passes through the following pipeline:
@@ -451,10 +343,42 @@ LLVM IR generation -> opt (O0-O3) -> LLVM object/archive tools -> artifact
 
 For `wasm32-wasip1`, Avenys uses the WASI SDK when `WASI_SDK_PATH` or
 `WASI_SYSROOT` is set. `wasm32-unknown-unknown` is a no-libc freestanding
-target; host services must be supplied as imports. The opt-in Docker fixtures
-are run with `MIRE_WASM_DOCKER_TESTS=1 tests/wasm_docker.sh`.
+target; host services must be supplied as imports.
 
 **Incremental compilation:** On rebuild, a fingerprint (source hash + dependency graph) is checked. If unchanged, returns in single-digit milliseconds. On partial changes, only affected units are re-analyzed. Cache uses WAL (write-ahead log) for crash-safe persistence.
+
+---
+
+## Shared libraries
+
+```bash
+# Build a shared library (.so)
+owl build --crate-type cdylib
+
+# Build a static library (.a)
+owl build --crate-type staticlib
+```
+
+Or configure in `owl.toml`:
+
+```toml
+[build]
+crate-type = "cdylib"   # or "staticlib"
+```
+
+Produces `.so` (shared) or `.a` (static) libraries with all symbols exported for `dlopen`/`dlsym` use.
+
+```bash
+mire build code/main.mire --artifact shared --output lib/libdemo.so
+```
+
+### Debug CLI Help
+
+```bash
+mire debug --help
+```
+
+Shows all debug options: `--tokens`, `--ast`, `--ir`, `--run`, plus build profiles and output options.
 
 ---
 
@@ -576,13 +500,9 @@ The `[c] runtime` setting in `owl.toml` controls what gets linked:
 With `runtime = "none"` + `nostartfiles = true` + `nostdlib = true` you get a
 ~14KB statically linked binary with **zero external dependencies**.
 
----
+### Load vs load!: module call syntax (E0025 / E0026)
 
-## New in v3.24.33
-
-### Load/Use syntax enforcement (E0025 / E0026)
-
-Two new error codes enforce correct module call syntax:
+Two error codes enforce correct module call syntax:
 
 | Code | Trigger | Fix |
 |------|---------|-----|
@@ -604,19 +524,6 @@ pub fn main: () {
   // set x = math::add(1, 2)  // E0026 rejected
 }
 ```
-
-### Runtime tiers documented
-- **Full** (default): All 15 runtime + PAL C files, full libs
-- **Minimal**: Demand-driven C compilation, only `-lm -lc` (+ crypto if PAL)
-- **None**: Freestanding, no runtime/PAL, `nostartfiles` + `nostdlib`
-
-### WASM/WASI support
-- `wasm32-wasip1`: WASI Preview 1 with sysroot from `WASI_SDK_PATH`
-- `wasm32-unknown-unknown`: Freestanding, host-provided imports only
-- Docker tests: `MIRE_WASM_DOCKER_TESTS=1 tests/wasm_docker.sh`
-
-### Minimal runtime strings
-`strings_minimal.c` - POSIX-free string operations (no `clock_gettime`/`clock`)
 
 ---
 
