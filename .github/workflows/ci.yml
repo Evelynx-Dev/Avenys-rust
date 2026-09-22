@@ -191,13 +191,13 @@ jobs:
       - name: Test owl
         working-directory: owl-src
         run: |
-          chmod +x bin/release/main
-          ./bin/release/main -V
+          chmod +x bin/main
+          ./bin/main -V
           echo "owl build successful"
 
       - name: Upload owl artifact
         uses: actions/upload-artifact@v4
         with:
           name: owl-linux-x86_64
-          path: owl-src/bin/release/main
+          path: owl-src/bin/main
           retention-days: 7
