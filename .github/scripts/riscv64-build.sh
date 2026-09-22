@@ -33,7 +33,7 @@ apt-get update -qq
 apt-get install -y -qq \
     curl wget ca-certificates build-essential git pkg-config \
     libsodium-dev zlib1g-dev libzstd-dev libarchive-dev \
-    llvm-22 llvm-22-dev llvm-22-tools clang-22 lld-22 \
+    llvm-22 llvm-22-dev llvm-22-tools clang-22 lld-22 libpolly-22-dev \
     || { echo "error: apt install failed (llvm-22 requires Ubuntu 26.04 riscv64 ports)" >&2; exit 1; }
 
 # mire invokes clang/llc/opt/ld.lld by their plain names; provide wrappers.
