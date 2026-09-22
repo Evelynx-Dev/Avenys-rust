@@ -2,6 +2,37 @@
 
 All notable changes to Avenys will be documented in this file.
 
+## 4.2.0 - 2026-09-22
+
+### Added
+- **Multi-arch installer** (`install/install.sh`): detects the host release
+  triple from `uname -m`, overridable via `--arch` / `MIRE_ARCH`, and pulls
+  per-architecture release archives (`mire-compiler-<triple>.tar.gz`,
+  `owl-<triple>.tar.gz`) with the x86_64 legacy fallback name. Supported
+  triples: x86_64, aarch64, riscv64.
+- **`--check` (read-only audit)**: validates distro, libc (glibc >= 2.39),
+  detected arch, package manager and LLVM (>= 18) and exits 0/1 without
+  installing or downloading.
+- **`--build-from-source`**: fetches avenys-rust, ensures rustc >= 1.85 and
+  builds the compiler against the host LLVM (for older glibc, different libc
+  variants, custom LLVM, or architectures without prebuilt archives).
+  `SOURCE_URL` / `SOURCE_REF` / `MIRE_RUSTUP_URL` override the defaults.
+- **`--docker` fallback**: installs inside the `mire-lang/toolchain`
+  container (GNU glibc >= 2.39), for distros without official support.
+- **Multi-arch release pipeline** (`.github/workflows/release.yml`):
+  x86_64/aarch64 compiler matrix plus an experimental riscv64 build under
+  QEMU (greater `continue-on-error`; never blocks the release).
+- **Toolchain container** (`docker/toolchain.Dockerfile` +
+  `.github/workflows/docker.yml`): publishes a full LLVM/Clang toolchain
+  image to GHCR on release.
+
+### Documentation
+- README install section rewritten: architecture detection (`--arch`),
+  `--check` audit, `--build-from-source`, `--docker`, install options, and
+  release archive table.
+- All `.md` docs cleaned to standard ASCII/markdown (no emojis or non-ASCII
+  symbols), keeping only project-structure trees in tree(1) style.
+
 ## 4.1.1 - 2026-09-18
 
 ### Fixed

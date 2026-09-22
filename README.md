@@ -1,4 +1,4 @@
-# Avenys v4.1.1
+# Avenys v4.2.0
 
 **A compiled, ownership-aware systems language with an LLVM backend.**
 
@@ -28,6 +28,14 @@ strings, collections, math, filesystem, processes, and more.
 | Dependencies | `owl load <name>` | - |
 | Package install | `owl install <name>` | - |
 
+
+## Recent Changes (4.2.0)
+- **Multi-arch installer**: `install/install.sh` detects the release triple
+  (`--arch` overrides), installs per-arch canonical archives, and adds
+  `--check` (read-only audit), `--build-from-source` (host LLVM build) and
+  `--docker` (toolchain container) paths. Release pipeline builds x86_64 +
+  aarch64 (+ riscv64 via QEMU, experimental) and publishes the toolchain
+  container to GHCR.
 
 ## Recent Changes (4.1.1)
 - **`[c]` cflags no longer reach `llc`**: project include paths (forwarded by
