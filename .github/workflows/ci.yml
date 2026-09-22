@@ -146,12 +146,16 @@ jobs:
 
       - name: Setup owl dependencies
         run: |
-          mkdir -p ~/.owl/modules
+          mkdir -p ~/.owl/modules ~/.owl/libs
           cp -r kioto-src ~/.owl/modules/kioto
+          cp -a kioto-src ~/.owl/libs/kioto
+          cp -a mire ~/.owl/libs/mire
           cp -r kioto-src ./kioto
-          # owl-src/owl.toml hardcodes Evelyn's local kioto path; repoint to
-          # the sibling checkout so `load kioto` resolves in CI.
-          sed -i 's|"/home/Evelyn/.owl/libs/kioto"|"../kioto"|' owl-src/owl.toml
+          # owl-src/owl.toml deps kioto via ~/.owl/libs/kioto (or, on older
+          # forks, Evelyn's absolute path); the runner's ~/.owl/libs is now
+          # populated above, and the absolute path (if present) is repointed
+          # to the sibling checkout so `load kioto` resolves in CI.
+          sed -i -e 's|"/home/Evelyn/.owl/libs/kioto"|"../kioto"|' owl-src/owl.toml
 
       - name: Generate avenys config for the owl build
         run: |
