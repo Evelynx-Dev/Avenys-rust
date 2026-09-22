@@ -186,7 +186,7 @@ jobs:
       - name: Build owl
         working-directory: owl-src
         run: |
-          mire build code/main.mire --release -O3 --no-analysis-cache --config native/mire-config.toml
+          mire build code/main.mire --release -O3 --no-analysis-cache --config native/mire-config.toml --lib-dir "$HOME/.owl/libs"
 
       - name: Test owl
         working-directory: owl-src
