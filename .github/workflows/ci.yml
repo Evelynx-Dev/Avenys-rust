@@ -42,6 +42,21 @@ jobs:
       - name: Setup mire stdlib for tests
         run: cp -r mire-src ../mire
 
+      - name: Shim libsodium soname for prebuilt test fixtures
+        run: |
+          # tests/libs/{mire,kioto}/*.so (GNU/Linux, built against libsodium
+          # 1.0.20) record a libsodium.so.26 NEEDED entry; ubuntu-24.04 ships
+          # libsodium.so.23. The symbols they exercise (sodium_init,
+          # crypto_sign_*) are stable public ABI, so alias the available
+          # library under the recorded soname for the linker and the loader.
+          SOD=$(find /usr/lib -name 'libsodium.so.23' | head -1)
+          if [ -n "$SOD" ]; then
+            sudo ln -sfn "$SOD" "${SOD%.23}.26"
+            ls -l "${SOD%.23}.26"
+          else
+            echo "warning: libsodium.so.23 not found; fixtures may fail to link"
+          fi
+
       - name: Build
         env:
           LLVM_CONFIG_PATH: /usr/bin/llvm-config-22
