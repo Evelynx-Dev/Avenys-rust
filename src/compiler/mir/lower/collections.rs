@@ -1,12 +1,18 @@
 use super::MirLower;
 use super::types::{data_type_to_kind, extract_data_type, is_pointer_valued_type};
+use crate::compiler::location::expression_location;
 use crate::compiler::mir::{MirCmp, MirConst, MirOp, MirType, MirValue};
 use crate::parser::ast::{DataType, Expression};
 
 fn is_i64_wide_type(dt: &DataType) -> bool {
     matches!(
         dt,
-        DataType::I64 | DataType::I128 | DataType::U64 | DataType::U128 | DataType::Char | DataType::Bool
+        DataType::I64
+            | DataType::I128
+            | DataType::U64
+            | DataType::U128
+            | DataType::Char
+            | DataType::Bool
     )
 }
 
@@ -137,6 +143,7 @@ pub(crate) fn lower_index_read(
         _ => return None,
     };
 
+    let loc = expression_location(target).to_tuple();
     let target_val = lower.lower_expression(target);
     let index_val = lower.lower_expression(index);
     let key_kind = data_type_to_kind(key_type);
@@ -170,7 +177,7 @@ pub(crate) fn lower_index_read(
                     data_type: result_type.clone(),
                 },
             ),
-            (0, 0),
+            loc,
         );
         Some(MirValue::temp(result))
     } else {
@@ -190,7 +197,7 @@ pub(crate) fn lower_index_read(
                     data_type: DataType::I64,
                 },
             ),
-            (0, 0),
+            loc,
         );
         Some(narrow_scalar_result(
             lower,
@@ -216,6 +223,7 @@ pub(crate) fn lower_index_write(
         _ => return false,
     };
 
+    let loc = expression_location(target).to_tuple();
     let target_val = lower.lower_expression(target);
     let index_val = lower.lower_expression(index);
     let key_kind = data_type_to_kind(key_type);
@@ -261,7 +269,7 @@ pub(crate) fn lower_index_write(
                 data_type: target_type.clone(),
             },
         ),
-        (0, 0),
+        loc,
     );
     true
 }

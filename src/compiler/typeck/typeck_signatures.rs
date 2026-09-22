@@ -1,3 +1,4 @@
+use crate::canonical_fn_name;
 use crate::error::Result;
 use crate::parser::ast::{DataType, Expression, Statement};
 
@@ -18,7 +19,7 @@ impl TypeChecker {
                     ..
                 } => {
                     self.functions.insert(
-                        name.clone(),
+                        canonical_fn_name(name),
                         FunctionSig {
                             type_params: type_params.clone(),
                             type_param_bounds: type_param_bounds.clone(),
@@ -34,7 +35,7 @@ impl TypeChecker {
                     ..
                 } => {
                     self.functions.insert(
-                        name.clone(),
+                        canonical_fn_name(name),
                         FunctionSig {
                             type_params: Vec::new(),
                             type_param_bounds: Vec::new(),
@@ -67,10 +68,24 @@ impl TypeChecker {
                             if let Some((_, self_ty)) =
                                 full_params.iter_mut().find(|(param, _)| param == "self")
                             {
-                                *self_ty = DataType::StructNamed(type_name.clone());
+                                let (base, _) = TypeChecker::split_nominal_type_args(type_name);
+                                let is_enum = self
+                                    .enum_variants
+                                    .keys()
+                                    .any(|k| k.starts_with(&format!("{}.", base)));
+                                *self_ty = if is_enum {
+                                    DataType::EnumNamed(type_name.to_string())
+                                } else {
+                                    DataType::StructNamed(type_name.to_string())
+                                };
                             }
+                            let key = if let Some(trait_name) = trait_name {
+                                format!("{}::{}::{}", trait_name, type_name, name)
+                            } else {
+                                format!("{}.{}", type_name, name)
+                            };
                             self.functions.insert(
-                                format!("{}.{}", type_name, name),
+                                key,
                                 FunctionSig {
                                     type_params: Vec::new(),
                                     type_param_bounds: Vec::new(),
@@ -95,6 +110,7 @@ impl TypeChecker {
                     name,
                     type_params,
                     type_param_bounds,
+                    parent,
                     fields,
                     ..
                 } => {
@@ -119,6 +135,7 @@ impl TypeChecker {
                         ClassSig {
                             type_params: type_params.clone(),
                             type_param_bounds: type_param_bounds.clone(),
+                            parent: parent.clone(),
                             fields: type_fields,
                         },
                     );
@@ -166,11 +183,15 @@ impl TypeChecker {
                     if *return_type == DataType::Function
                         && let Some(sig) = self.infer_returned_function_signature(body)
                     {
-                        self.function_return_signatures.insert(name.clone(), sig);
+                        self.function_return_signatures
+                            .insert(canonical_fn_name(name), sig);
                     }
                 }
                 Statement::Impl {
-                    type_name, methods, ..
+                    trait_name,
+                    type_name,
+                    methods,
+                    ..
                 } => {
                     for method in methods {
                         if let Statement::Function {
@@ -182,8 +203,12 @@ impl TypeChecker {
                             && *return_type == DataType::Function
                             && let Some(sig) = self.infer_returned_function_signature(body)
                         {
-                            self.function_return_signatures
-                                .insert(format!("{}.{}", type_name, name), sig);
+                            let key = if let Some(trait_name) = trait_name {
+                                format!("{}::{}::{}", trait_name, type_name, name)
+                            } else {
+                                format!("{}.{}", type_name, name)
+                            };
+                            self.function_return_signatures.insert(key, sig);
                         }
                     }
                     self.collect_function_return_signatures(methods)?;

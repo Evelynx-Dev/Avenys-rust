@@ -2,117 +2,93 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 
-// ── Managed string tracking (linked list + hash table) ────────────────
+// ── Arena allocator with refcounting and size-class free lists ────────────────
+//
+// All managed strings are allocated from a single contiguous arena.
+// Each string has a reference count in its header. When the refcount
+// reaches zero, the string is added to a size-class free list for reuse.
+// The arena is allocated at full size upfront via mmap(MAP_NORESERVE) to avoid
+// pointer invalidation on realloc (which would invalidate free list pointers).
+// The entire arena is released at program exit via rt_managed_cleanup_all().
 
-typedef struct MireManagedStringNode {
-    char *data_ptr;
-    struct MireManagedStringNode *next;
-} MireManagedStringNode;
+#define ARENA_MAX_SIZE     (1024 * 1024 * 1024) // 1 GB cap
+#define NUM_SIZE_CLASSES 9
 
-static MireManagedStringNode *managed_strings = NULL;
+// Size classes: 16, 32, 64, 128, 256, 512, 1024, 2048, 4096 bytes
+static const size_t SIZE_CLASSES[NUM_SIZE_CLASSES] = {
+    16, 32, 64, 128, 256, 512, 1024, 2048, 4096
+};
 
-// Hash table for O(1) contains / unregister (replaces linear scan).
-#define MANAGED_HT_INITIAL 64
+typedef struct FreeBlock {
+    size_t size;      // total block size (including header)
+    char *next;       // next free block in same size class
+} FreeBlock;
 
-static char **managed_ht_keys = NULL;
-static size_t managed_ht_cap = 0;
-static size_t managed_ht_len = 0;
+static char *arena_base = NULL;
+static size_t arena_pos = 0;    // bytes used
+static size_t arena_cap = 0;    // bytes allocated (always ARENA_MAX_SIZE after init)
+static char *free_lists[NUM_SIZE_CLASSES] = {NULL};
 
-static size_t managed_ht_hash(const char *key) {
-    size_t h = (size_t)key;
-    h ^= h >> 33;
-    h *= 0xff51afd7ed558ccdULL;
-    h ^= h >> 33;
-    return h;
+static int arena_ensure_initialized(void) {
+    if (arena_base) return 1;
+    // Use mmap with MAP_NORESERVE to reserve virtual address space without committing physical memory
+    arena_base = (char *)mmap(NULL, ARENA_MAX_SIZE, PROT_READ | PROT_WRITE,
+                              MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    if (arena_base == MAP_FAILED) return 0;
+    arena_cap = ARENA_MAX_SIZE;
+    arena_pos = 0;
+    return 1;
 }
 
-static int managed_ht_put(const char *key) {
-    if (!managed_ht_keys || managed_ht_len * 2 >= managed_ht_cap) {
-        size_t new_cap = managed_ht_cap ? managed_ht_cap * 2 : MANAGED_HT_INITIAL;
-        char **new_keys = (char **)calloc(new_cap, sizeof(char *));
-        if (!new_keys) return 0;
-        for (size_t i = 0; i < managed_ht_cap; i++) {
-            if (managed_ht_keys[i]) {
-                size_t h = managed_ht_hash(managed_ht_keys[i]);
-                for (size_t j = 0; j < new_cap; j++) {
-                    size_t idx = (h + j) % new_cap;
-                    if (!new_keys[idx]) { new_keys[idx] = managed_ht_keys[i]; break; }
-                }
-            }
+// ── Size class helpers ────────────────────────────────────────────────────
+
+static inline int size_class_index(size_t total_size) {
+    for (int i = 0; i < NUM_SIZE_CLASSES; i++) {
+        if (total_size <= SIZE_CLASSES[i]) return i;
+    }
+    return NUM_SIZE_CLASSES - 1; // largest class for oversized allocations
+}
+
+// ── Free list management ────────────────────────────────────────────────
+
+static inline void free_list_add(char *header_ptr, size_t total_size) {
+    int idx = size_class_index(total_size);
+    MireManagedString *hdr = (MireManagedString *)header_ptr;
+    char *data_area = (char *)(hdr + 1);  // data area starts after header
+    FreeBlock *block = (FreeBlock *)data_area;
+    block->size = total_size;
+    block->next = free_lists[size_class_index(total_size)];
+    free_lists[size_class_index(total_size)] = header_ptr;  // free list stores header pointers
+}
+
+static char *free_list_find(size_t need) {
+    int idx = size_class_index(need);
+    char **prev = (char **)&free_lists[idx];
+    while (*prev) {
+        char *header_ptr = *prev;
+        MireManagedString *hdr = (MireManagedString *)header_ptr;
+        char *data_area = (char *)(hdr + 1);
+        FreeBlock *curr = (FreeBlock *)data_area;
+        if (curr->size >= need) {
+            *prev = curr->next;
+            return header_ptr;
         }
-        free(managed_ht_keys);
-        managed_ht_keys = new_keys;
-        managed_ht_cap = new_cap;
+        prev = &curr->next;
     }
-    size_t h = managed_ht_hash(key);
-    for (size_t j = 0; j < managed_ht_cap; j++) {
-        size_t idx = (h + j) % managed_ht_cap;
-        if (!managed_ht_keys[idx]) {
-            managed_ht_keys[idx] = (char *)key;
-            managed_ht_len++;
-            return 1;
-        }
-        if (managed_ht_keys[idx] == key) return 1;
-    }
-    return 0;
+    return NULL;
 }
 
-static void managed_ht_remove(const char *key) {
-    if (!managed_ht_keys) return;
-    size_t h = managed_ht_hash(key);
-    for (size_t j = 0; j < managed_ht_cap; j++) {
-        size_t idx = (h + j) % managed_ht_cap;
-        if (!managed_ht_keys[idx]) return;
-        if (managed_ht_keys[idx] == key) {
-            managed_ht_keys[idx] = NULL;
-            managed_ht_len--;
-            return;
-        }
-    }
-}
+// ── Managed pointer detection ─────────────────────────────────────────
 
-static int managed_ht_contains(const char *key) {
-    if (!managed_ht_keys) return 0;
-    size_t h = managed_ht_hash(key);
-    for (size_t j = 0; j < managed_ht_cap; j++) {
-        size_t idx = (h + j) % managed_ht_cap;
-        if (!managed_ht_keys[idx]) return 0;
-        if (managed_ht_keys[idx] == key) return 1;
-    }
-    return 0;
-}
-
-void rt_managed_register(char *data_ptr) {
-    if (data_ptr == NULL) return;
-    MireManagedStringNode *node = (MireManagedStringNode *)malloc(sizeof(MireManagedStringNode));
-    if (node == NULL) return;
-    node->data_ptr = data_ptr;
-    node->next = managed_strings;
-    managed_strings = node;
-    managed_ht_put(data_ptr);
-}
-
-void rt_managed_unregister(char *data_ptr) {
-    managed_ht_remove(data_ptr);
-    MireManagedStringNode **cursor = &managed_strings;
-    while (*cursor != NULL) {
-        if ((*cursor)->data_ptr == data_ptr) {
-            MireManagedStringNode *node = *cursor;
-            *cursor = node->next;
-            free(node);
-            return;
-        }
-        cursor = &(*cursor)->next;
-    }
+int rt_managed_is_managed(const char *data_ptr) {
+    if (!data_ptr || !arena_base) return 0;
+    return (size_t)(data_ptr - arena_base) < arena_pos;
 }
 
 int rt_managed_contains(const char *data_ptr) {
-    return managed_ht_contains(data_ptr);
-}
-
-int rt_managed_is_managed(const char *data_ptr) {
-    return data_ptr != NULL && managed_ht_contains(data_ptr);
+    return rt_managed_is_managed(data_ptr);
 }
 
 // ── Header helpers ────────────────────────────────────────────────────
@@ -122,23 +98,49 @@ MireManagedString *rt_string_header(const char *data) {
     return (MireManagedString *)((char *)data - offsetof(MireManagedString, data));
 }
 
+static size_t utf8_next(const unsigned char *s, size_t offset, size_t byte_len) {
+    unsigned char first = s[offset];
+    size_t width = 1;
+    uint32_t codepoint = first;
+    if ((first & 0x80) == 0) return offset + 1;
+    if ((first & 0xe0) == 0xc0) {
+        width = 2;
+        codepoint = first & 0x1f;
+    } else if ((first & 0xf0) == 0xe0) {
+        width = 3;
+        codepoint = first & 0x0f;
+    } else if ((first & 0xf8) == 0xf0) {
+        width = 4;
+        codepoint = first & 0x07;
+    } else {
+        return offset + 1;
+    }
+    if (offset + width > byte_len) return offset + 1;
+    for (size_t i = 1; i < width; i++) {
+        unsigned char continuation = s[offset + i];
+        if ((continuation & 0xc0) != 0x80) return offset + 1;
+        codepoint = (codepoint << 6) | (continuation & 0x3f);
+    }
+    if ((width == 2 && codepoint < 0x80)
+        || (width == 3 && codepoint < 0x800)
+        || (width == 4 && codepoint < 0x10000)
+        || codepoint > 0x10ffff
+        || (codepoint >= 0xd800 && codepoint <= 0xdfff)) {
+        return offset + 1;
+    }
+    return offset + width;
+}
+
 static size_t utf8_codepoint_count(const char *s, size_t byte_len) {
     size_t count = 0;
-    for (size_t i = 0; i < byte_len; i++) {
-        unsigned char c = (unsigned char)s[i];
-        if (c < 0x80 || c >= 0xC0) count++;
+    for (size_t i = 0; i < byte_len;) {
+        i = utf8_next((const unsigned char *)s, i, byte_len);
+        count++;
     }
     return count;
 }
 
-static void utf8_cache_cp(MireManagedString *hdr) {
-    if (hdr && !(hdr->flags & MIRE_STR_UTF8_KNOWN)) {
-        hdr->utf8_cp = (uint32_t)utf8_codepoint_count(hdr->data, hdr->len);
-        hdr->flags |= MIRE_STR_UTF8_KNOWN;
-    }
-}
-
-// ── String growth ────────────────────────────────────────────────────
+// ── String helpers (raw malloc, not arena) ────────────────────────────
 
 size_t rt_string_growth_cap(size_t min_cap) {
     size_t cap = 16;
@@ -162,16 +164,40 @@ char *rt_strdup_raw_n(const char *src, size_t len) {
     return out;
 }
 
+// ── Arena allocation with size-class free lists ────────────────────────
+
 char *rt_managed_alloc(size_t len) {
     size_t cap = rt_string_growth_cap(len);
-    MireManagedString *header = (MireManagedString *)malloc(sizeof(MireManagedString) + cap + 1);
-    if (header == NULL) return NULL;
+    size_t total = sizeof(MireManagedString) + cap + 1;
+    // Align to 16 bytes for performance
+    total = (total + 15) & ~(size_t)15;
+
+    // Try to find a free block first
+    char *ptr = free_list_find(total);
+    if (ptr) {
+        MireManagedString *header = (MireManagedString *)ptr;
+        header->len = len;
+        header->cap = cap;
+        header->flags = MIRE_STR_MANAGED;
+        header->utf8_cp = 0;
+        header->refs = 1;
+        header->data[len] = '\0';
+        return header->data;
+    }
+
+    // Allocate from arena (ensure initialized first)
+    if (!arena_ensure_initialized()) return NULL;
+    size_t total_size = sizeof(MireManagedString) + cap + 1;
+    total = (total + 15) & ~(size_t)15;
+    if (arena_pos + total > arena_cap) return NULL;
+    MireManagedString *header = (MireManagedString *)(arena_base + arena_pos);
+    arena_pos += total;
     header->len = len;
     header->cap = cap;
     header->flags = MIRE_STR_MANAGED;
     header->utf8_cp = 0;
+    header->refs = 1;
     header->data[len] = '\0';
-    rt_managed_register(header->data);
     return header->data;
 }
 
@@ -220,28 +246,52 @@ char *rt_alloc_printf_raw_i64(const char *fmt, long long value) {
     return out;
 }
 
+// ── Refcounting ────────────────────────────────────────────────────────
+
+void rt_managed_retain(char *data_ptr) {
+    if (!data_ptr) return;
+    if (!rt_managed_is_managed(data_ptr)) return;
+    MireManagedString *hdr = rt_string_header(data_ptr);
+    if (hdr->refs > 0) {
+        hdr->refs++;
+    }
+}
+
 void rt_managed_free(char *value) {
-    if (value == NULL) return;
-    if (!rt_managed_contains(value)) return;
-    rt_managed_unregister(value);
-    MireManagedString *header = rt_string_header(value);
-    if (header) free(header);
+    if (!value) return;
+    if (!rt_managed_is_managed(value)) return;
+    MireManagedString *hdr = rt_string_header(value);
+    if (hdr->refs <= 0) return;
+    hdr->refs--;
+    if (hdr->refs == 0) {
+        // Add to free list for reuse
+        MireManagedString *hdr = rt_string_header(value);
+        size_t total = sizeof(MireManagedString) + hdr->cap + 1;
+        total = (total + 15) & ~(size_t)15;
+        free_list_add(value - offsetof(MireManagedString, data), total);
+    }
 }
 
 void rt_managed_cleanup_all(void) {
-    MireManagedStringNode *node = managed_strings;
-    while (node != NULL) {
-        MireManagedStringNode *next = node->next;
-        MireManagedString *header = rt_string_header(node->data_ptr);
-        if (header) free(header);
-        free(node);
-        node = next;
+    if (arena_base) {
+        munmap(arena_base, ARENA_MAX_SIZE);
+        arena_base = NULL;
     }
-    managed_strings = NULL;
-    free(managed_ht_keys);
-    managed_ht_keys = NULL;
-    managed_ht_cap = 0;
-    managed_ht_len = 0;
+    arena_pos = 0;
+    arena_cap = 0;
+    for (int i = 0; i < NUM_SIZE_CLASSES; i++) {
+        free_lists[i] = NULL;
+    }
+}
+
+// ── Register / unregister stubs (ABI compat, no-ops) ──────────────────
+
+void rt_managed_register(char *data_ptr) {
+    (void)data_ptr;
+}
+
+void rt_managed_unregister(char *data_ptr) {
+    (void)data_ptr;
 }
 
 // ── Optimized len: uses cached header length instead of strlen ────────
@@ -301,29 +351,22 @@ char *rt_strings_substr_utf8(const char *input, int64_t start_cp, int64_t count_
     }
     if (start_cp < 0) start_cp = 0;
 
-    // Walk UTF-8 bytes to find start byte offset
     size_t byte_start = 0;
     int64_t cp = 0;
-    for (size_t i = 0; i < byte_len && cp < start_cp; i++) {
-        unsigned char c = (unsigned char)input[i];
-        if (c < 0x80 || c >= 0xC0) {
-            if (cp == start_cp) break;
-            cp++;
-            byte_start = i;
-        }
+    while (byte_start < byte_len && cp < start_cp) {
+        byte_start = utf8_next((const unsigned char *)input, byte_start, byte_len);
+        cp++;
     }
     if (cp < start_cp) return rt_managed_from_slice("", 0);
 
-    // Now find the byte offset where we've counted count_cp codepoints
     size_t byte_end = byte_len;
     if (count_cp > 0) {
         int64_t remaining = count_cp;
         size_t i = byte_start;
         while (i < byte_len && remaining > 0) {
-            unsigned char c = (unsigned char)input[i];
-            if (c < 0x80 || c >= 0xC0) remaining--;
+            i = utf8_next((const unsigned char *)input, i, byte_len);
+            remaining--;
             if (remaining == 0) { byte_end = i; break; }
-            i++;
         }
         if (remaining > 0) byte_end = byte_len;
     }
@@ -342,9 +385,9 @@ int64_t rt_strings_index_of_utf8(const char *s, const char *sub) {
     // Count codepoints from start to pos
     size_t byte_offset = (size_t)(pos - s);
     int64_t cp_count = 0;
-    for (size_t i = 0; i < byte_offset; i++) {
-        unsigned char c = (unsigned char)s[i];
-        if (c < 0x80 || c >= 0xC0) cp_count++;
+    for (size_t i = 0; i < byte_offset;) {
+        i = utf8_next((const unsigned char *)s, i, byte_offset);
+        cp_count++;
     }
     return cp_count;
 }

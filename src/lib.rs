@@ -1,4 +1,7 @@
-pub mod avens;
+// Project manifests, lockfiles, and dependency metadata are compiler internals.
+// Owl owns project orchestration and receives only the small compiler API
+// re-exported below.
+pub(crate) mod avens;
 pub mod builtins;
 pub mod compiler;
 pub mod error;
@@ -9,11 +12,10 @@ pub mod parser;
 pub mod types;
 
 pub use avens::{
-    BuildMode, BuildOptions, BuildResult, ImportMode, MireCacheConfig, MireDependencies,
-    MireDependency, MireLock, MireManifest, MireProject, OptLevel, compile_file_with_avenys,
-    default_output_dir, find_project_root, load_exports, load_manifest_dependencies,
-    load_project_manifest, project_lock_path, project_manifest_path, write_lock_file,
-    write_manifest,
+    BuildMode, BuildOptions, BuildResult, CDefs, EntryContainment, ImportMode, LibType,
+    MireCacheConfig, MireManifest, MirePaths, MireProject, OptLevel, RuntimeTier,
+    check_entry_containment, compile_file_with_avenys, default_output_dir, find_project_root,
+    load_config_file, load_exports, load_project_manifest,
 };
 pub use compiler::{
     AnalysisReport, WarningConfig, analyze_program, analyze_program_with_warnings,
@@ -28,3 +30,20 @@ pub use loader::{
 };
 pub use parser::parse;
 pub use parser::{MireValue, Program};
+
+/// Normalize `::` separators in function names to `.`.
+///
+/// The parser preserves `::` in fn declaration names (e.g., `push::i64`) so the
+/// renamer can distinguish original names from already-prefixed ones. Downstream
+/// compiler passes that need `.`-separated identifiers call this function exactly
+/// once at their boundary.
+///
+/// AST:   push::i64        ← kept by parser
+///         ↓ canonical_fn_name
+/// Typeck: push.i64         ← function lookup tables
+///         ↓ canonical_fn_name
+/// MIR:    push.i64         ← LLVM identifiers
+#[inline]
+pub fn canonical_fn_name(name: &str) -> String {
+    name.replace("::", ".")
+}

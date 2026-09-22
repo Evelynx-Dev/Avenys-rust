@@ -3,6 +3,7 @@ pub mod location;
 pub mod mir;
 pub mod semantic;
 pub mod typeck;
+mod warning_diagnostics;
 pub mod warnings;
 
 use crate::error::Result;

@@ -11,6 +11,7 @@ pub(crate) fn resolve_typed(val: &MirValue, ctx: &mut LlvmCtx) -> (String, Strin
                 MirConst::Float(_) => "double",
                 MirConst::Bool(_) => "i1",
                 MirConst::Str(_) => "ptr",
+                MirConst::Struct { .. } | MirConst::Zero { .. } => "ptr",
             };
             (v, t.to_string())
         }
@@ -139,9 +140,6 @@ pub(crate) fn resolve_named_call(
             result, raw_tmp
         ));
         extra.push(format!("call void @free(ptr {})", raw_tmp));
-        if let Some(id) = result_id {
-            ctx.owned_string_temps.insert(id);
-        }
         String::new() // The result id was already registered by tmp_result
     } else if is_str_return && ll_ret == "ptr" {
         // Regular function returning str: ensure result is managed (copy if literal)
@@ -158,9 +156,6 @@ pub(crate) fn resolve_named_call(
             "%t{} = call ptr @rt_managed_ensure_managed(ptr {})",
             result, raw_tmp
         ));
-        if let Some(id) = result_id {
-            ctx.owned_string_temps.insert(id);
-        }
         String::new()
     } else {
         let result = tmp_result(ctx, ll_ret, result_id);
@@ -198,7 +193,7 @@ pub(crate) fn coerce_to(
     if from_ty == to_ty {
         return operand.to_string();
     }
-    // bool (i1) <-> enteros: el resto del codegen ya zexta bool a i64 antes de llamar.
+    // bool (i1) <-> integers: the rest of codegen already zero-extends bool to i64 before calling.
     if to_ty == "double" && from_ty == "i64" {
         let conv = tmp_extra(ctx, "double");
         extra.push(format!("{} = sitofp i64 {} to double", conv, operand));
@@ -219,7 +214,7 @@ pub(crate) fn coerce_to(
         extra.push(format!("{} = fptrunc double {} to float", conv, operand));
         return conv;
     }
-    // Entero -> entero de distinto ancho (extensiones/truncamientos explícitos).
+    // Integer -> integer of different width (explicit extensions/truncations).
     let int_width = |t: &str| match t {
         "i1" => 1,
         "i8" => 8,
@@ -236,11 +231,17 @@ pub(crate) fn coerce_to(
             // Asumimos extensión con signo para los casos de coerción en llamadas;
             // los literales con ascripción ya emiten zext/sext explicitos en el lower.
             let conv = tmp_extra(ctx, to_ty);
-            extra.push(format!("{} = sext {} {} to {}", conv, from_ty, operand, to_ty));
+            extra.push(format!(
+                "{} = sext {} {} to {}",
+                conv, from_ty, operand, to_ty
+            ));
             return conv;
         } else if to_w < from_w {
             let conv = tmp_extra(ctx, to_ty);
-            extra.push(format!("{} = trunc {} {} to {}", conv, from_ty, operand, to_ty));
+            extra.push(format!(
+                "{} = trunc {} {} to {}",
+                conv, from_ty, operand, to_ty
+            ));
             return conv;
         }
     }

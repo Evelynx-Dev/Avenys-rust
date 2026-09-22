@@ -75,6 +75,10 @@ pub enum DataType {
         ok: Box<DataType>,
         err: Box<DataType>,
     },
+    /// Represents an optional value: `some(value)` or `none`.
+    Maybe {
+        inner: Box<DataType>,
+    },
     /// Closure as a first-class value with explicit signature.
     /// Stores params and return type for type-safe closure usage.
     Closure {
@@ -172,13 +176,13 @@ impl DataType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct AttributeArg {
     pub name: Option<String>,
     pub value: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Attribute {
     pub name: String,
     pub args: Vec<AttributeArg>,
@@ -227,7 +231,11 @@ pub struct TraitMethodSig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Expression {
-    Literal(Literal),
+    Literal {
+        lit: Literal,
+        line: usize,
+        column: usize,
+    },
     Identifier(Identifier),
     BinaryOp {
         operator: String,
@@ -319,6 +327,10 @@ pub enum Expression {
         value: Box<Expression>,
         data_type: DataType,
     },
+    Some {
+        value: Box<Expression>,
+        data_type: DataType,
+    },
     Match {
         value: Box<Expression>,
         cases: Vec<(Expression, Expression)>,
@@ -329,12 +341,16 @@ pub enum Expression {
         enum_name: String,
         variant_name: String,
         data_type: DataType,
+        line: usize,
+        column: usize,
     },
     EnumVariant {
         enum_name: String,
         variant_name: String,
         payloads: Vec<Expression>,
         data_type: DataType,
+        line: usize,
+        column: usize,
     },
     /// Explicit type ascription `(expr :T)`. Carries the target type and the
     /// resolved type of the whole expression (equal to `target`). The typechecker
@@ -348,6 +364,13 @@ pub enum Expression {
     },
     /// `use!` wrapper required around calls into `load!`-imported modules.
     UseMacro {
+        inner: Box<Expression>,
+    },
+    /// Macro call `name!(args)`. `inner` is the underlying call expression; the
+    /// `!` is sugar that routes the call to a function declared `@[macro!]`.
+    /// Mirrors `UseMacro`: the pipeline lower/borrowck/codegen arms simply
+    /// delegate to `inner`, so a MacroCall lowers to an ordinary call.
+    MacroCall {
         inner: Box<Expression>,
     },
 }
@@ -560,6 +583,8 @@ pub enum Statement {
         target: AssignmentTarget,
         value: Expression,
         is_mutable: bool,
+        line: usize,
+        column: usize,
     },
     Function {
         name: String,
@@ -574,6 +599,8 @@ pub enum Statement {
         return_type: DataType,
         visibility: Visibility,
         is_method: bool,
+        name_line: usize,
+        name_column: usize,
     },
     Return(Option<Expression>),
     If {
@@ -614,10 +641,21 @@ pub enum Statement {
         type_param_bounds: Vec<(String, Vec<String>)>,
         parent: Option<String>,
         fields: Vec<Statement>,
+        #[serde(default)]
+        attributes: Vec<Attribute>,
+        #[serde(default)]
+        line: usize,
+        #[serde(default)]
+        column: usize,
+        #[serde(default)]
+        end_line: usize,
+        #[serde(default)]
+        end_column: usize,
     },
     Skill {
         name: String,
         visibility: Visibility,
+        parent: Option<String>,
         methods: Vec<TraitMethodSig>,
     },
     Impl {
@@ -632,6 +670,8 @@ pub enum Statement {
     ExternLib {
         name: String,
         path: String,
+        line: usize,
+        column: usize,
     },
     ExternFunction {
         name: String,
@@ -639,6 +679,8 @@ pub enum Statement {
         params: Vec<(String, DataType)>,
         return_type: DataType,
         visibility: Visibility,
+        line: usize,
+        column: usize,
     },
     Unsafe {
         line: usize,
@@ -652,6 +694,8 @@ pub enum Statement {
         path: Vec<String>,
         alias: Option<String>,
         items: Option<Vec<String>>,
+        line: usize,
+        column: usize,
     },
     Module {
         name: String,
@@ -690,6 +734,8 @@ pub enum Statement {
     LoadLocal {
         rel_path: Vec<String>,
         absolute: bool,
+        line: usize,
+        column: usize,
     },
 }
 

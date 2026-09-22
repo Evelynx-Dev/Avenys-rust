@@ -7,6 +7,17 @@ on:
     branches: [main, master]
 
 jobs:
+  wasm-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pull WASI SDK image
+        run: docker pull ghcr.io/webassembly/wasi-sdk:latest
+
+      - name: Build and run WASI and freestanding WASM fixtures
+        run: MIRE_WASM_DOCKER_TESTS=1 tests/wasm_docker.sh
+
   build-and-test:
     runs-on: ubuntu-latest
     steps:
@@ -17,22 +28,51 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq llvm-dev clang libssl-dev libsdl2-dev
+          sudo apt-get install -y -qq wget ca-certificates pkg-config libsodium-dev zlib1g-dev libzstd-dev libarchive-dev
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 22
+          sudo apt-get install -y -qq llvm-22 llvm-22-dev llvm-22-tools clang-22 lld-22
+          echo "/usr/lib/llvm-22/bin" >> "$GITHUB_PATH"
 
-      - name: Checkout kioto
+      - name: Checkout kioto (up-to-date Evelynx-Dev fork, PR #2 = v2.4.7)
         uses: actions/checkout@v4
         with:
-          repository: mire-lang/Kioto
+          repository: Evelynx-Dev/Kioto-1
           path: kioto-src
+          ref: master
 
       - name: Setup kioto for tests
         run: cp -r kioto-src ../kioto
 
+      - name: Checkout mire stdlib (mire-lang/mire-lib == local Arch/mire, kioto transitivity)
+        uses: actions/checkout@v4
+        with:
+          repository: mire-lang/mire-lib
+          path: mire-src
+          ref: main
+
+      - name: Setup mire stdlib for tests
+        run: cp -r mire-src ../mire
+
       - name: Build
+        env:
+          LLVM_CONFIG_PATH: /usr/bin/llvm-config-22
         run: cargo build --release
 
       - name: Test
+        env:
+          LLVM_CONFIG_PATH: /usr/bin/llvm-config-22
         run: cargo test --release
+
+      - name: Run modular Mire tests
+        env:
+          LLVM_CONFIG_PATH: /usr/bin/llvm-config-22
+        run: |
+          rm -rf "$HOME/.owl/libs" /tmp/avenys-tests-cache
+          mkdir -p "$HOME/.owl/libs"
+          cp -a kioto-src "$HOME/.owl/libs/kioto"
+          cp -a mire-src "$HOME/.owl/libs/mire"
+          ./target/release/mire test tests -j 8 --release --log \
+            --lib-dir "$HOME/.owl/libs" --cache-dir /tmp/avenys-tests-cache
 
       - name: Prepare artifact
         run: |
@@ -55,7 +95,10 @@ jobs:
       - name: Install runtime dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq llvm-dev clang libssl-dev libsdl2-dev
+          sudo apt-get install -y -qq wget ca-certificates pkg-config libsodium-dev zlib1g-dev libzstd-dev libarchive-dev
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 22
+          sudo apt-get install -y -qq llvm-22 llvm-22-dev llvm-22-tools clang-22 lld-22
+          echo "/usr/lib/llvm-22/bin" >> "$GITHUB_PATH"
 
       - name: Download mire artifact
         uses: actions/download-artifact@v4
@@ -76,28 +119,66 @@ jobs:
           fi
           mire --version || echo "mire installed"
 
-      - name: Checkout kioto
+      - name: Checkout kioto (up-to-date Evelynx-Dev fork, PR #2 = v2.4.7)
         uses: actions/checkout@v4
         with:
-          repository: mire-lang/Kioto
+          repository: Evelynx-Dev/Kioto-1
           path: kioto-src
+          ref: master
 
-      - name: Checkout owl source
+      - name: Checkout owl source (up-to-date Evelynx-Dev fork, PR #14 = migrated namespaced API)
         uses: actions/checkout@v4
         with:
-          repository: mire-lang/owl
+          repository: Evelynx-Dev/owl
           path: owl-src
+          ref: pr-0.27.0
+
+      - name: Checkout mire stdlib (mire-lang/mire-lib, == local Arch/mire)
+        uses: actions/checkout@v4
+        with:
+          repository: mire-lang/mire-lib
+          path: mire
+          ref: main
 
       - name: Setup owl dependencies
         run: |
           mkdir -p ~/.owl/modules
           cp -r kioto-src ~/.owl/modules/kioto
           cp -r kioto-src ./kioto
+          # owl-src/owl.toml hardcodes Evelyn's local kioto path; repoint to
+          # the sibling checkout so `load kioto` resolves in CI.
+          sed -i 's|"/home/Evelyn/.owl/libs/kioto"|"../kioto"|' owl-src/owl.toml
+
+      - name: Generate avenys config for the owl build
+        run: |
+          cat > owl-src/native/mire-config.toml <<'EOF'
+          [project]
+          name = "owl"
+          version = "1.1.1"
+          entry = "code/main.mire"
+
+          [build]
+          profile = "release"
+          opt-level = 3
+          artifact = "bin"
+          runtime = "minimal"
+          target = "x86_64-unknown-linux-gnu"
+
+          [paths]
+          bin = "${{ github.workspace }}/owl-src/bin"
+          cache = "/tmp/owl-archive-cache"
+
+          [cfg]
+          libs = ["archive"]
+          sources = ["native/archive.c"]
+          link-dirs = []
+          cflags = ["-Wl,--disable-new-dtags", "-Wl,-rpath,$ORIGIN/../lib/mire"]
+          EOF
 
       - name: Build owl
         working-directory: owl-src
         run: |
-          mire build code/main.mire --release -O3 --no-analysis-cache
+          mire build code/main.mire --release -O3 --no-analysis-cache --config native/mire-config.toml
 
       - name: Test owl
         working-directory: owl-src
