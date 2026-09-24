@@ -3,6 +3,9 @@
 All notable changes to Avenys will be documented in this file.
 
 ## 4.2.0 - 2026-09-22
+### Documentation
+- **PAL API documented**: Added ownership conventions (`[PAL-OWNED]`, `[BORROWED]`, `[WRITE-INTO]`), thread-local error getter `pal_last_error_message()`, capability-based removal `pal_root_remove`, safe FFI variants `pal_dir_next_into` and `pal_dir_next_name`. Clarified UNSANDBOXED functions are internal-only.
+
 
 ### Added
 - **Multi-arch installer** (`install/install.sh`): detects the host release
