@@ -761,6 +761,7 @@ impl<'a> BorrowChecker<'a> {
                 | DataType::Bool
                 | DataType::Char
                 | DataType::None
+                | DataType::Str
                 | DataType::Ref { .. }
                 | DataType::RefMut { .. }
                 | DataType::Array { .. }

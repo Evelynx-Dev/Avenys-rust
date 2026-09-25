@@ -1,3 +1,10 @@
+## 4.2.2 - 2026-09-25
+### Fixed
+- **Compiler ownership bug (follow-up)**: Fixed borrow checker treating `Str` as non-copy type, causing false "Use after move" errors when strings passed to functions like `strings::concat`. Added `Str` to copy types in borrow checker (`compiler/borrowck/mod.rs`).
+- **Codegen**: Added global newline constant `@nl` for string functions.
+- **Builtins**: Formatting fix in PAL extern declarations.
+- **Cargo.lock** synced to 4.2.2.
+
 # Changelog
 
 All notable changes to Avenys will be documented in this file.

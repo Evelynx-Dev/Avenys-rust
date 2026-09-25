@@ -167,6 +167,7 @@ pub(crate) fn pal_extern_decls() -> Vec<String> {
         // ── Safety (spans) ────────────────────────────────────────────
         "declare void @rt_panic_loc(ptr, i64, i64, ptr)".to_string(),
         "declare i64 @rt_div_i64(i64, i64, i64, i64, ptr)".to_string(),
+        
         "declare i64 @rt_rem_i64(i64, i64, i64, i64, ptr)".to_string(),
         "declare void @rt_check_bounds_i64(i64, i64, i64, i64, ptr)".to_string(),
         // ── Result[T E] ──────────────────────────────────────────────
