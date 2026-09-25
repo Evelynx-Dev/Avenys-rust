@@ -1,17 +1,25 @@
-## 4.2.2 - 2026-09-25
-### Fixed
-- **Compiler ownership bug (follow-up)**: Fixed borrow checker treating `Str` as non-copy type, causing false "Use after move" errors when strings passed to functions like `strings::concat`. Added `Str` to copy types in borrow checker (`compiler/borrowck/mod.rs`).
-- **Codegen**: Added global newline constant `@nl` for string functions.
-- **Builtins**: Formatting fix in PAL extern declarations.
-- **Cargo.lock** synced to 4.2.2.
-
 # Changelog
 
 All notable changes to Avenys will be documented in this file.
 
-## 4.2.1 - 2026-09-25
+## 4.2.2 - 2026-09-25
 ### Fixed
-- **Compiler ownership bug**: Fixed borrow checker treating `Str` as non-copy type, causing false "Use after move" errors when strings passed to functions like `strings::concat`. Added `Str` to copy types in borrow checker (`compiler/borrowck/mod.rs`).
+- **Compiler ownership bug**: the borrow checker treated `Str` as a non-copy
+  type, producing false "Use after move" errors when a string was passed to a
+  function such as `strings::concat`. `Str` is now a copy type
+  (`src/compiler/borrowck/mod.rs`).
+
+> The release note first published in 4.2.1 announced this fix, but the code
+> change only shipped in 4.2.2. The 4.2.1 bump carried no source change.
+
+## 4.2.1 - 2026-09-25
+### Documentation
+- **PAL API** (`src/pal/pal.h`): documented the ownership conventions
+  (`[PAL-OWNED]`, `[BORROWED]`, `[WRITE-INTO]`), the thread-local
+  `pal_last_error_message()` error getter, capability-based removal
+  `pal_root_remove`, and the safe FFI variants `pal_dir_next_into` /
+  `pal_dir_next_name`. Clarified that UNSANDBOXED functions are internal-only.
+- Added the 4.2.0 changelog entry.
 
 ## 4.2.0 - 2026-09-22
 ### Documentation

@@ -131,9 +131,6 @@ pub fn mir_to_llvm_with_filename(
     }
     out.push(String::new());
     out.extend(strings);
-    // Define global newline constant @nl used by string functions
-    out.push("@nl = private unnamed_addr constant [2 x i8] c\"\\0A\\00\"".to_string());
-    out.push(String::new());
     out.extend(function_irs);
 
     (out.join("\n"), program.extern_libs.clone())
