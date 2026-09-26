@@ -11,7 +11,16 @@ The compiler, Avenys, translates Mire source through a multi-stage pipeline into
 native binaries via LLVM. It ships with Kioto, a standard library covering
 strings, collections, math, filesystem, processes, and more.
 
-## Recent Changes (v4.2.0)
+## Recent Changes (v4.3.0)
+- **`bits::<T>(x)` bit-level reinterpretation**: a same-width scalar bitcast
+  lowered to a native LLVM `bitcast`, with no runtime call and no C builtin.
+  Useful for IEEE-754 payload work, where a NaN's bits or a float's exact
+  representation matter and there is no arithmetic that would preserve them.
+  The type checker rejects a non-scalar source, a non-bitcastable target and
+  any width mismatch, pointing at the call site.
+- **Float division no longer folds to `0.0`**: constant folding erased a
+  division between two literals (`1.0 / 2.0` became `0`), because the
+  `SDiv` folding arm ignored its operands. It now folds to a real division.
 - **Multi-arch installer**: `install/install.sh` detects the release triple
   (`--arch` overrides), installs per-arch canonical archives, and adds
   `--check` (read-only audit), `--build-from-source` (host LLVM build) and

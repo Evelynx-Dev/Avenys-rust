@@ -2,6 +2,31 @@
 
 All notable changes to Avenys will be documented in this file.
 
+## 4.3.0 - 2026-09-26
+### Added
+- **`bits::<T>(x)` bit-level reinterpretation intrinsic** — a same-width scalar
+  bitcast, lowered straight to the existing `MirOp::BitCast`, so the emitted IR
+  is a native LLVM `bitcast` with no runtime call and no C builtin.
+  `DataType::bit_width()` reports the real storage width of plain scalars
+  (i8..i128, u8..u128, f32, f64) and `None` for bool, char, str and containers.
+  `bitcast_target()` resolves the `bits::T` / `bits.T` namespace suffix to a
+  `DataType` and distinguishes "not a bitcast" from "bitcast with a bad target",
+  so the type checker can reject a wrong argument count, a non-bitcastable
+  target, a non-scalar source and any width mismatch with a spanned diagnostic.
+  Tests cover the f64 roundtrip, zero bits, identity, denormal patterns, NaN
+  payload preservation and the i32/f32 width pair.
+
+> This is new language surface, hence the minor bump rather than a patch.
+
+### Fixed
+- **Float division folded to `0.0` during constant folding** — `SDiv` dispatched
+  on an `is_float` flag but its constant-folding arm ignored both operands and
+  returned `0.0` for every float division, so a program that divided two
+  literals such as `1.0 / 2.0` had the division erased at compile time and
+  printed `0`. The arm now folds to `x / y`. Covered by four cases in
+  `src/compiler/mir/optimize/mod.rs`: exact halves, signed zero, and operands
+  that are themselves constant-folded expressions.
+
 ## 4.2.2 - 2026-09-25
 ### Fixed
 - **Compiler ownership bug**: the borrow checker treated `Str` as a non-copy
