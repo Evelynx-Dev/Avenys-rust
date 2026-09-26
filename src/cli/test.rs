@@ -349,6 +349,12 @@ pub(crate) fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError
         read_owl_test_paths(cwd)
     };
 
+    let configured_test_dirs: Vec<PathBuf> = read_owl_test_paths(cwd)
+        .into_iter()
+        .map(|(_, p)| p)
+        .collect();
+    let named_directly: Vec<PathBuf> = paths.iter().map(|p| cwd.join(p)).collect();
+
     for (key, root) in &test_roots {
         let use_key_cat = !is_generic_key(key);
         if root.is_file() {
@@ -368,7 +374,13 @@ pub(crate) fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError
                 display,
                 target_file: root.clone(),
                 binary_path,
-                skip_run: has_main && !has_test_fn,
+                skip_run: should_skip_run(
+                    root,
+                    has_main,
+                    has_test_fn,
+                    &configured_test_dirs,
+                    &named_directly,
+                ),
                 golden: None,
             });
             continue;
@@ -427,7 +439,13 @@ pub(crate) fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError
                 display,
                 target_file,
                 binary_path,
-                skip_run: has_main && !has_test_fn,
+                skip_run: should_skip_run(
+                    &file,
+                    has_main,
+                    has_test_fn,
+                    &configured_test_dirs,
+                    &named_directly,
+                ),
                 golden: None,
             });
         }
@@ -485,7 +503,13 @@ pub(crate) fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError
                     display,
                     target_file: candidate.clone(),
                     binary_path,
-                    skip_run: has_main && !has_test_fn,
+                    skip_run: should_skip_run(
+                        &candidate,
+                        has_main,
+                        has_test_fn,
+                        &configured_test_dirs,
+                        &named_directly,
+                    ),
                     golden: None,
                 });
                 break;
@@ -617,10 +641,22 @@ pub(crate) fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError
                                         println!("  {}", trimmed);
                                     }
                                 }
-                                let status = if file_failed == 0 {
-                                    UnitStatus::Pass
-                                } else {
+                                let status = if file_failed > 0 {
                                     UnitStatus::Fail(format!("{} assertion(s) failed", file_failed))
+                                } else if !output.status.success() {
+                                    // A script-style test signals failure by
+                                    // exiting non-zero, and not every helper
+                                    // prints the `[FAIL]` marker the scanner
+                                    // above looks for. Trusting the exit code
+                                    // too means a failure cannot be reported as
+                                    // a pass merely because a helper chose its
+                                    // own wording for the message.
+                                    UnitStatus::Fail(format!(
+                                        "test binary {}",
+                                        describe_status(&output.status)
+                                    ))
+                                } else {
+                                    UnitStatus::Pass
                                 };
                                 results.push((u.category.clone(), u.display.clone(), status));
                             }
@@ -908,6 +944,23 @@ fn write_test_logs(
     );
 }
 
+/// Renders a child exit status for a failure message, naming the two ways a
+/// test process can end badly without a `[FAIL]` line: a plain non-zero exit
+/// (an assertion helper calling `exit(1)`) and an abnormal death (a signal, or
+/// a panic that aborts). The second is worth distinguishing, because
+/// "exited with signal 6 (Aborted)" points at a crash rather than an
+/// assertion.
+fn describe_status(status: &std::process::ExitStatus) -> String {
+    use std::os::unix::process::ExitStatusExt;
+    match status.code() {
+        Some(code) => format!("exited with code {code}"),
+        None => match status.signal() {
+            Some(sig) => format!("was killed by signal {sig}"),
+            None => "ended without an exit code".to_string(),
+        },
+    }
+}
+
 /// Runs one compiled test in its own process and records its real peak RSS.
 /// `/proc/<pid>/status` is sampled while it runs; the maximum observed RSS is
 /// retained, so the metric is a peak for that test process rather than a mean.
@@ -974,6 +1027,33 @@ fn declared_test_count(cwd: &Path, display: &str) -> u32 {
 /// so a failure inside it summed to zero and the summary printed `Failed: 0`
 /// directly beneath a `FAILED` line. The exit code was never wrong, which is
 /// exactly why this went unnoticed: only the number a human reads was lying.
+/// Decides whether a collected test unit should be compiled but not executed.
+///
+/// `main` without `@[test]` normally means "a program that got swept into a
+/// broad directory argument, not a test", and running it could have side
+/// effects. But a script-style test *is* a `main` that asserts through a helper
+/// and declares nothing, and a whole suite can be written that way — owl's is,
+/// file after file. Skipping those reported every one of them `ok (compiled)`
+/// having run no assertion at all, which is the same vacuous green that a
+/// shared test artifact produced, one layer further out.
+///
+/// So the skip is narrowed to what it was actually for. A file inside a test
+/// location the manifest configures is a test by construction and always runs;
+/// so does a file the user named outright. Only a file reached by walking a
+/// directory that is not a configured test location is left alone.
+fn should_skip_run(
+    file: &Path,
+    has_main: bool,
+    has_test_fn: bool,
+    configured_test_dirs: &[PathBuf],
+    named_directly: &[PathBuf],
+) -> bool {
+    has_main
+        && !has_test_fn
+        && !configured_test_dirs.iter().any(|dir| file.starts_with(dir))
+        && !named_directly.iter().any(|named| named == file)
+}
+
 fn failed_test_count(cwd: &Path, display: &str) -> u32 {
     declared_test_count(cwd, display).max(1)
 }
@@ -1019,6 +1099,76 @@ mod tests {
         assert_eq!(failed_test_count(&dir, "missing.mr"), 1);
 
         fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn script_style_units_run_unless_they_are_a_swept_up_program() {
+        let tests_dir = Path::new("/proj/tests");
+        let configured = vec![tests_dir.to_path_buf()];
+
+        // The case that was broken: a `main` asserting through a helper, with
+        // no @[test] anywhere, living in a configured test directory. This is
+        // owl's entire suite. It must execute, or the suite is vacuously green.
+        assert!(!should_skip_run(
+            &tests_dir.join("06_math.mr"),
+            true,
+            false,
+            &configured,
+            &[]
+        ));
+
+        // A conventional unit declares its cases and always runs.
+        assert!(!should_skip_run(
+            &tests_dir.join("ok.mr"),
+            false,
+            true,
+            &configured,
+            &[]
+        ));
+
+        // What the skip is actually for: `code/main.mr` has a main, declares
+        // nothing, and was reached by walking the project directory. Running it
+        // would execute a program for its side effects, so it stays skipped.
+        assert!(should_skip_run(
+            Path::new("/proj/code/main.mr"),
+            true,
+            false,
+            &configured,
+            &[]
+        ));
+
+        // Naming the file outright is a request to test it, so it runs even
+        // though it looks exactly like a swept-up program.
+        assert!(!should_skip_run(
+            Path::new("/proj/code/main.mr"),
+            true,
+            false,
+            &configured,
+            &[PathBuf::from("/proj/code/main.mr")]
+        ));
+
+        // A bare main outside the test tree, with nothing configured and
+        // nothing named, keeps the original conservative behaviour.
+        assert!(should_skip_run(
+            Path::new("/proj/main.mr"),
+            true,
+            false,
+            &[],
+            &[]
+        ));
+    }
+
+    #[test]
+    fn a_non_zero_exit_fails_a_unit_even_without_a_fail_marker() {
+        // A helper that exits non-zero without printing `[FAIL]` must not be
+        // reported as a pass. The exit status is the last line of defence: it
+        // holds even if the wording of a failure message changes.
+        let failed = Command::new("/bin/sh").arg("-c").arg("exit 3").status().unwrap();
+        assert!(!failed.success());
+        assert_eq!(describe_status(&failed), "exited with code 3");
+
+        let ok = Command::new("/bin/sh").arg("-c").arg("exit 0").status().unwrap();
+        assert!(ok.success());
     }
 }
 

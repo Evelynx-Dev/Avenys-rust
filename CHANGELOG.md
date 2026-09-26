@@ -42,6 +42,34 @@ All notable changes to Avenys will be documented in this file.
   why it went unnoticed: only the number a human reads was wrong. A failing unit
   now counts as at least one failure, in both the summary and the per-family
   logs.
+- **The runner never executed script-style tests, and never noticed a crash** —
+  two independent gaps, both of which turned a real failure into a green. A test
+  file that declares no `@[test]` and just runs assertions from `main` was only
+  compiled, so its assertions were never reached; and a non-golden unit was
+  judged solely on its output text, so a test binary that segfaulted printed no
+  `[FAIL]` line and was reported as a pass. The exit status is now honoured, and
+  a file under a configured test directory, or named explicitly on the command
+  line, runs even when it declares no `@[test]`. `should_skip_run()` keeps the
+  one case that should not execute: a program in the swept tree that is not a
+  test path stays `ok (compiled)` and has no run-time effect, so compiling
+  anything cannot turn into a side effect. On this correction four genuine
+  compiler bugs became visible for the first time, all previously masked by the
+  two gaps above; each is reduced to a self-contained repro and recorded in the
+  affected project's tests:
+  - a function whose parameter and return type are both `anything` crashes when
+    called with a concrete value;
+  - the pipeline operator applied to a lambda, `5 => (x => double(x))`, crashes;
+  - reading a field of a struct-valued field, `o.inner.value`, returns the wrong
+    value when it does not crash outright;
+  - a fixed array of structs that carry a managed string field crashes, while
+    the same array over a struct with only an integer field is fine.
+  A further gap is a type-safety hole rather than a code-generation one: `dasu`
+  has type `None` yet lowers to `0`, so an `i64 == str` comparison survives type
+  checking and reaches an `inttoptr` plus `strcmp` at run time.
+- **`tests/Operators/Pipeline` asserted through `dasu` against a string** — the
+  case did not test the pipeline, and the comparison above is what let it
+  compile. It now checks the actual result value and adds an independent
+  arithmetic pipeline case.
 
 ## 4.2.2 - 2026-09-25
 ### Fixed

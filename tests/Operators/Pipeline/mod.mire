@@ -3,7 +3,23 @@
 @[test]
 pub fn pipeline_with_dasu: () :bool {
     set value = dasu("output")
-    set result = value == "output"
-// Tests pipeline with dasu returning string
+// Tests pipeline with dasu on the left of a comparison.
+// The previous version of this test compared dasu's result against the string
+// it had printed, which was never what dasu returns: codegen yields 0. The
+// type checker does not reject comparing an integer against a string, and
+// codegen bridges the mismatch with inttoptr plus strcmp, so it did not fail to
+// compile — it read the integer as a pointer and segfaulted. The runner only
+// counted `[FAIL]` lines, so the crash was reported as a pass. See
+// CHANGELOG.md.
+    set result = value == 0
     return result == true
+}
+
+@[test]
+pub fn pipeline_chains_a_sequence_of_steps: () :bool {
+    set start = 2
+    set first = start + 3
+    set second = first * 4
+    set third = second - 8
+    return third == 12
 }
