@@ -40,10 +40,45 @@ pub fn compile_file_with_avenys(source_path: &Path, options: &BuildOptions) -> R
         ))
     })?;
     let source_filename = source_path.display().to_string();
+    let normalized = normalize_test_build_options(options);
+    let options = normalized.as_ref().unwrap_or(options);
     match compile_file_inner(source_path, options, &source, &source_filename) {
         Ok(result) => Ok(result),
         Err(err) => Err(err.ensure_context(&source_filename, &source)),
     }
+}
+
+/// Enforce what a test build needs, independently of what the project builds.
+///
+/// A test always needs an executable, and always needs the runtime to run on.
+/// What a project publishes is irrelevant to both: a library configured as
+/// `shared` would otherwise build a shared object with no test entry point, and
+/// the runner would report every test file as ok having run no assertion. This
+/// runs once, at the entry point, before any consumer of `artifact` or `runtime`
+/// branches on them, so the test path cannot be steered by a manifest.
+///
+/// Returns `None` when the options already satisfy both, so the common case
+/// borrows rather than clones.
+fn normalize_test_build_options(options: &BuildOptions) -> Option<BuildOptions> {
+    if !options.test_mode {
+        return None;
+    }
+    let needs_artifact = !matches!(options.c_defs.artifact, LibType::Bin);
+    let needs_runtime = matches!(options.c_defs.runtime, RuntimeTier::None);
+    if !needs_artifact && !needs_runtime {
+        return None;
+    }
+    Some(BuildOptions {
+        c_defs: CDefs {
+            artifact: LibType::Bin,
+            runtime: match options.c_defs.runtime {
+                RuntimeTier::None => RuntimeTier::Minimal,
+                tier => tier,
+            },
+            ..options.c_defs.clone()
+        },
+        ..options.clone()
+    })
 }
 
 fn compile_file_inner(
@@ -842,4 +877,70 @@ pub fn default_output_dir(source_path: &Path, mode: BuildMode) -> PathBuf {
             BuildMode::Debug => "debug",
             BuildMode::Release => "release",
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn opts(artifact: LibType, runtime: RuntimeTier, test_mode: bool) -> BuildOptions {
+        BuildOptions {
+            c_defs: CDefs {
+                artifact,
+                runtime,
+                ..CDefs::default()
+            },
+            test_mode,
+            ..BuildOptions::default()
+        }
+    }
+
+    #[test]
+    fn a_test_build_is_artifact_independent() {
+        // The library case that made `owl test` report every file as ok having
+        // run nothing: kioto, mire, sdl, sqlite and blu all declare this.
+        let shared = normalize_test_build_options(&opts(LibType::Shared, RuntimeTier::Minimal, true))
+            .expect("shared artifact must be normalized for a test");
+        assert!(matches!(shared.c_defs.artifact, LibType::Bin));
+
+        let statik =
+            normalize_test_build_options(&opts(LibType::Static, RuntimeTier::Minimal, true))
+                .expect("static artifact must be normalized for a test");
+        assert!(matches!(statik.c_defs.artifact, LibType::Bin));
+
+        // Already an executable: nothing to do, so nothing is cloned.
+        assert!(normalize_test_build_options(&opts(LibType::Bin, RuntimeTier::Minimal, true))
+            .is_none());
+    }
+
+    #[test]
+    fn a_test_build_always_gets_a_runtime() {
+        // A test needs the runtime to run on, so a manifest declaring the
+        // freestanding tier is lifted to minimal.
+        let freestanding =
+            normalize_test_build_options(&opts(LibType::Bin, RuntimeTier::None, true))
+                .expect("none runtime must be lifted for a test");
+        assert!(matches!(freestanding.c_defs.runtime, RuntimeTier::Minimal));
+
+        // A full-tier project keeps its tier. Paired with a shared artifact so
+        // there is a normalization to observe: only the artifact should move.
+        let full = normalize_test_build_options(&opts(LibType::Shared, RuntimeTier::Full, true))
+            .expect("shared artifact must be normalized alongside a full tier");
+        assert!(matches!(full.c_defs.runtime, RuntimeTier::Full));
+        assert!(matches!(full.c_defs.artifact, LibType::Bin));
+
+        // Bin + full needs no normalization at all, and must not clone to say so.
+        assert!(normalize_test_build_options(&opts(LibType::Bin, RuntimeTier::Full, true)).is_none());
+    }
+
+    #[test]
+    fn a_normal_build_is_never_touched() {
+        // The whole point is that this applies to tests only. A library build
+        // must keep the artifact it was configured with, or packages would
+        // stop being able to publish.
+        assert!(normalize_test_build_options(&opts(LibType::Shared, RuntimeTier::None, false))
+            .is_none());
+        assert!(normalize_test_build_options(&opts(LibType::Static, RuntimeTier::Minimal, false))
+            .is_none());
+    }
 }

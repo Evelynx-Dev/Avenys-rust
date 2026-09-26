@@ -21,6 +21,12 @@ strings, collections, math, filesystem, processes, and more.
 - **Float division no longer folds to `0.0`**: constant folding erased a
   division between two literals (`1.0 / 2.0` became `0`), because the
   `SDiv` folding arm ignored its operands. It now folds to a real division.
+- **`mire test` is independent of the artifact**: a test always builds an
+  executable, whatever `[build] artifact` declares, and always gets at least the
+  minimal runtime. Libraries used to produce a shared object with no test entry
+  point, so every test file came back `ok` having run nothing. A failing test
+  file that declares no `@[test]` also now counts as at least one failure
+  instead of being invisible in the totals.
 - **Multi-arch installer**: `install/install.sh` detects the release triple
   (`--arch` overrides), installs per-arch canonical archives, and adds
   `--check` (read-only audit), `--build-from-source` (host LLVM build) and

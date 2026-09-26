@@ -26,6 +26,22 @@ All notable changes to Avenys will be documented in this file.
   printed `0`. The arm now folds to `x / y`. Covered by four cases in
   `src/compiler/mir/optimize/mod.rs`: exact halves, signed zero, and operands
   that are themselves constant-folded expressions.
+- **A test build inherited the project's artifact** — `mire test` on a project
+  declaring `artifact = "shared"` built a shared object, so the runner had no
+  executable to run and reported every test file `ok` having executed no
+  assertion. It reached every library package, and a green from that path was a
+  build success rather than a test result. `normalize_test_build_options()` now
+  forces an executable and lifts a `none` runtime tier to `minimal`, once at the
+  entry point and before any consumer of those fields branches on them, so the
+  guarantee holds however the compiler is driven. A normal build is untouched:
+  packages can still publish the artifact they declare.
+- **A failing test file could report zero failures** — the summary counts
+  `@[test]` declarations, so a script-style test declaring none (a plain `main`
+  asserting through a helper) summed to nothing and printed `Failed: 0`
+  directly beneath a `FAILED` line. The exit code was always correct, which is
+  why it went unnoticed: only the number a human reads was wrong. A failing unit
+  now counts as at least one failure, in both the summary and the per-family
+  logs.
 
 ## 4.2.2 - 2026-09-25
 ### Fixed

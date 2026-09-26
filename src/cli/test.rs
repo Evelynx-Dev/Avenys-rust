@@ -719,10 +719,16 @@ pub(crate) fn test_command(cwd: &Path, args: &[String]) -> Result<i32, MireError
         .filter(|(_, _, status)| matches!(status, UnitStatus::Pass | UnitStatus::Compiled))
         .map(|(_, display, _)| declared_test_count(cwd, display))
         .sum();
+    // A failing unit counts as at least one failure. A file that declares no
+    // @[test] function has nothing to count, so summing raw declaration counts
+    // reported "Failed: 0" next to a file that had just printed FAILED: a
+    // script-style test (a plain main asserting through a helper, as owl's own
+    // suite does) could fail as loudly as it liked without ever moving the
+    // total. The failure has to be visible where the user is looking.
     let declared_failed: u32 = results
         .iter()
         .filter(|(_, _, status)| matches!(status, UnitStatus::Fail(_)))
-        .map(|(_, display, _)| declared_test_count(cwd, display))
+        .map(|(_, display, _)| failed_test_count(cwd, display))
         .sum();
     let total = declared_passed + declared_failed + global_skipped;
     println!();
@@ -837,7 +843,8 @@ fn write_test_logs(
         let test_count = declared_test_count(cwd, display);
         match status {
             UnitStatus::Pass | UnitStatus::Compiled => entry.0 += test_count,
-            UnitStatus::Fail(_) => entry.1 += test_count,
+            // Same floor as the summary: a failing unit is never worth zero.
+            UnitStatus::Fail(_) => entry.1 += failed_test_count(cwd, display),
         }
         if let Some((ram_mb, time_ms, cpu_percent)) = execution_metrics.get(display) {
             entry.4 = entry.4.max(*ram_mb);
@@ -957,6 +964,62 @@ fn declared_test_count(cwd: &Path, display: &str) -> u32 {
         .ok()
         .map(|source| source.matches("@[test]").count() as u32)
         .unwrap_or(0)
+}
+
+/// How much a failing unit contributes to the totals.
+///
+/// Counting raw `@[test]` declarations is right for a file that declares them,
+/// and wrong for one that does not. A script-style test — a plain `main` that
+/// asserts through a helper, the shape owl's own suite uses — declares nothing,
+/// so a failure inside it summed to zero and the summary printed `Failed: 0`
+/// directly beneath a `FAILED` line. The exit code was never wrong, which is
+/// exactly why this went unnoticed: only the number a human reads was lying.
+fn failed_test_count(cwd: &Path, display: &str) -> u32 {
+    declared_test_count(cwd, display).max(1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write_unit(dir: &Path, name: &str, body: &str) {
+        fs::write(dir.join(name), body).expect("write unit");
+    }
+
+    #[test]
+    fn a_failing_unit_without_test_declarations_still_counts_as_one() {
+        let dir = std::env::temp_dir().join(format!(
+            "mire_failed_count_{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        // The shape owl's suite uses: a plain main asserting through a helper,
+        // with no @[test] declarations anywhere.
+        write_unit(
+            &dir,
+            "script.mr",
+            "pub fn main: () { if 1 != 2 { exit(1) } }",
+        );
+        // A conventional unit declaring three cases, one of which failed.
+        write_unit(
+            &dir,
+            "declared.mr",
+            "@[test] pub fn a: () :bool { return true }\n\
+             @[test] pub fn b: () :bool { return false }\n\
+             @[test] pub fn c: () :bool { return true }",
+        );
+
+        // Zero declarations, but a failure is still one failure.
+        assert_eq!(declared_test_count(&dir, "script.mr"), 0);
+        assert_eq!(failed_test_count(&dir, "script.mr"), 1);
+        // Declared units keep their real count rather than being floored to one.
+        assert_eq!(declared_test_count(&dir, "declared.mr"), 3);
+        assert_eq!(failed_test_count(&dir, "declared.mr"), 3);
+        // A unit that cannot even be read must not vanish either.
+        assert_eq!(failed_test_count(&dir, "missing.mr"), 1);
+
+        fs::remove_dir_all(&dir).ok();
+    }
 }
 
 fn family_log_name(name: &str) -> String {
