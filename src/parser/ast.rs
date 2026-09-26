@@ -123,7 +123,7 @@ impl DataType {
                 key_type: Box::new(DataType::Unknown),
                 value_type: Box::new(DataType::Unknown),
             },
-            "anything" => DataType::Anything,
+            "any" | "anything" => DataType::Anything,
             "function" => DataType::Function,
             "db" => DataType::Db,
             "tuple" => DataType::Tuple,

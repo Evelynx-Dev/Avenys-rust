@@ -704,7 +704,8 @@ fn compile_file_inner(
             ir.push_str("  store i32 %argc, ptr @.argc\n");
             ir.push_str("  store ptr %argv, ptr @.argv\n");
             ir.push_str("  %call_main = call i64 @fn_main(ptr null)\n");
-            ir.push_str("  ret i32 0\n");
+            ir.push_str("  %exit_code = trunc i64 %call_main to i32\n");
+            ir.push_str("  ret i32 %exit_code\n");
             ir.push_str("}\n");
         }
         ir = dedup_llvm_declarations(&ir);

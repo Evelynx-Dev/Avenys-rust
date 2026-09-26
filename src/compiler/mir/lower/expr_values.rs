@@ -22,6 +22,24 @@ impl MirLower {
 
     pub(crate) fn get_struct_name(&self, expr: &Expression) -> Option<String> {
         match expr {
+            Expression::BinaryOp { data_type, .. }
+            | Expression::UnaryOp { data_type, .. }
+            | Expression::NamedArg { data_type, .. }
+            | Expression::Call { data_type, .. }
+            | Expression::List { data_type, .. }
+            | Expression::Dict { data_type, .. }
+            | Expression::Tuple { data_type, .. }
+            | Expression::Index { data_type, .. }
+            | Expression::MemberAccess { data_type, .. }
+            | Expression::Reference { data_type, .. }
+            | Expression::Dereference { data_type, .. }
+            | Expression::Box { data_type, .. }
+            | Expression::Pipeline { data_type, .. } => {
+                if let DataType::StructNamed(name) = data_type {
+                    return Some(name.clone());
+                }
+                None
+            }
             Expression::Identifier(id) => self.var_types.get(&id.name).and_then(|t| match t {
                 DataType::StructNamed(name) => Some(name.clone()),
                 DataType::Ref { inner } | DataType::RefMut { inner } => {
@@ -33,6 +51,7 @@ impl MirLower {
                 }
                 _ => None,
             }),
+            Expression::MemberAccess { target, .. } => self.get_struct_name(target),
             _ => None,
         }
     }

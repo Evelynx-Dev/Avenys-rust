@@ -67,6 +67,17 @@ fn collect_concat_operands(
 }
 
 impl MirLower {
+    /// Returns the element type for pipeline input (vector -> element, array -> element, slice -> element, str -> str, other -> as-is)
+    fn pipeline_input_element_type(&self, input_type: &DataType) -> DataType {
+        match input_type {
+            DataType::Vector { element_type, .. }
+            | DataType::Array { element_type, .. }
+            | DataType::Slice { element_type } => *element_type.clone(),
+            DataType::Str => DataType::Str,
+            other => other.clone(),
+        }
+    }
+
     pub(crate) fn lower_call_args(&mut self, name: &str, args: &[Expression]) -> Vec<MirValue> {
         let needs_wrap = name == "dasu" || name == "print" || name == "str";
         args.iter()
@@ -900,7 +911,7 @@ impl MirLower {
                             ),
                             loc,
                         );
-                        if matches!(actual_field_type, DataType::Array { .. }) {
+                        if matches!(actual_field_type, DataType::Array { .. } | DataType::StructNamed(_)) {
                             return MirValue::temp(gep_result);
                         }
                         let load_result = self.new_temp();
@@ -972,7 +983,7 @@ impl MirLower {
                     );
                     MirValue::temp(result)
                 }
-                _ => MirValue::Const(MirConst::None),
+                _ => { debug_assert!(false, "unhandled Expression variant in lowering"); MirValue::Const(MirConst::None) },
             },
 
             Expression::Index {
@@ -1325,7 +1336,7 @@ impl MirLower {
                     );
                     MirValue::temp(final_list)
                 }
-                _ => MirValue::Const(MirConst::None),
+                _ => { debug_assert!(false, "unhandled Expression variant in lowering"); MirValue::Const(MirConst::None) },
             },
             Expression::EnumVariantPath {
                 enum_name,
@@ -1743,7 +1754,25 @@ impl MirLower {
                     MirValue::temp(value)
                 }
             }
-            _ => MirValue::Const(MirConst::None),
+            Expression::Pipeline { input, stage, data_type, .. } => {
+                let input_val = self.lower_expression(input);
+                // Function/identifier stage: call with input as first argument
+                let stage_val = self.lower_expression(stage);
+                let result = self.new_temp();
+                self.func.blocks[self.current_block].push(
+                    Some(result),
+                    MirOp::Call(
+                        stage_val,
+                        vec![input_val],
+                        MirType {
+                            data_type: data_type.clone(),
+                        },
+                    ),
+                    loc,
+                );
+                MirValue::temp(result)
+            }
+            _ => { debug_assert!(false, "unhandled Expression variant in lowering"); MirValue::Const(MirConst::None) },
         }
     }
 
@@ -1927,7 +1956,7 @@ impl MirLower {
                 );
                 MirValue::temp(result)
             }
-            _ => MirValue::Const(MirConst::None),
+            _ => { debug_assert!(false, "unhandled Expression variant in lowering"); MirValue::Const(MirConst::None) },
         }
     }
 }

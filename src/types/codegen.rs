@@ -127,7 +127,7 @@ pub fn llvm_elem_type_str(dt: &DataType) -> String {
         DataType::Bool => "i1".to_string(),
         DataType::Char => "i32".to_string(),
         DataType::None => "i64".to_string(),
-        DataType::StructNamed(name) => format!("struct:{}", name),
+        DataType::StructNamed(_) => "ptr".to_string(),
         _ => "i64".to_string(),
     }
 }

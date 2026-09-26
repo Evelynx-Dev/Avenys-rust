@@ -66,7 +66,21 @@ pub fn resolve_binary_type(operator: &str, left: &DataType, right: &DataType) ->
                 ),
             ))
         }
-        "==" | "!=" | "<" | "<=" | ">" | ">=" => Ok(DataType::Bool),
+        "==" | "!=" | "<" | "<=" | ">" | ">=" => {
+            if is_comparable_pair(left, right) {
+                Ok(DataType::Bool)
+            } else {
+                Err(type_error(
+                    0,
+                    0,
+                    format!(
+                        "Cannot compare {:?} with {:?}: comparison requires both operands to be \
+                         the same kind (both numbers, both strings, both bools, or the same type)",
+                        left, right
+                    ),
+                ))
+            }
+        }
         "&&" | "||" => {
             if left == &DataType::Unknown || right == &DataType::Unknown {
                 return Ok(DataType::Bool);
@@ -441,6 +455,76 @@ pub fn is_bool_like(dtype: &DataType) -> bool {
         dtype,
         DataType::Bool | DataType::Anything | DataType::Unknown
     )
+}
+
+/// Broad "is this a runtime container/reference class" test, used to decide
+/// whether two operands belong to the same comparison class.
+fn is_reference_class(dtype: &DataType) -> bool {
+    matches!(
+        dtype,
+        DataType::List
+            | DataType::Vector { .. }
+            | DataType::Dict
+            | DataType::Map { .. }
+            | DataType::Tuple
+            | DataType::Set
+            | DataType::Box
+            | DataType::Datetime
+            | DataType::Result { .. }
+            | DataType::Maybe { .. }
+            | DataType::DynTrait { .. }
+            | DataType::Array { .. }
+            | DataType::Slice { .. }
+            | DataType::Ref { .. }
+            | DataType::RefMut { .. }
+            | DataType::Function
+            | DataType::Closure { .. }
+    )
+}
+
+/// Are `left` and `right` mutually comparable with `==` / `!=` / `<` / …?
+///
+/// Without this check the typechecker accepted `i64 == str`, which reached
+/// codegen as an `inttoptr` + `strcmp` and dereferenced a small integer as a
+/// string pointer (SIGSEGV). The rule is "same class", not "identical type",
+/// so `str == str`, `i64 == f64` and `S == S` all stay legal.
+///
+/// `Unknown` / `Anything` are inference placeholders, so they defer the decision.
+/// `None` is the *void* marker of statement-only builtins (`dasu`, `fs::write`,
+/// `map::remove`, …) — it carries no value, so comparing one is always a bug.
+pub fn is_comparable_pair(left: &DataType, right: &DataType) -> bool {
+    if matches!(left, DataType::Unknown | DataType::Anything)
+        || matches!(right, DataType::Unknown | DataType::Anything)
+    {
+        return true;
+    }
+    if matches!(left, DataType::None) || matches!(right, DataType::None) {
+        return false;
+    }
+    if is_numeric(left) && is_numeric(right) {
+        return true;
+    }
+    if is_bool_like(left) && is_bool_like(right) {
+        return true;
+    }
+    if left == right {
+        return true;
+    }
+    if left.is_struct_like() && right.is_struct_like() {
+        return left.struct_name() == right.struct_name();
+    }
+    if matches!(left, DataType::Enum | DataType::EnumNamed(_))
+        && matches!(right, DataType::Enum | DataType::EnumNamed(_))
+    {
+        return true;
+    }
+    if is_reference_class(left) && is_reference_class(right) {
+        return true;
+    }
+    if matches!(left, DataType::Generic(_)) || matches!(right, DataType::Generic(_)) {
+        return true;
+    }
+    false
 }
 
 /// Is the assignment of `actual` to `expected` valid?
