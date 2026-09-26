@@ -1,7 +1,7 @@
 [project]
 name = "avenys"
 version = "4.1.0"
-entry = "tests/mod.mire"
+entry = "tests/mod.mr"
 
 [build]
 compiler = "mire"

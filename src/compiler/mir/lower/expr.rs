@@ -429,6 +429,24 @@ impl MirLower {
             Expression::Call { name, args, .. } if name == "__type_matches" => {
                 MirValue::Const(MirConst::Bool(true))
             }
+            // bits::<T>(value) — bit-level reinterpretation between same-width
+            // scalars. typeck has already validated the widths, so this lowers
+            // straight to MirOp::BitCast (no runtime call, no builtin).
+            Expression::Call { name, args, .. } if crate::bitcast_target(name).is_some() => {
+                let target = crate::bitcast_target(name).unwrap_or(DataType::Unknown);
+                let source = self.lower_expression(&args[0]);
+                let dst_type = MirType {
+                    data_type: target,
+                };
+                let result = self.new_temp();
+                let block = self.current_block;
+                self.func.blocks[block].push(
+                    Some(result),
+                    MirOp::BitCast(source, dst_type),
+                    loc,
+                );
+                MirValue::temp(result)
+            }
             Expression::Call { name, args, .. } if name == "range" => {
                 let mir_args: Vec<MirValue> =
                     args.iter().map(|a| self.lower_expression(a)).collect();

@@ -47,3 +47,21 @@ pub use parser::{MireValue, Program};
 pub fn canonical_fn_name(name: &str) -> String {
     name.replace("::", ".")
 }
+
+/// Namespace of the bit-level reinterpretation intrinsic.
+pub const BITCAST_NS: &str = "bits";
+
+/// Resolve `bits::<T>(x)` / `bits.<T>(x)` to the target type `T`.
+///
+/// Returns `None` when `name` is not a bitcast at all. `Some(DataType::Unknown)`
+/// means it *is* a bitcast but the suffix is not a known type, so the caller
+/// should report a diagnostic rather than fall through to normal call
+/// resolution.
+pub fn bitcast_target(name: &str) -> Option<crate::parser::ast::DataType> {
+    let sep = if name.contains("::") { "::" } else { "." };
+    let (ns, rest) = name.split_once(sep)?;
+    if ns != BITCAST_NS || rest.is_empty() || rest.contains('.') || rest.contains(':') {
+        return None;
+    }
+    Some(crate::parser::ast::DataType::parse_type(rest))
+}

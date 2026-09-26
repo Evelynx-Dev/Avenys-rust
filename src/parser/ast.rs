@@ -134,6 +134,20 @@ impl DataType {
         }
     }
 
+    /// Width in bits for the scalar types a `bits::<T>(x)` reinterpretation can
+    /// target. Returns `None` for anything that is not a plain scalar, because
+    /// those have no fixed bit-level reinterpretation.
+    pub fn bit_width(&self) -> Option<u32> {
+        Some(match self {
+            DataType::I8 | DataType::U8 => 8,
+            DataType::I16 | DataType::U16 => 16,
+            DataType::I32 | DataType::U32 | DataType::F32 => 32,
+            DataType::I64 | DataType::U64 | DataType::F64 => 64,
+            DataType::I128 | DataType::U128 => 128,
+            _ => return None,
+        })
+    }
+
     pub fn is_struct_like(&self) -> bool {
         matches!(self, DataType::Struct | DataType::StructNamed(_))
     }

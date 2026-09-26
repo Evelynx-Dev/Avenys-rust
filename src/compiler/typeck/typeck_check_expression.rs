@@ -204,6 +204,71 @@ impl TypeChecker {
                 name_line,
                 name_column,
                 data_type,
+            } if crate::bitcast_target(name).is_some() => {
+                let target = crate::bitcast_target(name).unwrap_or(DataType::Unknown);
+                if args.len() != 1 {
+                    return Err(type_error_at_span(
+                        self.current_span,
+                        format!(
+                            "`bits::<T>(value)` takes exactly 1 argument, got {}",
+                            args.len()
+                        ),
+                    ));
+                }
+                if target == DataType::Unknown {
+                    return Err(type_error_at_span(
+                        self.current_span,
+                        format!("unknown bitcast target type in `bits::<{name}>(value)`"),
+                    ));
+                }
+                let source = self.check_expression(&mut args[0])?;
+                let target_width = match target.bit_width() {
+                    Some(w) => w,
+                    None => {
+                        return Err(type_error_at_span(
+                            self.current_span,
+                            format!(
+                                "`{}` is not a bitcastable type: expected one of \
+                                 i8/i16/i32/i64/i128/u8/u16/u32/u64/u128/f32/f64",
+                                data_type_name_for_diag(&target)
+                            ),
+                        ));
+                    }
+                };
+                match source.bit_width() {
+                    Some(w) if w == target_width => {}
+                    Some(w) => {
+                        return Err(type_error_at_span(
+                            self.current_span,
+                            format!(
+                                "cannot bitcast {} ({w}-bit) to {} ({target_width}-bit): \
+                                 both sides must have the same width",
+                                data_type_name_for_diag(&source),
+                                data_type_name_for_diag(&target)
+                            ),
+                        ));
+                    }
+                    None => {
+                        return Err(type_error_at_span(
+                            self.current_span,
+                            format!(
+                                "cannot bitcast {}: only plain scalars have a bit-level \
+                                 representation",
+                                data_type_name_for_diag(&source)
+                            ),
+                        ));
+                    }
+                }
+                *data_type = target.clone();
+                Ok(target)
+            }
+            Expression::Call {
+                name,
+                args,
+                type_args,
+                name_line,
+                name_column,
+                data_type,
             } => {
                 // A qualified call into a `load!`-imported module is only
                 // allowed when wrapped in `use!`. The qualifier may appear
