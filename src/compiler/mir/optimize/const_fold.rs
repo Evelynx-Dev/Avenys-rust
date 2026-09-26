@@ -35,7 +35,7 @@ fn try_fold(inst: &MirInst) -> Option<MirConst> {
         SDiv(MirValue::Const(a), MirValue::Const(b)) => match (a, b) {
             (MirConst::Int(0), _) => None,
             (_, MirConst::Int(0)) => None,
-            _ => binop_const(a, b, |x, y| x / y, |_, _| 0.0),
+            _ => binop_const(a, b, |x, y| x / y, |x, y| x / y),
         },
         SRem(MirValue::Const(a), MirValue::Const(b)) => match (a, b) {
             (MirConst::Int(0), _) => None,

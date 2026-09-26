@@ -1,0 +1,1 @@
+write_mire_config called with path=[tests/log/bin/.cache/mire-test-config.toml]
