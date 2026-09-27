@@ -82,6 +82,9 @@ struct ImportResolver<'a> {
     /// by its module, so extra exports cannot collide, and the final expansion's
     /// dedupe pass still collapses identical statements.
     reachable_candidate_scope: HashSet<String>,
+    /// Files already visited by the candidate pre-scan, so the scan visits each
+    /// canonical path once even when several modules load it.
+    candidate_scan_seen: HashSet<PathBuf>,
 }
 
 // Local imports may be deeply nested, but a hostile or accidental graph must
@@ -124,6 +127,7 @@ impl<'a> ImportResolver<'a> {
             current_file: None,
             expand_derives_entry: true,
             reachable_candidate_scope: HashSet::new(),
+            candidate_scan_seen: HashSet::new(),
         }
     }
 
@@ -143,6 +147,117 @@ impl<'a> ImportResolver<'a> {
     /// - **`Statement::Load`** → `load` submodule (package resolution)
     /// - **`Statement::LoadLocal`** → `lload` submodule (local resolution)
     /// - Everything else → pass through
+    /// Collect the dependency candidates of the whole import graph *before* any
+    /// reachable selection runs.
+    ///
+    /// Reachable selection asks "does this module export what somebody asked
+    /// for?", and the answer depends on the candidate set. That set used to be
+    /// whatever had been collected *so far*, top-down, so an early `load` was
+    /// selected against a strictly narrower set than a later one. Two
+    /// consequences, both observable:
+    ///
+    /// * A module pulled in by an early `load` was expanded and cached before a
+    ///   later module could contribute its references, so an export only the
+    ///   later module asked for was missing. Swapping the two `load` statements
+    ///   then changed which exports survived, which is what made the order of
+    ///   the statements part of the language's semantics.
+    /// * A symbol a dependency needs could be reported as undefined even though
+    ///   it was there. `load kioto` before `load testlib` lost kioto's
+    ///   `strings::from::i64` (referenced only from inside testlib) and failed
+    ///   with `Unknown function 'strings.from.i64'`; the same two loads in the
+    ///   opposite order compiled.
+    ///
+    /// Scanning the graph first makes every selection see every reference in the
+    /// program, so the outcome no longer depends on `load` order. The scan is
+    /// best-effort: an unresolvable target is skipped here and reported with its
+    /// real span by the expansion that follows, so errors keep their location
+    /// instead of being reported against the entry file.
+    ///
+    /// It parses through the same memoized `load_or_parse_file` the expansion
+    /// uses, so the extra pass costs no re-parsing of unchanged files and never
+    /// populates `expanded_cache`. `@[derive]` expansion is not replayed here:
+    /// derived code is intra-module, and widening the scope past what a consumer
+    /// asked for is harmless while narrowing it is not.
+    fn scan_dependency_candidates(&mut self, path: &Path) {
+        let Ok(canonical) = path.canonicalize() else {
+            return;
+        };
+        if self.candidate_scan_seen.len() >= MAX_LOADED_FILES {
+            return;
+        }
+        if !self.candidate_scan_seen.insert(canonical.clone()) {
+            return;
+        }
+        let Ok(parsed) = load_or_parse_file(self, &canonical, None) else {
+            // Leave the file marked as seen: the expansion will report the real
+            // error, and re-walking a broken graph from every importer would
+            // only repeat the failure.
+            return;
+        };
+        self.reachable_candidate_scope
+            .extend(collect_program_dependency_candidates(&parsed.program));
+
+        for statement in &parsed.program.statements {
+            match statement {
+                Statement::Load {
+                    path: segments,
+                    line,
+                    column,
+                    ..
+                } if !segments.is_empty() && !segments[0].starts_with("__") => {
+                    for target in self.scan_load_targets(segments, *line, *column) {
+                        self.scan_dependency_candidates(&target);
+                    }
+                }
+                Statement::LoadLocal {
+                    rel_path,
+                    absolute,
+                    line,
+                    column,
+                } => {
+                    let current_dir = canonical.parent().unwrap_or_else(|| Path::new("."));
+                    let span = Span::new(*line, *column);
+                    if let Ok((target, _depth)) =
+                        lload::resolve_load_local_target(self, rel_path, *absolute, current_dir, span)
+                    {
+                        self.scan_dependency_candidates(&target);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Every file a `load` statement can pull in, most specific first.
+    ///
+    /// A path that does not resolve as written is walked up one segment at a
+    /// time, which covers the parent-module fallback in `expand_load`: when
+    /// `load pkg::module::group` names no `group` export, the expansion loads
+    /// `pkg::module` and filters it, so the scan has to visit that parent too.
+    fn scan_load_targets(&mut self, segments: &[String], line: usize, column: usize) -> Vec<PathBuf> {
+        let mut targets = Vec::new();
+        let mut last_error = None;
+        for take in (1..=segments.len()).rev() {
+            let prefix = &segments[..take];
+            match load::resolve_load_path(self, prefix, Span::new(line, column)) {
+                Ok(target) => {
+                    if !targets.contains(&target) {
+                        targets.push(target);
+                    }
+                    break;
+                }
+                Err(err) => last_error = Some(err),
+            }
+        }
+        if targets.is_empty() {
+            // Nothing resolved. The expansion reports this with a real span, so
+            // the scan only keeps the error to avoid an unused-variable warning
+            // and stays silent.
+            drop(last_error);
+        }
+        targets
+    }
+
     fn load_file(&mut self, path: &Path, span: Span) -> Result<Vec<ExpandedStatement>> {
         if self.active_stack.len() >= MAX_LOCAL_LOAD_DEPTH {
             return Err(self.loader_error(
@@ -161,6 +276,14 @@ impl<'a> ImportResolver<'a> {
                     MAX_LOADED_FILES
                 ),
             ));
+        }
+        // The outermost call is the program root. Walk the whole import graph
+        // once before expanding anything, so reachable selection has every
+        // candidate in the program available and the result does not depend on
+        // the order of the `load` statements. See
+        // `scan_dependency_candidates`.
+        if self.active_stack.is_empty() {
+            self.scan_dependency_candidates(path);
         }
         let canonical = path.canonicalize().map_err(|err| {
             self.loader_error(
