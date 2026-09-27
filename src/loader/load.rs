@@ -293,6 +293,32 @@ pub(super) fn infer_reachable_import_items(
         }
     }
 
+    // A private `extern fn` is a declaration of a foreign symbol, not an
+    // implementation, and a consumer is allowed to name it even though the
+    // library did not publish it: `sdl3`'s `events` module declares
+    // `rt_write_i32` and sdl's own test calls it directly. `parsed.exports` only
+    // lists `pub` statements, so reachable selection dropped the declaration
+    // and the consumer failed with `Unknown function 'rt_write_i32'` — a symbol
+    // the library really does declare.
+    //
+    // A reference to one of those makes this module's public surface the wrong
+    // thing to select against, so it bails to a full load exactly as the
+    // namespace case above does. Adding the extern to the item list instead
+    // would be wrong twice over: it would leave the module's real exports
+    // behind, and in a module whose only candidate is the extern it would turn
+    // what used to be a full load into a one-item selection.
+    for statement in &parsed.program.statements {
+        if let Statement::ExternFunction {
+            name,
+            visibility: crate::parser::ast::Visibility::Private,
+            ..
+        } = statement
+            && candidate_reaches_export(candidates, module_segments, name)
+        {
+            return Ok(None);
+        }
+    }
+
     if selected.is_empty() {
         return Ok(None);
     }
