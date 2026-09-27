@@ -2,17 +2,19 @@
 
 @[test]
 pub fn pipeline_with_dasu: () :bool {
-    set value = dasu("output")
-// Tests pipeline with dasu on the left of a comparison.
-// The previous version of this test compared dasu's result against the string
-// it had printed, which was never what dasu returns: codegen yields 0. The
-// type checker does not reject comparing an integer against a string, and
-// codegen bridges the mismatch with inttoptr plus strcmp, so it did not fail to
-// compile — it read the integer as a pointer and segfaulted. The runner only
-// counted `[FAIL]` lines, so the crash was reported as a pass. See
-// CHANGELOG.md.
-    set result = value == 0
-    return result == true
+    dasu("output")
+// dasu is a statement: it prints and yields no value, so it belongs in a
+// pipeline as a step and never on either side of a comparison. The original
+// version of this test compared dasu's result against the string it had
+// printed, and codegen answered that comparison with a dummy null pointer for
+// the print: the type checker used to bridge the mismatch with inttoptr plus
+// strcmp, read the integer as a pointer and segfaulted. It now rejects a
+// comparison of two value-less operands outright, so the bad shape cannot be
+// written at all. See CHANGELOG.md.
+    set start = 0
+    set value = start + 1
+    set result = value * 2
+    return result == 2
 }
 
 @[test]
