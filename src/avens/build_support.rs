@@ -558,6 +558,73 @@ pub(super) fn apply_cfg_filter(program: &mut crate::parser::ast::Program) {
     });
 }
 
+/// Replace the body of every `@[test, ignore]` function with a trivial one.
+///
+/// `ignore` is how a test is quarantined without deleting it, and the harness
+/// already skips calling it. Its *body*, though, still reached the type checker
+/// and the backend, because analysis runs before the harness is injected. A test
+/// quarantined for a compile failure therefore took its whole file down with it:
+/// `tests/advanced.mire` holds one ignored closure test and lost all thirteen of
+/// its cases, reported as a single type error in a function nobody runs. An
+/// ignored test has to stop being compiled as well as stop being run.
+///
+/// The signature is kept so the function still type-checks and still satisfies
+/// anything that references it; only the body is replaced, by a `return` of a
+/// default for the declared return type. A `bool` test returns `true`, which is
+/// also what a quarantined test would report if the harness ever did call it.
+pub(super) fn neutralise_ignored_tests(program: &mut crate::parser::ast::Program) {
+    use crate::parser::ast::{Expression, Statement};
+
+    for stmt in &mut program.statements {
+        let Statement::Function {
+            attributes,
+            body,
+            return_type,
+            ..
+        } = stmt
+        else {
+            continue;
+        };
+        let is_test = attributes.iter().any(|a| a.name == "test");
+        let is_ignored = attributes.iter().any(|a| a.name == "ignore");
+        if !is_test || !is_ignored {
+            continue;
+        }
+        body.clear();
+        if let Some(value) = default_literal_for(return_type) {
+            body.push(Statement::Return(Some(Expression::Literal {
+                lit: value,
+                line: 0,
+                column: 0,
+            })));
+        }
+    }
+}
+
+/// A literal of the right kind for `ty`, used to give a bodyless function a
+/// valid return. `None` means the type has no sensible literal, in which case the
+/// body stays empty and the function falls off its end as it would anyway.
+fn default_literal_for(ty: &crate::parser::ast::DataType) -> Option<crate::parser::ast::Literal> {
+    use crate::parser::ast::{DataType, Literal};
+    Some(match ty {
+        DataType::Bool => Literal::Bool(true),
+        DataType::I8
+        | DataType::I16
+        | DataType::I32
+        | DataType::I64
+        | DataType::I128
+        | DataType::U8
+        | DataType::U16
+        | DataType::U32
+        | DataType::U64
+        | DataType::U128
+        | DataType::Char => Literal::Int(0),
+        DataType::F32 | DataType::F64 => Literal::Float(0.0),
+        DataType::Str => Literal::Str(String::new()),
+        _ => return None,
+    })
+}
+
 pub(super) fn inject_test_harness(program: &mut crate::parser::ast::Program) {
     use crate::parser::ast::{DataType, Expression, Identifier, Literal, Statement, Visibility};
 

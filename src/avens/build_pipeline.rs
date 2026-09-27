@@ -1,8 +1,8 @@
 use super::build_support::{
     apply_cfg_filter, collect_used_symbols, dedup_llvm_declarations, generate_enum_constructors,
     generate_runtime_declarations, generate_struct_constructors, inject_macros,
-    inject_test_harness, minimal_runtime_c_files, precompile_c_object, progress_phase,
-    runtime_base, set_c_defs,
+    inject_test_harness, minimal_runtime_c_files, neutralise_ignored_tests, precompile_c_object,
+    progress_phase, runtime_base, set_c_defs,
 };
 use super::*;
 use crate::compiler::check_warnings_with_origins;
@@ -279,7 +279,15 @@ fn compile_file_inner(
     };
     let cache_settings = CacheSettings::resolve_for(source_path, options.cache)?;
     let mut cache = IncrementalCache::load_with_settings(source_path, cache_settings)?;
-    let loaded = load_program_with_cache(source_path, &mut cache, options.import_mode)?;
+    let mut loaded = load_program_with_cache(source_path, &mut cache, options.import_mode)?;
+    // An ignored test must not be compiled either, or a test quarantined for a
+    // compile error still fails the build through its own body. This has to
+    // happen here, before analysis, because the harness that skips the call is
+    // injected into the codegen copy further down. Gated on test mode so a
+    // normal build of the same file keeps the function intact.
+    if options.test_mode {
+        neutralise_ignored_tests(&mut loaded.program);
+    }
     let phase_load = build_start.elapsed().as_millis() as u64;
     progress_phase("load", source_filename, phase_load, phase_load);
     let source_file_hash = source_hash(source);
