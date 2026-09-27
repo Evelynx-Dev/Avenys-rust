@@ -311,7 +311,19 @@ impl<'a> ImportResolver<'a> {
             None
         };
         let parsed = load_or_parse_file(self, &canonical, expanded_source)?;
-        self.current_file = Some(canonical.display().to_string());
+        // `current_file` is the ambient "which file owns the statement being
+        // processed" marker that `loader_error` attaches to diagnostics. A
+        // nested expansion must not leak that ownership: without restoring it
+        // below, a `load` that fails in this file *after* an earlier `load`
+        // expanded many modules is reported against whichever module the
+        // previous expansion happened to end in (e.g. a missing dependency
+        // written in the root file blamed on the last file of `load kioto`).
+        // Only the success path needs restoring: `loader_error` reads the
+        // marker when it builds the error, so a propagating `?` has already
+        // captured the right filename.
+        let previous_file = self
+            .current_file
+            .replace(canonical.display().to_string());
         let imported_symbol_candidates = collect_program_dependency_candidates(&parsed.program);
         let mut expanded = Vec::new();
         let mut direct_dependencies = Vec::new();
@@ -373,6 +385,7 @@ impl<'a> ImportResolver<'a> {
         );
         self.expanded_cache
             .insert(canonical.clone(), expanded.clone());
+        self.current_file = previous_file;
         Ok(expanded)
     }
 
