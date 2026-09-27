@@ -223,10 +223,21 @@ pub(super) fn resolve_load_path(
 /// When `ImportMode::Reachable` is active and no explicit items are given,
 /// parse the target file and select only exports matching the caller's
 /// dependency candidates.
+///
+/// `module_segments` is the load path that reached this file (for example
+/// `["math", "float"]` for `load kioto::math::float`). The statements this
+/// module contributes are named after the *last* segment (`float.sign`), but a
+/// consumer spells them with the namespace it wrote in its own source
+/// (`math::float::sign`), and the candidate set is built from that spelling.
+/// Matching on the bare export name alone therefore misses every qualified
+/// call: `sign` does not equal `math.float.sign`, and the only reason such a
+/// module kept any symbols at all was an unrelated tail collision elsewhere in
+/// the candidate set. So an export is selected when a candidate *ends with* the
+/// export, with or without the module's own namespace in front.
 pub(super) fn infer_reachable_import_items(
     resolver: &mut ImportResolver,
     path: &Path,
-    module_prefix: Option<&str>,
+    module_segments: &[String],
     candidates: &HashSet<String>,
 ) -> Result<Option<Vec<String>>> {
     let parsed = load_or_parse_file(resolver, path, None)?;
@@ -263,18 +274,7 @@ pub(super) fn infer_reachable_import_items(
         if non_selectable.contains(export) {
             continue;
         }
-        let normalized = canonical_fn_name(export);
-        let export_tail = normalized
-            .rsplit_once('.')
-            .map_or(normalized.as_str(), |(_, tail)| tail);
-        let prefixed = module_prefix.map(|prefix| format!("{prefix}.{export_tail}"));
-        if candidates.contains(export)
-            || candidates.contains(&normalized)
-            || candidates.contains(export_tail)
-            || prefixed
-                .as_ref()
-                .is_some_and(|value| candidates.contains(value))
-        {
+        if candidate_reaches_export(candidates, module_segments, export) {
             selected.push(export.to_string());
             continue;
         }
@@ -285,10 +285,9 @@ pub(super) fn infer_reachable_import_items(
         // `complex.new`, not `math.complex.new`), so a per-statement selection
         // on the `math.` prefix would drop them. Bail to a full load instead.
         if namespace_exports.contains(export)
-            && candidates.iter().any(|candidate| {
-                candidate.starts_with(&format!("{export}."))
-                    || candidate.starts_with(&format!("{export}::"))
-            })
+            && candidates
+                .iter()
+                .any(|candidate| candidate_references_namespace(candidate, export))
         {
             return Ok(None);
         }
@@ -300,4 +299,73 @@ pub(super) fn infer_reachable_import_items(
     selected.sort();
     selected.dedup();
     Ok(Some(selected))
+}
+
+/// True when some candidate names this export, either bare or under the
+/// module's own namespace.
+fn candidate_reaches_export(
+    candidates: &HashSet<String>,
+    module_segments: &[String],
+    export: &str,
+) -> bool {
+    candidates
+        .iter()
+        .any(|candidate| candidate_reaches_export_namespaced(candidate, module_segments, export))
+}
+
+/// True when `candidate` names `export`, bare or namespaced.
+///
+/// A candidate matches when it equals the export or ends with `.{export}`, and
+/// additionally when it ends with `.{namespace}.{export}` for the namespace the
+/// module was loaded under. The suffix form is what makes `math.float.sign`
+/// select `sign` in a module reached as `kioto::math::float`; the leading
+/// segments belong to whichever enclosing package spelled the call and are not
+/// knowable from inside this module.
+fn candidate_reaches_export_namespaced(
+    candidate: &str,
+    module_segments: &[String],
+    export: &str,
+) -> bool {
+    let candidate = canonical_fn_name(candidate);
+    let export_tail = canonical_fn_name(export);
+    if candidate == export_tail || candidate.ends_with(&format!(".{export_tail}")) {
+        return true;
+    }
+    let namespace = module_segments
+        .iter()
+        .map(|segment| canonical_fn_name(segment))
+        .collect::<Vec<_>>()
+        .join(".");
+    if namespace.is_empty() {
+        return false;
+    }
+    let qualified = format!("{namespace}.{export_tail}");
+    candidate == qualified || candidate.ends_with(&format!(".{qualified}"))
+}
+
+/// True when `candidate` references something *inside* the `namespace` named
+/// by `export`.
+///
+/// This is deliberately a segment test rather than a prefix test. A
+/// sub-module's namespace can appear anywhere in a consumer's spelling: the
+/// module reached as `kioto::math` exports the namespace `float`, and a
+/// consumer may write `float::sign` (namespace first) or `math::float::sign`
+/// (one enclosing namespace in front). Only a `starts_with` test recognises
+/// the first form, so with it the second form silently selected just the root
+/// module's own `sign` and dropped the entire `float` sub-tree.
+///
+/// Matching on whole segments — and requiring the namespace to be a
+/// non-final segment, since a candidate that merely *is* the namespace names
+/// the module rather than something inside it — accepts both forms while still
+/// rejecting `floaty::sign` for the `float` namespace.
+fn candidate_references_namespace(candidate: &str, namespace: &str) -> bool {
+    let candidate = canonical_fn_name(candidate);
+    let namespace = canonical_fn_name(namespace);
+    if namespace.is_empty() {
+        return false;
+    }
+    let segments: Vec<&str> = candidate.split('.').collect();
+    segments
+        .windows(2)
+        .any(|pair| pair[0] == namespace.as_str())
 }

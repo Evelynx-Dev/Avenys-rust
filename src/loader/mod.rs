@@ -64,6 +64,24 @@ struct ImportResolver<'a> {
     /// reference (e.g. `str.copy`) are reachable-selected exactly as if the
     /// user had written the impls by hand.
     expand_derives_entry: bool,
+    /// Union of the dependency candidates of every module expanded so far in
+    /// this load, from the entry file down.
+    ///
+    /// Reachable-import selection has to see the *whole* chain, not just the
+    /// module that wrote the `load`. A consumer calling
+    /// `math::float::sign` puts `math.float.sign` in the entry program's
+    /// candidates, but the `load kioto::math::float` statement that eventually
+    /// pulls the float module in lives in `math/mod.mr` — a file whose own
+    /// candidates say nothing about `sign`. Selecting on that file's local set
+    /// dropped the export the consumer actually asked for. Accumulating the
+    /// ancestors' candidates restores the answer: a module is selected against
+    /// everything referenced by any module that can see it.
+    ///
+    /// The union only ever *widens* selection, so a module may keep a few
+    /// exports no consumer asked for. That is safe: every statement is namespaced
+    /// by its module, so extra exports cannot collide, and the final expansion's
+    /// dedupe pass still collapses identical statements.
+    reachable_candidate_scope: HashSet<String>,
 }
 
 // Local imports may be deeply nested, but a hostile or accidental graph must
@@ -105,6 +123,7 @@ impl<'a> ImportResolver<'a> {
             package_registry: HashMap::new(),
             current_file: None,
             expand_derives_entry: true,
+            reachable_candidate_scope: HashSet::new(),
         }
     }
 
@@ -271,10 +290,20 @@ impl<'a> ImportResolver<'a> {
             Err(e) => return Err(e),
         };
 
+        // Selection must consider every ancestor's references, not just this
+        // file's. See `reachable_candidate_scope`.
+        if self.reachable_candidate_scope.is_empty() {
+            self.reachable_candidate_scope = imported_symbol_candidates.clone();
+        } else {
+            self.reachable_candidate_scope
+                .extend(imported_symbol_candidates.iter().cloned());
+        }
+        let candidate_scope = self.reachable_candidate_scope.clone();
+
         let selected = if items.is_some() {
             items
         } else if matches!(self.import_mode, ImportMode::Reachable) {
-            load::infer_reachable_import_items(self, &target, None, imported_symbol_candidates)?
+            load::infer_reachable_import_items(self, &target, &path, &candidate_scope)?
         } else {
             None
         };
@@ -449,9 +478,6 @@ impl<'a> ImportResolver<'a> {
 // Public API
 // ---------------------------------------------------------------------------
 
-/// Remove statements that appear more than once with the exact same content
-/// and origin.
-///
 /// Multiple `load` statements targeting the same module (e.g. the same
 /// dependency loaded from the root file and again from each `load!` group)
 /// expand to byte-identical declarations. Keeping only the first copy avoids

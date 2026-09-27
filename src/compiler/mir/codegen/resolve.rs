@@ -83,10 +83,17 @@ pub(crate) fn resolve_named_call(
     } else if ctx.extern_fn_names.contains(name) {
         (format!("@{}", name), false)
     } else {
-        // Try stripping root namespaces (e.g. "kioto.net.http.get" -> "http.get")
-        // Multiple prefix levels may need to be stripped since 'load kioto' flattens
-        // the top-level namespace with empty prefix.
-        let stripped = name.match_indices('.').rev().find_map(|(i, _)| {
+        // Try stripping *leading* namespaces (e.g. "kioto.net.http.get" ->
+        // "http.get"). `load kioto` flattens the top-level namespace with an
+        // empty prefix, so a caller may spell a function with one or more
+        // enclosing namespaces that the definition itself does not carry.
+        //
+        // Suffixes must be tried longest-first, matching the type checker's
+        // `strip_root_namespace` order. Trying shortest-first silently picked a
+        // same-named function from the caller's own scope: `math.float.isNan`
+        // resolved to a consumer-level `isNan` when one existed, and the call
+        // recursed into itself instead of reaching `float.isNan`.
+        let stripped = name.match_indices('.').find_map(|(i, _)| {
             let rest = &name[i + 1..];
             if ctx.defined_fn_names.contains(rest) {
                 Some(format!("@fn_{}", sanitize_fn_name(rest)))
