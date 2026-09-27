@@ -492,6 +492,21 @@ fn is_reference_class(dtype: &DataType) -> bool {
 /// `Unknown` / `Anything` are inference placeholders, so they defer the decision.
 /// `None` is the *void* marker of statement-only builtins (`dasu`, `fs::write`,
 /// `map::remove`, …) — it carries no value, so comparing one is always a bug.
+/// Strips borrow wrappers for a comparison check.
+///
+/// Borrow-vs-value is not a meaningful distinction when comparing: `&str == ""`
+/// and `"" == &str` compare the pointee, exactly as `unify_types` already
+/// assumes when it unifies `Ref{inner}` against a bare `inner` (see the
+/// `Ref { inner } | RefMut { inner }, other` arm above). Keeping the comparison
+/// rule consistent with unification is what lets existing code such as
+/// `if path == ""` on a `path :&str` parameter keep compiling.
+fn strip_borrow(dt: &DataType) -> &DataType {
+    match dt {
+        DataType::Ref { inner } | DataType::RefMut { inner } => strip_borrow(inner),
+        other => other,
+    }
+}
+
 pub fn is_comparable_pair(left: &DataType, right: &DataType) -> bool {
     if matches!(left, DataType::Unknown | DataType::Anything)
         || matches!(right, DataType::Unknown | DataType::Anything)
@@ -509,6 +524,22 @@ pub fn is_comparable_pair(left: &DataType, right: &DataType) -> bool {
     }
     if left == right {
         return true;
+    }
+    // Borrow-vs-value: compare the pointees. Only identical underlying types
+    // become comparable, so this widens `&str`/`&i64` against their own value
+    // type without making unrelated types comparable.
+    let l = strip_borrow(left);
+    let r = strip_borrow(right);
+    if l != left || r != right {
+        if l == r {
+            return true;
+        }
+        if is_numeric(l) && is_numeric(r) {
+            return true;
+        }
+        if is_bool_like(l) && is_bool_like(r) {
+            return true;
+        }
     }
     if left.is_struct_like() && right.is_struct_like() {
         return left.struct_name() == right.struct_name();

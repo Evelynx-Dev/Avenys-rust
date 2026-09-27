@@ -162,10 +162,29 @@ fn load_manifest_file(manifest_path: &Path) -> Result<Option<MireManifest>> {
     Ok(Some(manifest))
 }
 
+/// Directory names that are shared scratch space rather than a project root.
+///
+/// A manifest sitting directly in one of these is not owned by the build that
+/// happens to be walking upwards: any project created under a temp directory
+/// would otherwise "inherit" it and have its own manifest silently ignored, and
+/// a malformed scratch copy would fail unrelated builds. Subdirectories of a
+/// temp root are unaffected — a real project there brings its own manifest, so
+/// the walk returns before reaching the root itself.
+fn is_shared_temp_root(path: &Path) -> bool {
+    let name = path.file_name().and_then(|n| n.to_str());
+    let is_tmpdir = std::env::var("TMPDIR")
+        .ok()
+        .map(|t| Path::new(&t) == path)
+        .unwrap_or(false);
+    matches!(name, Some("tmp") | Some("temp")) || is_tmpdir || path == Path::new("/tmp")
+}
+
 pub fn find_project_root(start: &Path) -> Option<PathBuf> {
     let mut current = Some(start);
     while let Some(path) = current {
-        if path.join("owl.toml").exists() || path.join("Mire.toml").exists() {
+        if (path.join("owl.toml").exists() || path.join("Mire.toml").exists())
+            && !is_shared_temp_root(path)
+        {
             return Some(path.to_path_buf());
         }
         current = path.parent();

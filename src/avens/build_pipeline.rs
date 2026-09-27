@@ -700,12 +700,28 @@ fn compile_file_inner(
             && ir.contains("@fn_main")
             && !ir.contains("define i32 @main(")
         {
+            // `fn_main` is `void` for a unit `main` and `i64` for one that
+            // returns a status. Reading a return value out of a `void` function
+            // is undefined behaviour: the wrapper used to do it unconditionally
+            // and the process then exited with whatever happened to be left in
+            // the return register, so a program whose last call was e.g.
+            // `proc::run_output` exited non-zero despite succeeding.
+            let main_returns_void = ir
+                .lines()
+                .find(|line| line.contains("define") && line.contains("@fn_main("))
+                .map(|line| line.split_whitespace().nth(1) == Some("void"))
+                .unwrap_or(false);
             ir.push_str("\n\ndefine i32 @main(i32 %argc, ptr %argv) {\n");
             ir.push_str("  store i32 %argc, ptr @.argc\n");
             ir.push_str("  store ptr %argv, ptr @.argv\n");
-            ir.push_str("  %call_main = call i64 @fn_main(ptr null)\n");
-            ir.push_str("  %exit_code = trunc i64 %call_main to i32\n");
-            ir.push_str("  ret i32 %exit_code\n");
+            if main_returns_void {
+                ir.push_str("  call void @fn_main(ptr null)\n");
+                ir.push_str("  ret i32 0\n");
+            } else {
+                ir.push_str("  %call_main = call i64 @fn_main(ptr null)\n");
+                ir.push_str("  %exit_code = trunc i64 %call_main to i32\n");
+                ir.push_str("  ret i32 %exit_code\n");
+            }
             ir.push_str("}\n");
         }
         ir = dedup_llvm_declarations(&ir);
