@@ -201,10 +201,11 @@ fn prune_stale_wal(base_dir: &Path) {
     }
 }
 
-/// Removes all cache contents (indexes, blobs, WAL, version file) so a fresh
-/// cache can be rebuilt after a compiler version change.
-fn wipe_cache_dir(cache_dir: &Path) {
-    let _ = fs::remove_dir_all(cache_dir);
+/// Creates the full cache directory structure: the four index subdirectories
+/// plus the blob and WAL stores. Idempotent, and safe to call from a thread
+/// that did not win the init lock, because by then the only thread allowed to
+/// wipe has already finished.
+fn create_cache_dirs(cache_dir: &Path) {
     fs::create_dir_all(cache_dir).ok();
     fs::create_dir_all(cache_dir.join(INDEX_DIR).join(FILES_INDEX)).ok();
     fs::create_dir_all(cache_dir.join(INDEX_DIR).join(ANALYSES_INDEX)).ok();
@@ -214,7 +215,28 @@ fn wipe_cache_dir(cache_dir: &Path) {
     fs::create_dir_all(cache_dir.join(WAL_DIR)).ok();
 }
 
+/// Removes all cache contents (indexes, blobs, WAL, version file) so a fresh
+/// cache can be rebuilt after a compiler version change.
+fn wipe_cache_dir(cache_dir: &Path) {
+    let _ = fs::remove_dir_all(cache_dir);
+    create_cache_dirs(cache_dir);
+}
+
 const INIT_LOCK_STALE_SECS: u64 = 30;
+
+/// The init lock path for a cache directory, as a sibling of it.
+///
+/// It deliberately sits outside `cache_dir`: `wipe_cache_dir` removes that
+/// directory wholesale, and a lock inside it would be destroyed by the wipe it
+/// is meant to serialise.
+fn sibling_lock_path(cache_dir: &Path) -> PathBuf {
+    let mut name = cache_dir
+        .file_name()
+        .map(|n| n.to_os_string())
+        .unwrap_or_default();
+    name.push(".init.lock");
+    cache_dir.with_file_name(name)
+}
 
 /// Removes the init lock when dropped (only the thread that created it).
 struct InitLockGuard<'a>(&'a Path);
@@ -562,15 +584,6 @@ impl IncrementalCache {
     pub fn load_with_settings(source_path: &Path, settings: CacheSettings) -> Result<Self> {
         let cache_dir = cache_file_path(source_path);
 
-        // Create directory structure
-        fs::create_dir_all(&cache_dir).ok();
-        fs::create_dir_all(cache_dir.join(INDEX_DIR).join(FILES_INDEX)).ok();
-        fs::create_dir_all(cache_dir.join(INDEX_DIR).join(ANALYSES_INDEX)).ok();
-        fs::create_dir_all(cache_dir.join(INDEX_DIR).join(BUILDS_INDEX)).ok();
-        fs::create_dir_all(cache_dir.join(INDEX_DIR).join(MIR_INDEX)).ok();
-        fs::create_dir_all(cache_dir.join(BLOBS_DIR)).ok();
-        fs::create_dir_all(cache_dir.join(WAL_DIR)).ok();
-
         // Validate the cache format/version. If the cache was produced by a
         // different compiler version, wipe it so stale analyses/builds/MIR are
         // never silently reused after semantics change.
@@ -588,7 +601,19 @@ impl IncrementalCache {
         // blobs/WAL files their siblings are writing mid-flight. The holder
         // performs the init; everyone else waits for it to finish (with a
         // stale-lock timeout in case the holder crashed).
-        let init_lock = cache_dir.join(".init.lock");
+        //
+        // The directory structure is built here, under the lock, and after any
+        // wipe, rather than before it. Building it first left a window in which
+        // the lock holder's `remove_dir_all` deleted the index/blobs/wal
+        // directories a sibling thread had just created, and that sibling then
+        // failed a write with ENOENT on a directory it had already made.
+        //
+        // The lock is a SIBLING of the cache directory, not a child. A child
+        // lock would be deleted by the very `remove_dir_all` that the lock
+        // exists to guard, which would let a waiting thread take the lock and
+        // wipe a second time while the first holder is still initialising.
+        fs::create_dir_all(&cache_dir).ok();
+        let init_lock = sibling_lock_path(&cache_dir);
         let acquired = fs::create_dir(&init_lock).is_ok();
         if acquired {
             let _guard = InitLockGuard(&init_lock);
@@ -607,6 +632,7 @@ impl IncrementalCache {
             {
                 wipe_cache_dir(&cache_dir);
             }
+            create_cache_dirs(&cache_dir);
             let _ = atomic_write(
                 &version_path,
                 format!("{NEW_CACHE_FORMAT}\n{NEW_FORMAT_VERSION}\n").as_bytes(),
@@ -616,6 +642,7 @@ impl IncrementalCache {
             prune_stale_wal(&cache_dir);
         } else {
             wait_for_init_lock(&init_lock);
+            create_cache_dirs(&cache_dir);
         }
 
         // Replay WAL

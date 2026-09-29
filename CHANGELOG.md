@@ -2,6 +2,43 @@
 
 All notable changes to Avenys will be documented in this file.
 
+## 4.3.2 - 2026-09-29
+A patch release fixing a data race in the incremental cache that only shows up
+when several compiler threads initialise a cold cache at once, which is exactly
+what `mire test -j N` does.
+
+### Fixed
+- **Parallel `mire test` could fail with `Cannot write cache file ... No such
+  file or directory`** — the CI run failed here, on
+  `tests/Builtins/scalars.mire`, and only when the modular tests ran with
+  `-j 8` against a fresh cache directory. Two defects combined.
+  `load_with_settings` created the `index/`, `blobs/` and `wal/` directories
+  *before* it took the initialisation lock, so the thread that did win the lock
+  could `remove_dir_all` a directory another thread had just created, and that
+  thread then failed a write against a path it had already made. Compounding
+  it, the lock itself lived *inside* the cache directory, so the wipe deleted
+  the very lock that existed to prevent it; a waiting thread could then take
+  the lock, see no version file, and wipe a second time while the first holder
+  was still initialising. The directories are now built under the lock after
+  any wipe, and the lock is a sibling of the cache directory so a wipe can
+  never remove it.
+  Reproduced at 33-61 write errors per `mire test tests -j 8` run before the
+  fix, and 0 across six runs after it. The tolerant "dropping unreadable WAL
+  file" notices that remain are intended behaviour: they report a thread
+  pruning a WAL file another thread had already removed, and never fail a
+  build.
+
+### Added
+- `concurrent_cold_cache_init_preserves_all_writers` in the incremental cache
+  tests: eight threads released from a barrier into a brand-new cache
+  directory, over several rounds, asserting that no writer's entry is lost or
+  corrupted. Note that this guards the invariant but does not by itself
+  reproduce the regression — it also passes against the pre-fix code, because
+  the barrier sends every thread into the load phase together, so none reaches
+  `save()` until the initialisation storm is over. Confirming the write path
+  still requires the end-to-end `mire test tests -j 8` run on a fresh cache
+  directory.
+
 ## 4.3.1 - 2026-09-29
 A patch release. Two of these are the reason CI stopped passing on a current
 stable toolchain, and the third is a filesystem write that reported failure for
