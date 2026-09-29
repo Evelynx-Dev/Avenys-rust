@@ -39,12 +39,27 @@ what `mire test -j N` does.
   waiter that finds the lock free — or stale, because a holder crashed — takes
   the lock and performs the initialisation itself rather than assuming someone
   else did.
+- **The waiter's own last-resort path re-entered the race it existed to
+  prevent** — on hitting its give-up deadline it removed the lock and called
+  `init_cache` directly, i.e. it wiped the cache while *not* holding the lock.
+  That is the same defect as above: removing someone else's lock does not make
+  the cache yours, and an unsynchronised wipe is how the CI failure started. It
+  only ever checked that the outcome was correct, never that the lock was held,
+  so it satisfied every test while reintroducing the race. The path now breaks
+  the lock and loops to re-acquire it through the same atomic `create_dir` that
+  grants the lock in the first place, re-arming the deadline to bound retries.
+  `init_cache` carries a `debug_assert!` that the lock is held, so this class of
+  mistake fails loudly under `cargo test` instead of degrading into a rare
+  ENOENT that only CI sees.
 
 ### Verification
-- The two defects are covered by deterministic tests that do not depend on
+- Each defect is covered by a deterministic test that does not depend on
   timing, and each was confirmed to fail against the old behaviour by
-  temporarily restoring it: `init_lock_survives_the_wipe_it_guards` fails as
-  soon as `wipe_cache_dir` goes back to `remove_dir_all`.
+  temporarily restoring it:
+  `init_lock_survives_the_wipe_it_guards` fails as soon as `wipe_cache_dir`
+  goes back to `remove_dir_all`, and
+  `give_up_path_still_initialises_under_the_lock` trips the `debug_assert!`
+  the moment the give-up path initialises without the lock.
 - End to end, `mire test tests -j 8` on a fresh cache directory: the fatal write
   error does not reproduce locally on either build (0 in 6 runs before and
   after), because it depends on how the CI runner's threads interleave. What is
@@ -57,10 +72,13 @@ what `mire test -j N` does.
   green: `Ok: 276 - Passed: 276 - Failed: 0`.
 
 ### Added
-- Four cache tests in `src/incremental/cache.rs`:
+- Five cache tests in `src/incremental/cache.rs`, all deterministic:
   `init_lock_survives_the_wipe_it_guards` (minimal deterministic reproduction),
   `init_rebuilds_directories_after_a_wipe`,
-  `waiter_steals_a_stale_lock_instead_of_returning_uninitialised`, and
+  `waiter_steals_a_stale_lock_instead_of_returning_uninitialised`,
+  `give_up_path_still_initialises_under_the_lock` (forces the last-resort
+  branch with the staleness check disabled, and proves via the `debug_assert!`
+  that the init still happens under the lock), and
   `waiter_returns_immediately_when_the_cache_is_already_versioned` (guards
   against the fix trading the race for a stall).
 - `concurrent_cold_cache_init_preserves_all_writers` in the incremental cache
