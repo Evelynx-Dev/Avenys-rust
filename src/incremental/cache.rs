@@ -215,27 +215,48 @@ fn create_cache_dirs(cache_dir: &Path) {
     fs::create_dir_all(cache_dir.join(WAL_DIR)).ok();
 }
 
+/// Name of the directory used as the cache-initialisation lock.
+const INIT_LOCK_NAME: &str = ".init.lock";
+
 /// Removes all cache contents (indexes, blobs, WAL, version file) so a fresh
 /// cache can be rebuilt after a compiler version change.
+///
+/// The init lock is deliberately preserved. A `remove_dir_all` here used to take
+/// the lock with it, so the thread holding it went on believing it was
+/// exclusive while another thread created the lock directory again and started
+/// a second wipe — which is how a cold `mire test -j N` ended up deleting
+/// `blobs/` from under a thread that was mid-write and failing with
+/// `Cannot write cache file ...: No such file or directory`. Callers must hold
+/// the lock; keeping it is what makes that mutual exclusion real.
 fn wipe_cache_dir(cache_dir: &Path) {
-    let _ = fs::remove_dir_all(cache_dir);
+    if let Ok(entries) = fs::read_dir(cache_dir) {
+        for entry in entries.flatten() {
+            if entry.file_name() == std::ffi::OsStr::new(INIT_LOCK_NAME) {
+                continue;
+            }
+            let path = entry.path();
+            // Not `remove_dir_all` on the cache dir itself: that is exactly what
+            // used to destroy the lock.
+            let _ = if path.is_dir() {
+                fs::remove_dir_all(&path)
+            } else {
+                fs::remove_file(&path)
+            };
+        }
+    }
     create_cache_dirs(cache_dir);
 }
 
 const INIT_LOCK_STALE_SECS: u64 = 30;
 
-/// The init lock path for a cache directory, as a sibling of it.
+/// The init lock path for a cache directory.
 ///
-/// It deliberately sits outside `cache_dir`: `wipe_cache_dir` removes that
-/// directory wholesale, and a lock inside it would be destroyed by the wipe it
-/// is meant to serialise.
-fn sibling_lock_path(cache_dir: &Path) -> PathBuf {
-    let mut name = cache_dir
-        .file_name()
-        .map(|n| n.to_os_string())
-        .unwrap_or_default();
-    name.push(".init.lock");
-    cache_dir.with_file_name(name)
+/// It lives inside `cache_dir` — which is already a build artifact directory
+/// (`bin/.cache`, or `$MIRE_CACHE_DIR`) that projects ignore — so no lock
+/// bookkeeping leaks into the project tree. `wipe_cache_dir` skips it, which is
+/// what stops a wipe from taking the lock that guards it.
+fn init_lock_path(cache_dir: &Path) -> PathBuf {
+    cache_dir.join(INIT_LOCK_NAME)
 }
 
 /// Removes the init lock when dropped (only the thread that created it).
@@ -247,26 +268,95 @@ impl Drop for InitLockGuard<'_> {
     }
 }
 
-/// Waits for the thread that acquired the init lock to finish initializing
-/// the cache (version check/wipe/write). If the holder crashed and left a
-/// stale lock, removes it and proceeds — the version file is then read on the
-/// next load and the stale cache is handled by the following init holder.
-fn wait_for_init_lock(lock_dir: &Path) {
-    let stale_cutoff =
-        std::time::Instant::now() + std::time::Duration::from_secs(INIT_LOCK_STALE_SECS);
+/// True when `cache_dir` already holds a version file matching this build.
+///
+/// The version file stores two lines: the format tag (e.g. "MIREINC4") on line
+/// 1 and the version number (e.g. "5") on line 2. Parsing the whole file as a
+/// single `u32` would always fail, because the tag is not numeric, so each line
+/// is read independently.
+fn cache_version_is_current(cache_dir: &Path) -> bool {
+    let Ok(content) = fs::read_to_string(cache_dir.join(VERSION_FILE)) else {
+        return false;
+    };
+    let mut lines = content.lines();
+    let format = lines.next().map(str::trim);
+    let version = lines.last().map(str::trim).and_then(|v| v.parse::<u32>().ok());
+    format == Some(NEW_CACHE_FORMAT) && version == Some(NEW_FORMAT_VERSION)
+}
+
+/// Initialises `cache_dir`. Callers must hold the init lock.
+///
+/// Ordering matters and is the whole point of this function: any wipe happens
+/// *first*, and the directory structure is rebuilt *after* it. Creating the
+/// directories before the wipe left a window where the wipe removed a
+/// directory a sibling thread had just made, and that sibling then failed a
+/// write against a path it had already created.
+fn init_cache(cache_dir: &Path) {
+    if !cache_version_is_current(cache_dir) {
+        wipe_cache_dir(cache_dir);
+    }
+    create_cache_dirs(cache_dir);
+    let _ = atomic_write(
+        &cache_dir.join(VERSION_FILE),
+        format!("{NEW_CACHE_FORMAT}\n{NEW_FORMAT_VERSION}\n").as_bytes(),
+    );
+
+    // Bound WAL growth left behind by abandoned writers before replaying.
+    prune_stale_wal(cache_dir);
+}
+
+/// Waits until `cache_dir` is genuinely initialised, then returns.
+///
+/// The previous implementation merely waited for the lock directory to vanish
+/// and returned. That is not the same thing: a holder that dies between its
+/// wipe and its version write leaves the lock gone but the cache unversioned,
+/// and the waiter would carry on into a cache that the next arriving thread
+/// would then wipe underneath it. So the exit condition is the version file
+/// itself, and a waiter that finds the lock free (or stale, because a holder
+/// crashed) takes the lock and performs the init rather than assuming someone
+/// else did.
+fn wait_for_cache_init(cache_dir: &Path, lock_dir: &Path) {
+    let threshold = std::time::Duration::from_secs(INIT_LOCK_STALE_SECS);
+    wait_for_cache_init_with(cache_dir, lock_dir, threshold, threshold);
+}
+
+/// [`wait_for_cache_init`] with both timing thresholds injected, so tests can
+/// exercise lock stealing and the give-up path without waiting 30 seconds.
+fn wait_for_cache_init_with(
+    cache_dir: &Path,
+    lock_dir: &Path,
+    stale_after: std::time::Duration,
+    give_up_after: std::time::Duration,
+) {
+    let deadline = std::time::Instant::now() + give_up_after;
     loop {
-        if !lock_dir.exists() {
+        if cache_version_is_current(cache_dir) {
             return;
         }
-        if let Ok(meta) = fs::metadata(lock_dir)
-            && let Ok(mtime) = meta.modified()
-                && let Ok(age) = mtime.elapsed()
-                    && age > std::time::Duration::from_secs(INIT_LOCK_STALE_SECS) {
-                        let _ = fs::remove_dir(lock_dir);
-                        return;
-                    }
-        if std::time::Instant::now() >= stale_cutoff {
+        // The lock is free, or its holder is gone. Either way, own the lock and
+        // do the init ourselves rather than waiting for someone who may never
+        // come back.
+        if fs::create_dir(lock_dir).is_ok() {
+            let _guard = InitLockGuard(lock_dir);
+            init_cache(cache_dir);
+            return;
+        }
+        // Still held. Break the lock if the holder outlived its welcome.
+        if let Some(age) = fs::metadata(lock_dir)
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|m| m.elapsed().ok())
+            && age > stale_after
+        {
             let _ = fs::remove_dir(lock_dir);
+            continue;
+        }
+        if std::time::Instant::now() >= deadline {
+            // The lock is wedged but the version is still wrong: initialise
+            // anyway. A redundant init is safe (it only wipes when the version
+            // does not match), and hanging forever is not an option.
+            let _ = fs::remove_dir(lock_dir);
+            init_cache(cache_dir);
             return;
         }
         std::thread::sleep(std::time::Duration::from_millis(2));
@@ -584,65 +674,17 @@ impl IncrementalCache {
     pub fn load_with_settings(source_path: &Path, settings: CacheSettings) -> Result<Self> {
         let cache_dir = cache_file_path(source_path);
 
-        // Validate the cache format/version. If the cache was produced by a
-        // different compiler version, wipe it so stale analyses/builds/MIR are
-        // never silently reused after semantics change.
-        //
-        // The version file stores two lines: the format tag (e.g. "MIREINC4")
-        // on line 1 and the version number (e.g. "3") on line 2. Reading the
-        // whole file as a single u32 would always fail (the format tag is not
-        // numeric), so each line is parsed independently. A missing/foreign
-        // format tag or an older version wipes the cache.
-        //
-        // Initialization (version check + wipe + version write) is serialized
-        // across concurrent loaders with an exclusive `create_dir` lock: on a
-        // fresh cache every parallel `mire test` thread would otherwise read
-        // "no version", and their concurrent `remove_dir_all` would delete the
-        // blobs/WAL files their siblings are writing mid-flight. The holder
-        // performs the init; everyone else waits for it to finish (with a
-        // stale-lock timeout in case the holder crashed).
-        //
-        // The directory structure is built here, under the lock, and after any
-        // wipe, rather than before it. Building it first left a window in which
-        // the lock holder's `remove_dir_all` deleted the index/blobs/wal
-        // directories a sibling thread had just created, and that sibling then
-        // failed a write with ENOENT on a directory it had already made.
-        //
-        // The lock is a SIBLING of the cache directory, not a child. A child
-        // lock would be deleted by the very `remove_dir_all` that the lock
-        // exists to guard, which would let a waiting thread take the lock and
-        // wipe a second time while the first holder is still initialising.
+        // Validate the cache format/version and build the directory structure
+        // under an exclusive init lock. See `init_cache` / `wait_for_cache_init`
+        // for why the lock lives outside `cache_dir` and why a waiter must not
+        // return until the cache is genuinely initialized.
         fs::create_dir_all(&cache_dir).ok();
-        let init_lock = sibling_lock_path(&cache_dir);
-        let acquired = fs::create_dir(&init_lock).is_ok();
-        if acquired {
+        let init_lock = init_lock_path(&cache_dir);
+        if fs::create_dir(&init_lock).is_ok() {
             let _guard = InitLockGuard(&init_lock);
-            let version_path = cache_dir.join(VERSION_FILE);
-            let version_content = fs::read_to_string(&version_path).ok();
-            let stored_format = version_content
-                .as_deref()
-                .and_then(|v| v.lines().next().map(|line| line.trim().to_string()));
-            let stored_version = version_content.as_deref().and_then(|v| {
-                v.lines()
-                    .last()
-                    .and_then(|line| line.trim().parse::<u32>().ok())
-            });
-            if stored_format.as_deref() != Some(NEW_CACHE_FORMAT)
-                || stored_version != Some(NEW_FORMAT_VERSION)
-            {
-                wipe_cache_dir(&cache_dir);
-            }
-            create_cache_dirs(&cache_dir);
-            let _ = atomic_write(
-                &version_path,
-                format!("{NEW_CACHE_FORMAT}\n{NEW_FORMAT_VERSION}\n").as_bytes(),
-            );
-
-            // Bound WAL growth from abandoned writers before replaying.
-            prune_stale_wal(&cache_dir);
+            init_cache(&cache_dir);
         } else {
-            wait_for_init_lock(&init_lock);
-            create_cache_dirs(&cache_dir);
+            wait_for_cache_init(&cache_dir, &init_lock);
         }
 
         // Replay WAL
@@ -1534,5 +1576,174 @@ mod tests {
         assert!(!stale.exists(), "stale WAL pruned");
         assert!(fresh.exists(), "fresh WAL preserved");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ── Cold-cache init race ────────────────────────────────────────────
+    //
+    // Background: `mire test -j N` gives every worker thread its own
+    // IncrementalCache but they all share one cache directory. On a cold cache
+    // each of them reaches `load_with_settings` at once, finds no version file,
+    // and wants to wipe. Two defects used to make that unsafe, and the result in
+    // CI was a modular test run reporting 8 failures, the visible symptom being
+    //
+    //     Cannot write cache file '<cache>/blobs/<hash>': No such file or directory
+    //
+    // on tests/Builtins/scalars.mire:
+    //
+    //  1. The index/blobs/wal directories were created *before* the init lock
+    //     was taken, so a wipe could delete one a sibling had just created and
+    //     that sibling then wrote into a directory that no longer existed.
+    //  2. The init lock lived *inside* the cache directory, so the wipe deleted
+    //     the very lock meant to prevent it. The holder kept thinking it held
+    //     the lock while a second thread created the lock directory again and
+    //     began a second wipe.
+
+    /// Fixture root for the cache tests: `<repo>/tests/cache`, never /tmp, so
+    /// a failure leaves its evidence where the test suite lives. Everything in
+    /// there is ignored by git (see tests/cache/.gitignore).
+    fn cache_fixture(tag: &str) -> PathBuf {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("cache")
+            .join(format!("{tag}_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("cache fixture dir");
+        root
+    }
+
+    #[test]
+    fn init_lock_survives_the_wipe_it_guards() {
+        // Minimal, deterministic reproduction of defect 2 — no threads needed.
+        //
+        // A holder takes the init lock and then initialises, which may wipe the
+        // cache. If the wipe can take the lock with it, the lock guards nothing:
+        // the holder is still running, believes it is exclusive, and yet any
+        // other thread can create the lock directory and start a second wipe.
+        let root = cache_fixture("lock_survives_wipe");
+        let cache_dir = root.join("bin").join(CACHE_DIR_NAME);
+        fs::create_dir_all(&cache_dir).expect("cache dir");
+        let lock = init_lock_path(&cache_dir);
+
+        // Holder acquires the lock.
+        assert!(
+            fs::create_dir(&lock).is_ok(),
+            "first holder must acquire the init lock"
+        );
+
+        // Holder initialises, which wipes an unversioned cache.
+        assert!(
+            !cache_version_is_current(&cache_dir),
+            "a fresh cache must not look initialised"
+        );
+        wipe_cache_dir(&cache_dir);
+
+        assert!(
+            lock.exists(),
+            "the wipe destroyed the init lock it is meant to guard: \
+             a second thread can now wipe the same cache concurrently"
+        );
+        assert!(
+            fs::create_dir(&lock).is_err(),
+            "a second thread must not be able to acquire the init lock \
+             while the first holder still holds it"
+        );
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn init_rebuilds_directories_after_a_wipe() {
+        // Minimal, deterministic reproduction of defect 1: the directory
+        // structure must exist once `init_cache` returns, even though the
+        // version did not match and triggered a wipe.
+        let root = cache_fixture("rebuild_dirs");
+        let cache_dir = root.join("bin").join(CACHE_DIR_NAME);
+        fs::create_dir_all(&cache_dir).expect("cache dir");
+
+        init_cache(&cache_dir);
+
+        assert!(cache_version_is_current(&cache_dir));
+        for sub in [
+            cache_dir.join(BLOBS_DIR),
+            cache_dir.join(WAL_DIR),
+            cache_dir.join(INDEX_DIR).join(FILES_INDEX),
+            cache_dir.join(INDEX_DIR).join(ANALYSES_INDEX),
+            cache_dir.join(INDEX_DIR).join(BUILDS_INDEX),
+            cache_dir.join(INDEX_DIR).join(MIR_INDEX),
+        ] {
+            assert!(sub.is_dir(), "{} missing after init", sub.display());
+        }
+
+        // And a store into the rebuilt structure must not hit ENOENT, which is
+        // exactly what the CI failure was.
+        let hash = store_blob(&cache_dir, b"hello").expect("blob store after init");
+        assert_eq!(read_blob(&cache_dir, &hash, true), Some(b"hello".to_vec()));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn waiter_steals_a_stale_lock_instead_of_returning_uninitialised() {
+        // Defect 2, second half: the old waiter returned as soon as the lock
+        // directory disappeared, without checking that the cache had actually
+        // been versioned. A holder that died between its wipe and its version
+        // write left the lock gone and the cache unversioned, so the waiter
+        // walked into a cache the next arriving thread would wipe under it.
+        let root = cache_fixture("waiter_steals_stale");
+        let cache_dir = root.join("bin").join(CACHE_DIR_NAME);
+        fs::create_dir_all(&cache_dir).expect("cache dir");
+        let lock = init_lock_path(&cache_dir);
+
+        // Simulate a holder that took the lock and then died: the lock is
+        // present, the cache was never versioned.
+        fs::create_dir(&lock).expect("stale lock");
+        assert!(!cache_version_is_current(&cache_dir));
+
+        // With a zero staleness threshold the lock counts as abandoned, so the
+        // waiter must break it and initialise the cache itself.
+        wait_for_cache_init_with(
+            &cache_dir,
+            &lock,
+            std::time::Duration::from_millis(0),
+            std::time::Duration::from_secs(5),
+        );
+
+        assert!(
+            cache_version_is_current(&cache_dir),
+            "the waiter returned without initialising the cache"
+        );
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn waiter_returns_immediately_when_the_cache_is_already_versioned() {
+        // The common case: 7 of 8 threads arrive at an already-initialised
+        // cache. They must not block, and must not wipe anything.
+        let root = cache_fixture("waiter_fast_path");
+        let cache_dir = root.join("bin").join(CACHE_DIR_NAME);
+        fs::create_dir_all(&cache_dir).expect("cache dir");
+        let lock = init_lock_path(&cache_dir);
+        init_cache(&cache_dir);
+
+        // A marker that a stray wipe would destroy.
+        let marker = cache_dir.join(BLOBS_DIR).join("marker");
+        fs::write(&marker, b"kept").expect("marker");
+
+        let started = std::time::Instant::now();
+        wait_for_cache_init_with(
+            &cache_dir,
+            &lock,
+            std::time::Duration::from_secs(30),
+            std::time::Duration::from_secs(30),
+        );
+
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(1),
+            "an already-versioned cache must not make a waiter wait"
+        );
+        assert_eq!(fs::read(&marker).ok(), Some(b"kept".to_vec()));
+
+        let _ = fs::remove_dir_all(&root);
     }
 }

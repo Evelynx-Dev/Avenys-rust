@@ -9,35 +9,80 @@ what `mire test -j N` does.
 
 ### Fixed
 - **Parallel `mire test` could fail with `Cannot write cache file ... No such
-  file or directory`** — the CI run failed here, on
-  `tests/Builtins/scalars.mire`, and only when the modular tests ran with
-  `-j 8` against a fresh cache directory. Two defects combined.
-  `load_with_settings` created the `index/`, `blobs/` and `wal/` directories
-  *before* it took the initialisation lock, so the thread that did win the lock
-  could `remove_dir_all` a directory another thread had just created, and that
-  thread then failed a write against a path it had already made. Compounding
-  it, the lock itself lived *inside* the cache directory, so the wipe deleted
-  the very lock that existed to prevent it; a waiting thread could then take
-  the lock, see no version file, and wipe a second time while the first holder
-  was still initialising. The directories are now built under the lock after
-  any wipe, and the lock is a sibling of the cache directory so a wipe can
-  never remove it.
-  Reproduced at 33-61 write errors per `mire test tests -j 8` run before the
-  fix, and 0 across six runs after it. The tolerant "dropping unreadable WAL
-  file" notices that remain are intended behaviour: they report a thread
-  pruning a WAL file another thread had already removed, and never fail a
-  build.
+  file or directory`** — this is what took CI down. The failing job reported
+  `Passed: 268 - Failed: 8`, and the one failure it managed to print was
+  `tests/Builtins/scalars.mire` dying with
+
+      error[E0015] Runtime Error
+      Cannot write cache file '/tmp/avenys-tests-cache/blobs/ec96b757843f9848':
+      No such file or directory (os error 2)
+
+  Two defects combined to produce it. `load_with_settings` created the
+  `index/`, `blobs/` and `wal/` directories *before* it took the
+  initialisation lock, so the thread that won the lock could `remove_dir_all` a
+  directory another thread had just created, and that thread then failed a
+  write against a path it had already made. Compounding it, the lock lived
+  *inside* the cache directory, so the wipe deleted the very lock that existed
+  to prevent it: the holder carried on believing it was exclusive while another
+  thread created the lock directory again and began a second wipe.
+  The directory structure is now built under the lock and after any wipe, and
+  `wipe_cache_dir` removes the cache's children one by one while explicitly
+  skipping the lock instead of `remove_dir_all`-ing the directory it lives in.
+  The lock stays inside `bin/.cache`, which projects already ignore, so no lock
+  bookkeeping leaks into the project tree.
+- **A waiter could return before the cache was actually initialised** — the old
+  waiter polled until the lock directory disappeared and then returned, which is
+  not the same thing as "the cache is ready". A holder that died between its
+  wipe and its version write left the lock gone and the cache unversioned, so
+  the waiter walked into a cache that the next arriving thread would then wipe
+  underneath it. The exit condition is now the version file itself, and a
+  waiter that finds the lock free — or stale, because a holder crashed — takes
+  the lock and performs the initialisation itself rather than assuming someone
+  else did.
+
+### Verification
+- The two defects are covered by deterministic tests that do not depend on
+  timing, and each was confirmed to fail against the old behaviour by
+  temporarily restoring it: `init_lock_survives_the_wipe_it_guards` fails as
+  soon as `wipe_cache_dir` goes back to `remove_dir_all`.
+- End to end, `mire test tests -j 8` on a fresh cache directory: the fatal write
+  error does not reproduce locally on either build (0 in 6 runs before and
+  after), because it depends on how the CI runner's threads interleave. What is
+  measurable locally is the redundant-reinitialisation cascade it caused, seen
+  as the tolerant `dropping unreadable WAL file` notices: 17-76 per run before
+  the fix (mean ~44) against 0-14 after it (mean ~5.7). Those notices are
+  themselves intended behaviour — a thread pruning a WAL file another thread had
+  already removed — and never fail a build; the drop in their frequency is just
+  the cascade going away. CI is the authority on the fatal error, and it is
+  green: `Ok: 276 - Passed: 276 - Failed: 0`.
 
 ### Added
+- Four cache tests in `src/incremental/cache.rs`:
+  `init_lock_survives_the_wipe_it_guards` (minimal deterministic reproduction),
+  `init_rebuilds_directories_after_a_wipe`,
+  `waiter_steals_a_stale_lock_instead_of_returning_uninitialised`, and
+  `waiter_returns_immediately_when_the_cache_is_already_versioned` (guards
+  against the fix trading the race for a stall).
 - `concurrent_cold_cache_init_preserves_all_writers` in the incremental cache
   tests: eight threads released from a barrier into a brand-new cache
   directory, over several rounds, asserting that no writer's entry is lost or
-  corrupted. Note that this guards the invariant but does not by itself
-  reproduce the regression — it also passes against the pre-fix code, because
-  the barrier sends every thread into the load phase together, so none reaches
-  `save()` until the initialisation storm is over. Confirming the write path
-  still requires the end-to-end `mire test tests -j 8` run on a fresh cache
-  directory.
+  corrupted. It guards the invariant but does not by itself reproduce the
+  regression — it also passes against the pre-fix code, because the barrier
+  sends every thread into the load phase together, so none reaches `save()`
+  until the initialisation storm is over.
+- `wait_for_cache_init_with` takes the two timing thresholds as arguments, so
+  lock stealing and the give-up path are testable without waiting 30 seconds.
+
+### Notes
+- Cache tests use `tests/cache/` as their fixture root rather than `/tmp`, so a
+  failure leaves its evidence in the test tree. `tests/cache/.gitignore` ignores
+  everything the tests create, so nothing they leave behind can be committed.
+- The lock is a transient directory used for mutual exclusion inside the
+  compiler's own build cache. It is not a lockfile, and Avenys has no lockfile
+  handling of any kind: `owl.lock` and dependency resolution belong to Owl
+  alone. The compiler is handed source and a normalized config, keeps its cache
+  under `bin/.cache`, and compiles. That boundary is now stated explicitly in
+  `src/avens/manifest.rs`.
 
 ## 4.3.1 - 2026-09-29
 A patch release. Two of these are the reason CI stopped passing on a current

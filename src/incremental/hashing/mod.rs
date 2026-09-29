@@ -1022,27 +1022,31 @@ mod tests {
         //
         // SCOPE / KNOWN LIMITATION: this test asserts that concurrent cold
         // starts never lose or corrupt any writer's entries, but it does NOT
-        // deterministically reproduce the CI failure. It passes on the
-        // pre-fix code as well, because a barrier releases every thread into
-        // the load phase together, so no thread reaches `save()` until the
-        // wipe storm has already finished. The pre-fix defect was only exposed
-        // by the full `-j 8` modular workload (reproduced there at 33-61
-        // "Cannot write cache file" errors per run, versus 0 after the fix).
-        // So treat this as a concurrency invariant guard, not as proof the
-        // regression cannot return; verifying the write path needs the
-        // end-to-end `mire test tests -j 8` run on a fresh cache dir.
+        // reproduce the CI failure. It passes on the pre-fix code as well,
+        // because a barrier releases every thread into the load phase together,
+        // so no thread reaches `save()` until the wipe storm has already
+        // finished. The fatal `Cannot write cache file` error likewise does not
+        // reproduce locally on either build (0 in 6 `mire test tests -j 8` runs
+        // on a fresh cache directory, before and after the fix) because it
+        // depends on the CI runner's thread interleaving. So treat this as a
+        // concurrency invariant guard, not as proof the regression cannot
+        // return. The deterministic coverage lives next door, in
+        // `incremental::cache::tests`, and CI is the authority on the
+        // end-to-end symptom.
         use std::sync::{Arc, Barrier};
 
         const THREADS: usize = 8;
         const ROUNDS: usize = 6;
 
         for round in 0..ROUNDS {
-            let root = std::env::temp_dir().join(format!(
-                "mire_cache_cold_{}_{}",
-                now_epoch_ms(),
-                round
-            ));
-            fs::create_dir_all(&root).expect("temp dir");
+            // Fixture lives under the repo's own tests directory (never /tmp),
+            // and is gitignored via tests/cache/.gitignore.
+            let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests")
+                .join("cache")
+                .join(format!("cold_{round}_{}", std::process::id()));
+            let _ = fs::remove_dir_all(&root);
+            fs::create_dir_all(&root).expect("fixture dir");
             fs::write(
                 root.join("owl.toml"),
                 "[project]\nname = \"test\"\nversion = \"0.1.0\"\nentry = \"main.mire\"\n",

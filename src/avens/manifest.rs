@@ -4,6 +4,13 @@ use std::collections::HashMap;
 /// Normalized project configuration emitted by Owl. Avenys accepts this file
 /// as a closed compiler contract and does not resolve the originating
 /// `owl.toml` or dependency graph when it is supplied with `--config`.
+///
+/// Dependency management is Owl's job, not the compiler's. Avenys never reads,
+/// writes, updates or validates a lockfile (`owl.lock` or any other), never
+/// resolves version constraints, and never picks a dependency version. It is
+/// handed source code plus this normalized config, it keeps its own build cache
+/// under `bin/.cache`, and it compiles. Anything that needs to know *which*
+/// version of a library to use has already been decided upstream by Owl.
 #[derive(Debug, Clone, serde::Deserialize)]
 struct MireConfigFile {
     #[serde(default)]
