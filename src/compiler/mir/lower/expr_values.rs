@@ -51,7 +51,6 @@ impl MirLower {
                 }
                 _ => None,
             }),
-            Expression::MemberAccess { target, .. } => self.get_struct_name(target),
             _ => None,
         }
     }

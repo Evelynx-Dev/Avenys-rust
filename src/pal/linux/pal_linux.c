@@ -265,7 +265,10 @@ static int64_t linux_file_read(int64_t internal, void *buf, int64_t capacity) {
 
 static int64_t linux_file_write(int64_t internal, const void *buf, int64_t length) {
     linux_file_t *file = (linux_file_t *)internal;
-    if (!file || !buf || length <= 0) return -1;
+    // A zero length is a valid no-op that POSIX reports as 0 bytes written,
+    // not as a failure, so only a negative length is rejected here. Rejecting
+    // 0 would make writing an empty string look like a write that failed.
+    if (!file || !buf || length < 0) return -1;
     ssize_t n = write(file->fd, buf, (size_t)length);
     if (n < 0) return -1;
     return (int64_t)n;

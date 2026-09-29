@@ -2,6 +2,32 @@
 
 All notable changes to Avenys will be documented in this file.
 
+## 4.3.1 - 2026-09-29
+A patch release. Two of these are the reason CI stopped passing on a current
+stable toolchain, and the third is a filesystem write that reported failure for
+something that is not a failure.
+
+### Fixed
+- **An unreachable match arm made the build fail on newer stable** — the
+  member-access arm in `get_struct_name` was already covered by the or-pattern
+  above it, which lists `Expression::MemberAccess { data_type, .. }` and reads
+  the struct name straight off the resolved type. The arm after that could
+  therefore never run, and rustc now rejects the build for it. The arm is
+  removed, so the arm that always ran is the only one. Behaviour is unchanged,
+  because the removed arm was dead code.
+- **A private method nothing called broke the build as a dead-code warning** —
+  `pipeline_input_element_type` had no callers. Removed.
+- **Writing an empty string to a file reported failure** —
+  `linux_file_write` rejected `length <= 0`, but a zero length is a valid
+  no-op that POSIX reports as 0 bytes written rather than as an error. Writing
+  an empty file therefore came back as a failed write even though the file was
+  created. Only a negative length is rejected now. This mattered because
+  `fs::write` in kioto compares the byte count against the length it asked
+  for, so a correct zero-byte write was being counted as a mismatch.
+
+> Both build failures were reported by CI, not by the local suite, because the
+> local toolchain predates the change in rustc that promoted them to errors.
+
 ## 4.3.0 - 2026-09-26
 ### Added
 - **`bits::<T>(x)` bit-level reinterpretation intrinsic** — a same-width scalar

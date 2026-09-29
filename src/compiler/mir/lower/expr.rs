@@ -67,17 +67,6 @@ fn collect_concat_operands(
 }
 
 impl MirLower {
-    /// Returns the element type for pipeline input (vector -> element, array -> element, slice -> element, str -> str, other -> as-is)
-    fn pipeline_input_element_type(&self, input_type: &DataType) -> DataType {
-        match input_type {
-            DataType::Vector { element_type, .. }
-            | DataType::Array { element_type, .. }
-            | DataType::Slice { element_type } => *element_type.clone(),
-            DataType::Str => DataType::Str,
-            other => other.clone(),
-        }
-    }
-
     pub(crate) fn lower_call_args(&mut self, name: &str, args: &[Expression]) -> Vec<MirValue> {
         let needs_wrap = name == "dasu" || name == "print" || name == "str";
         args.iter()
