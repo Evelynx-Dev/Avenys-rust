@@ -1011,4 +1011,60 @@ mod tests {
               "expected a call named `in`, got {text}"
           );
       }
+
+      #[test]
+      fn module_name_accepts_every_keyword_a_path_segment_does() {
+          // Regression. `parse_module_statement` used to call `expect_ident`,
+          // which allows new/drop/move/own/set/to/is. Swapping it for
+          // `expect_path_segment` to let `module in` through narrowed it to
+          // in/is/to/of and silently took the others away — which broke
+          // `module new`, the name of owl's scaffolding module, and failed the
+          // `build-owl` CI job rather than anything in the test corpus. A path
+          // segment is now "any word surface", so this pins the whole class:
+          // every keyword, in both positions, at once.
+          const KEYWORDS: &[&str] = &[
+              "in", "is", "to", "of", "new", "drop", "move", "own", "set",
+          ];
+
+          for kw in KEYWORDS {
+              let module = format!("module {kw}\n");
+              let program = parse(&module)
+                  .unwrap_or_else(|e| panic!("`module {kw}` must parse: {e:?}"));
+              match &program.statements[0] {
+                  Statement::Module { name } => assert_eq!(name, kw, "module name"),
+                  other => panic!("`module {kw}`: expected a module, got {other:?}"),
+              }
+
+              let load = format!("load a::b::{kw}\npub fn main: () {{ }}\n");
+              parse(&load)
+                  .unwrap_or_else(|e| panic!("`load a::b::{kw}` must parse: {e:?}"));
+          }
+      }
+
+      #[test]
+      fn a_path_segment_is_never_narrower_than_an_identifier() {
+          // The invariant behind the previous test, stated directly: anything
+          // `expect_ident` took must still be accepted after a `::`. If a future
+          // keyword lands in both, this is what notices.
+          for kw in ["new", "drop", "move", "own", "set"] {
+              let ident = format!("pub fn {kw}: () {{ }}\n");
+              let as_path = format!("load a::b::{kw}\npub fn main: () {{ }}\n");
+              parse(&ident)
+                  .unwrap_or_else(|e| panic!("`fn {kw}` must parse as an ident: {e:?}"));
+              parse(&as_path).unwrap_or_else(|e| {
+                  panic!("`load a::b::{kw}` must parse as a path: {e:?}")
+              });
+          }
+      }
+
+      #[test]
+      fn a_path_segment_still_rejects_punctuation() {
+          // Widening to "any word surface" must not let punctuation through.
+          // `load a::` is a malformed path, not a path to something.
+          let source = "load a::::b\npub fn main: () { }\n";
+          assert!(
+              parse(source).is_err(),
+              "`::::` is not a module path segment"
+          );
+      }
   }

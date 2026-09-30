@@ -22,28 +22,38 @@ impl Parser {
         Ok(surface.to_string())
     }
 
-    /// Accept one segment of a module path in a `load` statement.
+    /// Accept one segment of a module path, in a `load` statement or a
+    /// `module` declaration.
     ///
-    /// Wider than `expect_ident` on purpose. A keyword is only a keyword in the
-    /// position that gives it meaning — `in` is the membership operator in an
-    /// expression (`x in y`) and nothing at all in a path — so a package is
-    /// free to be called `in`, which is exactly what the standard library's
-    /// stdin module does. Accepting the token here costs the operator nothing,
-    /// because the operator is matched as a token in `parse_additive`, never as
-    /// a name.
+    /// Strictly wider than `expect_ident`, and deliberately not a hand-kept list.
+    /// A keyword is only a keyword in the position that gives it meaning — `in`
+    /// is the membership operator in an expression (`x in y`) and nothing at all
+    /// in a path — so a package is free to be called `in`, which is exactly what
+    /// the standard library's stdin module does. Accepting the token here costs
+    /// the operator nothing, because the operator is matched as a token in
+    /// `parse_additive`, never as a name.
+    ///
+    /// Enumerating keywords here is how this regressed once already: an earlier
+    /// revision listed `in`/`is`/`to`/`of` and replaced the `expect_ident` call
+    /// in `parse_module_statement`, which quietly dropped the keywords
+    /// `expect_ident` had always allowed there and took `module new` — the name
+    /// of owl's project-scaffolding module — down with it. CI caught it. The
+    /// rule is now "any token whose surface is a word", so a path segment is
+    /// never narrower than an identifier, and the next keyword added to the
+    /// language cannot break a path again.
     pub(super) fn expect_path_segment(&mut self) -> Result<String> {
         if self.check(TokenType::Ident) {
             return Ok(self.advance().value.unwrap_or_default());
         }
-        let surface = match self.peek().ttype {
-            TokenType::In => "in",
-            TokenType::Is => "is",
-            TokenType::To => "to",
-            TokenType::Of => "of",
-            _ => return Err(self.error("Expected a module path segment")),
-        };
-        self.advance();
-        Ok(surface.to_string())
+
+        let token = self.peek();
+        let surface = self.token_surface(token.clone());
+        if is_word_surface(&surface) {
+            self.advance();
+            return Ok(surface);
+        }
+
+        Err(self.error("Expected a module path segment"))
     }
 
     pub(super) fn expect_member_name(&mut self) -> Result<String> {
