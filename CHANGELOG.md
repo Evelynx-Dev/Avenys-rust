@@ -8,6 +8,23 @@ when several compiler threads initialise a cold cache at once, which is exactly
 what `mire test -j N` does.
 
 ### Fixed
+- **A module path could no longer be named after a keyword** — this is a
+  regression introduced by the `in`-as-a-name change below, and it is recorded
+  here because the `in` fix is what surfaced it. `expect_ident` had always
+  allowed `new`, `drop`, `move`, `own`, `set`, `to` and `is` as names. Replacing
+  it with the new `expect_path_segment` in `parse_module_statement` and in the
+  `load` path narrowed it to `in`/`is`/`to`/`of` and silently took the others
+  away. The first casualty was `module new`, the name of owl's scaffolding
+  module, which failed the `build-owl` CI job with
+  `error[E0003] Expected a module path segment` before owl's `main` was ever
+  reached. No local test caught it, because nothing in the test corpus is named
+  after a keyword. A path segment is now any token whose surface is a word, the
+  same test `expect_member_name` uses, which makes it a strict superset of
+  `expect_ident` by construction; punctuation is still rejected, so
+  `load a::::b` remains a syntax error. `module_name_accepts_every_keyword_a_path_segment_does`
+  and `a_path_segment_is_never_narrower_than_an_identifier` in
+  `src/parser/mod.rs` walk the whole set and both call sites, and both were
+  checked to fail against the enumerating version.
 - **`dasu` and `ireru` never actually flushed** — the flush was emitted *before*
   the write it was meant to push out. `compile_inst` assembles an instruction by
   emitting its `extra` lines first and the returned line last, which is right for
