@@ -1053,9 +1053,13 @@ fn runtime_symbol_to_c_file(sym: &str) -> Option<&'static str> {
         Some("mire_types.c")
     } else if sym.starts_with("rt_managed_") || sym.starts_with("rt_panic") {
         Some("managed.c")
-    } else if sym.starts_with("rt_check_bounds") {
-        Some("safety.c")
-    } else if sym.starts_with("rt_list_")
+      } else if sym.starts_with("rt_check_bounds") {
+          Some("safety.c")
+      } else if sym.starts_with("rt_io_") {
+          // Standard streams: stdin/stdout/stderr via the C stdio FILE*s.
+          // Before the rt_read_/rt_write_ arms below, which are byte helpers.
+          Some("mire_io.c")
+      } else if sym.starts_with("rt_list_")
         || sym.starts_with("rt_lists_")
         || sym.starts_with("rt_vecs_")
     {

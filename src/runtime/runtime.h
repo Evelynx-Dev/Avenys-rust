@@ -573,6 +573,25 @@ void  rt_closure_env_free(void *env);
 
 void   *dasu(int64_t value);
 char   *ireru(const char *prompt);
+
+// Standard streams. `selector` is 1 for stdout and 2 for stderr; anything else
+// clamps to stdout. All of these go through the stdio FILE* rather than the raw
+// descriptor, so they interleave correctly with printf-based output.
+int64_t rt_io_write(int64_t selector, const char *data);
+int64_t rt_io_write_n(int64_t selector, const char *data, int64_t count);
+int64_t rt_io_write_line(int64_t selector, const char *data);
+int64_t rt_io_write_i64(int64_t selector, int64_t value, int64_t newline);
+int64_t rt_io_write_f64(int64_t selector, double value, int64_t newline);
+int64_t rt_io_flush(int64_t selector);
+int64_t rt_io_error(int64_t selector);
+int64_t rt_io_clear(int64_t selector);
+int64_t rt_io_fd(int64_t selector);
+int64_t rt_io_read_char(void);
+char   *rt_io_read_line(void);
+char   *rt_io_read_bytes(int64_t count);
+char   *rt_io_read_all(void);
+int64_t rt_io_available(void);
+int64_t rt_io_is_tty(void);
 void   *rt_get_args(int argc, char **argv);
 char   *rt_time_elapsed_ms_str(int64_t start_ns);
 char   *rt_cpu_elapsed_ms_str(int64_t start_ns);
