@@ -14,11 +14,11 @@ impl Parser {
             );
         }
 
-        let mut path = vec![self.expect_ident()?];
+        let mut path = vec![self.expect_path_segment()?];
         while self.check(TokenType::Colon) && self.peek_n(1).ttype == TokenType::Colon {
             self.advance();
             self.advance();
-            path.push(self.expect_ident()?);
+            path.push(self.expect_path_segment()?);
         }
 
         let alias = if self.check(TokenType::As) {

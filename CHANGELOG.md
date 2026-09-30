@@ -8,6 +8,21 @@ when several compiler threads initialise a cold cache at once, which is exactly
 what `mire test -j N` does.
 
 ### Fixed
+- **`dasu` and `ireru` never actually flushed** — the flush was emitted *before*
+  the write it was meant to push out. `compile_inst` assembles an instruction by
+  emitting its `extra` lines first and the returned line last, which is right for
+  setup (allocas, coercions) but wrong for a trailing flush: the generated code
+  called `fflush` and then `printf`. The symptom was invisible on a terminal,
+  because line buffering hid it, and appeared as soon as stdout was a pipe or a
+  file. A program alternating `dasu` with a write to stderr came out reordered —
+  `two 1 four 3` instead of `1 two 3 four` — because stdout stayed in its buffer
+  while unbuffered stderr went straight out, and nothing flushed stdout until
+  process exit. `ireru` had the same defect, meaning an input prompt could reach
+  the terminal late. Both now emit write-then-flush. The ordering is pinned by
+  `dasu_flushes_after_printing`, `ireru_flushes_after_writing_the_prompt` and
+  `dasu_still_emits_exactly_one_flush_per_call` in
+  `src/compiler/mir/codegen/mod.rs`, which build a real `MirProgram` and check
+  the emitted IR.
 - **Parallel `mire test` could fail with `Cannot write cache file ... No such
   file or directory`** — this is what took CI down. The failing job reported
   `Passed: 268 - Failed: 8`, and the one failure it managed to print was
@@ -90,6 +105,20 @@ what `mire test -j N` does.
   until the initialisation storm is over.
 - `wait_for_cache_init_with` takes the two timing thresholds as arguments, so
   lock stealing and the give-up path are testable without waiting 30 seconds.
+
+### Added
+- **`in` is accepted as a name, not only as the membership operator.** The `in`
+  keyword is unavoidable — it is the `for`/`find` iterator — but the standard
+  library's stdin module is also called `in`, and three separate places rejected
+  the collision outright, so `module in`, `load mire::std::in` and `in::line()`
+  were each a syntax error. The module declaration and the load path now take the
+  wider path-segment rule, and an expression head accepts the keyword, which is
+  what makes `in::` work as a namespace like any other. The change is narrow on
+  purpose: the `in` operator itself, and `for`/`find` over it, are untouched, and
+  a bare `in(1)` still parses as a call named `in` and is left for name resolution
+  to accept or reject — that layering is unchanged, only the head widened. Six
+  tests in `src/parser/mod.rs` cover the module declaration, the load path, the
+  namespaced call, the operator, the two loop forms, and the bare-call case.
 
 ### Notes
 - Cache tests use `tests/cache/` as their fixture root rather than `/tmp`, so a

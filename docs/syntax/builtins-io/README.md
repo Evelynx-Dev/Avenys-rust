@@ -22,6 +22,9 @@ dasu("Line 2")  // Same line: "Line 1Line 2"
 - Interpolation: `{var}` substitutes variable
 - `{expr}` NOT supported (assign to variable first)
 - No automatic newline
+- **Flushes after every call**, so output is not held back when stdout is a pipe
+  or a file rather than a terminal. A `dasu` interleaved with a write to stderr
+  reaches the shared destination in call order.
 
 ## ireru (Read Line)
 
@@ -33,6 +36,8 @@ dasu("You entered: {input}")
 - `ireru(prompt :str) :str` - prints prompt, reads stdin line
 - Returns line without trailing newline
 - Blocks until Enter pressed
+- **The prompt is flushed after it is written**, so it appears before the read
+  starts rather than when the buffer happens to fill
 
 ## proc::run::output (Capture Command)
 

@@ -437,10 +437,25 @@ pub(crate) fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
                     }
                 };
                 let result = tmp_result(ctx, "ptr", inst.result);
+                // Order matters here, and it is the opposite of what the `extra`
+                // convention suggests. compile_inst emits everything in `extra`
+                // *before* the line this arm returns, because `extra` normally
+                // holds setup (allocas, coercions) that the operation depends on.
+                // A flush is not setup, it is the last step: flushing first would
+                // push the *previous* line out and leave this one sitting in the
+                // buffer. So the printf, the dummy result and the flush all go
+                // into `extra`, in that order, and the returned line is empty.
+                //
+                // The bug this fixes is only visible when stdout is not a
+                // terminal. dasu() writing into a fully buffered stdout while
+                // stderr stays unbuffered meant a program alternating the two
+                // had its stdout output arrive after the stderr that followed it,
+                // and stdout was not pushed out at all until exit.
+                extra.push(line);
                 extra.push(format!("%t{} = inttoptr i64 0 to ptr", result));
                 extra.push("call i32 @fflush(ptr null)".to_string());
-                line
                 // result is the ptr returned by dasu (dummy null pointer)
+                String::new()
             } else if name_opt == Some("ireru") {
                 let prompt_ptr = if args.is_empty() {
                     "null".to_string()
@@ -449,8 +464,12 @@ pub(crate) fn compile_inst(inst: &MirInst, ctx: &mut LlvmCtx) -> Vec<String> {
                     v
                 };
                 let result = tmp_result(ctx, "ptr", inst.result);
+                // Same ordering fix as dasu: write the prompt first, then flush,
+                // otherwise the prompt is still sitting in the buffer when the
+                // flush runs and the reader sees nothing.
+                extra.push(format!("%t{} = call ptr @ireru(ptr {})", result, prompt_ptr));
                 extra.push("call i32 @fflush(ptr null)".to_string());
-                format!("%t{} = call ptr @ireru(ptr {})", result, prompt_ptr)
+                String::new()
             } else if name_opt == Some("env_args") {
                 // env_args() builtin — delegate to runtime
                 let result = tmp_result(ctx, "ptr", inst.result);

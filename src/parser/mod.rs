@@ -918,10 +918,97 @@ mod tests {
         assert!(*is_constant);
     }
 
-    #[test]
-    fn rejects_cons_with_mut() {
-        let source = "cons X = 5 :i64 mut\n";
-        let result = parse(source);
-        assert!(result.is_err(), "cons with mut should be rejected");
-    }
-}
+      #[test]
+      fn rejects_cons_with_mut() {
+          let source = "cons X = 5 :i64 mut\n";
+          let result = parse(source);
+          assert!(result.is_err(), "cons with mut should be rejected");
+      }
+
+      // `in` is a keyword because the `in` operator needs to be a keyword. The
+      // stdlib's stdin module is also called `in`, and the cost of that collision
+      // is paid in three separate places: the module declaration, the load path,
+      // and the expression head of a namespaced call. Each one has to accept the
+      // keyword, or `load mire::std::in` and `in::line()` cannot be written at all.
+      #[test]
+      fn parses_module_named_in() {
+          let source = "module in\npub fn line: () :i64 { return 0 }\n";
+          let program = parse(source).expect("`module in` must parse");
+          match &program.statements[0] {
+              Statement::Module { name } => assert_eq!(name, "in"),
+              other => panic!("expected module, got {other:?}"),
+          }
+      }
+
+      #[test]
+      fn parses_load_path_ending_in_in() {
+          let source = "load mire::std::in\npub fn main: () { }\n";
+          let program = parse(source).expect("`load mire::std::in` must parse");
+          let text = format!("{:?}", program.statements[0]);
+          assert!(
+              text.contains("in"),
+              "the load statement should name the `in` module, got {text}"
+          );
+      }
+
+      #[test]
+      fn parses_namespaced_call_on_in() {
+          // This is the form the runtime actually needs: `in` is a namespace
+          // like any other, and the keyword cannot stop it being a call head.
+          let source = "load mire::std::in\npub fn main: () { set n = in::line() }\n";
+          assert!(
+              parse(source).is_ok(),
+              "a namespaced call on `in` must parse"
+          );
+      }
+
+      #[test]
+      fn in_operator_still_parses_as_a_binary_expression() {
+          // The whole reason `in` became a keyword. If recognising the module
+          // name had shadowed the operator, every `x in y` would stop parsing.
+          let source = "pub fn main: () { set b = 1 in [1 2 3] }\n";
+          let program = parse(source).expect("the `in` operator must still parse");
+          let found = format!("{:?}", program.statements[0]).contains("Binary");
+          assert!(found, "expected a binary expression, got {program:?}");
+      }
+
+      #[test]
+      fn find_and_for_loops_over_in_are_unaffected() {
+          // `in` is the iterator keyword in both `find` and `for`. Widening the
+          // expression head to accept it must not disturb either statement.
+          let source = "pub fn main: () {\n    find x in [1 2] { use dasu(x) }\n    for i in [1 2] { use dasu(i) }\n}\n";
+          let program = parse(source).expect("find/for over `in` must still parse");
+          // Both live in the body of `main`, not at the top level.
+          let body = match &program.statements[0] {
+              Statement::Function { body, .. } => body,
+              other => panic!("expected the function, got {other:?}"),
+          };
+          assert!(
+              matches!(body[0], Statement::Find { .. }),
+              "expected find, got {:?}",
+              body[0]
+          );
+          assert!(
+              matches!(body[1], Statement::For { .. }),
+              "expected for, got {:?}",
+              body[1]
+          );
+      }
+
+      #[test]
+      fn in_is_parsed_as_a_call_head_and_left_to_the_resolver() {
+          // `in::line()` and a bare `in(1)` travel the same path through the
+          // expression head, so accepting the keyword there necessarily accepts
+          // both. Whether the bare form means anything is decided by name
+          // resolution, not here, so this test pins the parse only: the bare
+          // call must come out as a call named `in` and be left for the resolver
+          // to accept or reject.
+          let source = "load mire::std::in\npub fn main: () { in(1) }\n";
+          let program = parse(source).expect("`in(1)` parses as a call head");
+          let text = format!("{:?}", program.statements[1]);
+          assert!(
+              text.contains("name: \"in\""),
+              "expected a call named `in`, got {text}"
+          );
+      }
+  }

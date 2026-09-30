@@ -679,11 +679,15 @@ impl Parser {
         Ok(Statement::Return(Some(expr)))
     }
 
-    fn parse_module_statement(&mut self) -> Result<Statement> {
-        self.expect(TokenType::Module)?;
-        let name = self.expect_ident()?;
-        Ok(Statement::Module { name })
-    }
+      fn parse_module_statement(&mut self) -> Result<Statement> {
+          self.expect(TokenType::Module)?;
+          // A module name is a name, not an expression, so it takes the wider
+          // path-segment rule: the standard library's stdin module is called
+          // `in`, and `module in` has to be legal for `load mire::std::in` to
+          // resolve to anything.
+          let name = self.expect_path_segment()?;
+          Ok(Statement::Module { name })
+      }
 
     pub(super) fn parse_block(&mut self) -> Result<Vec<Statement>> {
         let mut statements = Vec::new();

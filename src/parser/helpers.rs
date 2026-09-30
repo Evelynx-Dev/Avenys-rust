@@ -22,6 +22,30 @@ impl Parser {
         Ok(surface.to_string())
     }
 
+    /// Accept one segment of a module path in a `load` statement.
+    ///
+    /// Wider than `expect_ident` on purpose. A keyword is only a keyword in the
+    /// position that gives it meaning — `in` is the membership operator in an
+    /// expression (`x in y`) and nothing at all in a path — so a package is
+    /// free to be called `in`, which is exactly what the standard library's
+    /// stdin module does. Accepting the token here costs the operator nothing,
+    /// because the operator is matched as a token in `parse_additive`, never as
+    /// a name.
+    pub(super) fn expect_path_segment(&mut self) -> Result<String> {
+        if self.check(TokenType::Ident) {
+            return Ok(self.advance().value.unwrap_or_default());
+        }
+        let surface = match self.peek().ttype {
+            TokenType::In => "in",
+            TokenType::Is => "is",
+            TokenType::To => "to",
+            TokenType::Of => "of",
+            _ => return Err(self.error("Expected a module path segment")),
+        };
+        self.advance();
+        Ok(surface.to_string())
+    }
+
     pub(super) fn expect_member_name(&mut self) -> Result<String> {
         if self.check(TokenType::Ident) {
             return Ok(self.advance().value.unwrap_or_default());

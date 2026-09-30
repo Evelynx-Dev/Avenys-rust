@@ -339,3 +339,95 @@ fn compile_terminator(term: &MirTerminator, ctx: &mut LlvmCtx, ret_type: &str) -
         MirTerminator::Unreachable => "unreachable".to_string(),
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::items_after_test_module)]
+mod flush_order_tests {
+    use super::mir_to_llvm;
+    use crate::compiler::mir::{
+        DataType, MirBlock, MirConst, MirFunction, MirInst, MirOp, MirProgram, MirTerminator,
+        MirType, MirValue,
+    };
+    use std::collections::HashMap;
+
+    /// Builds a one-function program whose body is a single call to `name` with
+    /// one i64 constant argument, and returns the generated LLVM IR.
+    fn ir_for_call(name: &str) -> String {
+        let program = MirProgram {
+            functions: vec![MirFunction {
+                name: "main".to_string(),
+                params: Vec::new(),
+                ret_type: DataType::None,
+                body_hash: 0,
+                noinline: false,
+                blocks: vec![MirBlock {
+                    id: 0,
+                    label: "entry".to_string(),
+                    insts: vec![MirInst {
+                        result: Some(0),
+                        op: MirOp::Call(
+                            MirValue::Global(name.to_string()),
+                            vec![MirValue::Const(MirConst::Int(7))],
+                            MirType {
+                                data_type: DataType::I64,
+                            },
+                        ),
+                        loc: (1, 1),
+                    }],
+                    terminator: MirTerminator::Ret(None),
+                }],
+            }],
+            entry_point: Some("main".to_string()),
+            extern_functions: Vec::new(),
+            extern_libs: Vec::new(),
+            struct_types: HashMap::new(),
+            globals: HashMap::new(),
+        };
+        let (ir, _strings) = mir_to_llvm(&program);
+        ir
+    }
+
+    /// Index of the first `needle` in `haystack`.
+    fn at(haystack: &str, needle: &str) -> usize {
+        haystack
+            .find(needle)
+            .unwrap_or_else(|| panic!("`{needle}` missing from the generated IR"))
+    }
+
+    #[test]
+    fn dasu_flushes_after_printing() {
+        let ir = ir_for_call("dasu");
+        let printf = at(&ir, "@printf");
+        let flush = at(&ir, "@fflush");
+        assert!(
+            printf < flush,
+            "dasu must printf before it flushes, otherwise the flush only pushes \
+             out the previous line and this one waits in the buffer.\n{ir}"
+        );
+    }
+
+    #[test]
+    fn ireru_flushes_after_writing_the_prompt() {
+        let ir = ir_for_call("ireru");
+        let prompt = at(&ir, "@ireru");
+        let flush = at(&ir, "@fflush");
+        assert!(
+            prompt < flush,
+            "ireru must write the prompt before it flushes, otherwise the reader \
+             is prompted by a flush that had nothing to send yet.\n{ir}"
+        );
+    }
+
+    #[test]
+    fn dasu_still_emits_exactly_one_flush_per_call() {
+        // The fix moved the flush from the returned line into `extra`, which is
+        // emitted first. A second flush would mean the sequence got emitted twice
+        // rather than reordered.
+        let ir = ir_for_call("dasu");
+        assert_eq!(
+            ir.matches("@fflush").count(),
+            1,
+            "one dasu call must produce one flush:\n{ir}"
+        );
+    }
+}
