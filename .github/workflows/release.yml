@@ -138,19 +138,19 @@ jobs:
           sudo cp -r /tmp/compiler/pal /usr/local/lib/mire/pal
           mire --version
 
-      - name: Checkout kioto (Evelynx-Dev fork, v2.4.7)
+      - name: Checkout kioto (active PR #3 branch, v2.5.0)
         uses: actions/checkout@v4
         with:
           repository: Evelynx-Dev/Kioto-1
           path: kioto
-          ref: master
+          ref: pr/2.5.0
 
-      - name: Checkout owl source (Evelynx-Dev fork)
+      - name: Checkout owl source (active PR #16 branch, official repo)
         uses: actions/checkout@v4
         with:
-          repository: Evelynx-Dev/owl
+          repository: mire-lang/owl
           path: owl-src
-          ref: pr-0.27.0
+          ref: pr/1.2.0
 
       - name: Install build prerequisites + libsodium (for bundling)
         run: |
@@ -234,19 +234,19 @@ jobs:
       - name: Enable QEMU binfmt
         run: docker run --rm --privileged tonistiigi/binfmt --install all
 
-      - name: Checkout kioto (Evelynx-Dev fork, v2.4.7)
+      - name: Checkout kioto (active PR #3 branch, v2.5.0)
         uses: actions/checkout@v4
         with:
           repository: Evelynx-Dev/Kioto-1
           path: kioto
-          ref: master
+          ref: pr/2.5.0
 
-      - name: Checkout owl source (Evelynx-Dev fork)
+      - name: Checkout owl source (active PR #16 branch, official repo)
         uses: actions/checkout@v4
         with:
-          repository: Evelynx-Dev/owl
+          repository: mire-lang/owl
           path: owl-src
-          ref: pr-0.27.0
+          ref: pr/1.2.0
 
       - name: Build owl in a riscv64 container (QEMU)
         env:

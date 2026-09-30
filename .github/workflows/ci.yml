@@ -22,22 +22,22 @@ jobs:
           sudo apt-get install -y -qq llvm-22 llvm-22-dev llvm-22-tools clang-22 lld-22 libpolly-22-dev
           echo "/usr/lib/llvm-22/bin" >> "$GITHUB_PATH"
 
-      - name: Checkout kioto (Shukensha-sys fork, master = v2.4.9 namespaced net API)
+      - name: Checkout kioto (active PR #3 branch = v2.5.0 namespaced net API)
         uses: actions/checkout@v4
         with:
-          repository: Shukensha-sys/Kioto
+          repository: Evelynx-Dev/Kioto-1
           path: kioto-src
-          ref: master
+          ref: pr/2.5.0
 
       - name: Setup kioto for tests
         run: cp -r kioto-src ../kioto
 
-      - name: Checkout mire stdlib (Shukensha-sys/mire-lib = local Arch/mire, incl. assert macro)
+      - name: Checkout mire stdlib (official mire-lang branch, incl. macros + owl_archive_* externs)
         uses: actions/checkout@v4
         with:
-          repository: Shukensha-sys/mire-lib
+          repository: mire-lang/mire-lib
           path: mire-src
-          ref: main
+          ref: pr/1.0.0
 
       - name: Setup mire stdlib for tests
         run: cp -r mire-src ../mire
@@ -123,26 +123,26 @@ jobs:
           fi
           mire --version || echo "mire installed"
 
-      - name: Checkout kioto (Shukensha-sys fork, master = v2.4.9 namespaced net API)
+      - name: Checkout kioto (active PR #3 branch = v2.5.0 namespaced net API)
         uses: actions/checkout@v4
         with:
-          repository: Shukensha-sys/Kioto
+          repository: Evelynx-Dev/Kioto-1
           path: kioto-src
-          ref: master
+          ref: pr/2.5.0
 
-      - name: Checkout owl source (up-to-date Evelynx-Dev fork, PR #14 = migrated namespaced API)
+      - name: Checkout owl source (active PR #16 branch, in the official repo)
         uses: actions/checkout@v4
         with:
-          repository: Evelynx-Dev/owl
+          repository: mire-lang/owl
           path: owl-src
-          ref: pr-0.27.0
+          ref: pr/1.2.0
 
-      - name: Checkout mire stdlib (Shukensha-sys/mire-lib, incl. assert macro)
+      - name: Checkout mire stdlib (official mire-lang branch, incl. macros + owl_archive_* externs)
         uses: actions/checkout@v4
         with:
-          repository: Shukensha-sys/mire-lib
+          repository: mire-lang/mire-lib
           path: mire
-          ref: main
+          ref: pr/1.0.0
 
       - name: Setup owl dependencies
         run: |
@@ -151,18 +151,17 @@ jobs:
           cp -a kioto-src ~/.owl/libs/kioto
           cp -a mire ~/.owl/libs/mire
           cp -r kioto-src ./kioto
-          # owl-src/owl.toml deps kioto via ~/.owl/libs/kioto (or, on older
-          # forks, Evelyn's absolute path); the runner's ~/.owl/libs is now
-          # populated above, and the absolute path (if present) is repointed
-          # to the sibling checkout so `load kioto` resolves in CI.
-          sed -i -e 's|"/home/Evelyn/.owl/libs/kioto"|"../kioto"|' owl-src/owl.toml
+          # owl 1.2.4 declares its deps with `~`-relative paths, and this job
+          # builds through a generated config that carries no [dependencies],
+          # so `load kioto` / `load mire` resolve from --lib-dir (~/.owl/libs)
+          # rather than from owl-src/owl.toml. No path rewriting is needed.
 
       - name: Generate avenys config for the owl build
         run: |
           cat > owl-src/native/mire-config.toml <<'EOF'
           [project]
           name = "owl"
-          version = "1.1.1"
+          version = "1.2.4"
           entry = "code/main.mire"
 
           [build]
@@ -177,7 +176,7 @@ jobs:
           cache = "/tmp/owl-archive-cache"
 
           [cfg]
-          libs = ["archive"]
+          libs = ["archive", "zstd"]
           sources = ["native/archive.c"]
           link-dirs = []
           cflags = ["-Wl,--disable-new-dtags", "-Wl,-rpath,$ORIGIN/../lib/mire"]
